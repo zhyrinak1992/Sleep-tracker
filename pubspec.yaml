@@ -24,6 +24,8 @@ dependencies:
   flutter_local_timezone: ^1.0.0
   pdf: ^3.11.3
   audioplayers: ^6.1.0
+  archive: ^3.6.1
+  xml: ^6.5.0
 
 dependency_overrides:
   # device_info_plus 12.4.0 requires Xcode 26.1+; keep compatibility with current macos-15 runner.

@@ -4,6 +4,7 @@ import 'dart:io';
 
 import '../../data/backup_service.dart';
 import '../../data/apple_health_service.dart';
+import '../../data/apple_health_file_import_service.dart';
 import '../../data/audio_observation_service.dart';
 import '../../data/pdf_report_service.dart';
 import '../../data/sleep_database.dart';
@@ -57,6 +58,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+
+  Future<void> _importAppleHealthFile() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final preview = await AppleHealthFileImportService.instance.chooseAndPreview();
+      if (!mounted || preview == null) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Проверка данных Apple Health'),
+          content: Text(
+            'Найдено в архиве:\\n'
+            '• ночей сна: ${preview.nights}\\n'
+            '• интервалов фаз: ${preview.stages}\\n'
+            '• измерений здоровья: ${preview.metrics}\\n\\n'
+            'Данные будут добавлены в общую историю приложения. Уже импортированные записи не создадут дубликаты.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Отмена')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Импортировать')),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      final result = await preview.importIntoDatabase();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Импорт завершён: новых ночей — ${result.nights}, фаз — ${result.stages}, измерений — ${result.metrics}.'),
+      ));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось импортировать архив Apple Health: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   Future<void> _startAudioClip() async {
     try {
@@ -184,8 +224,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: const Icon(Icons.favorite_outline),
             label: const Text('Импортировать данные сна'),
           )),
+          const SizedBox(height: 10),
+          SizedBox(width: double.infinity, child: FilledButton.icon(
+            onPressed: _busy ? null : _importAppleHealthFile,
+            icon: const Icon(Icons.file_open_outlined),
+            label: const Text('Импортировать из файла Apple Health'),
+          )),
           const SizedBox(height: 8),
-          const Text('Синхронизация доступна вручную. Повторный импорт не создаёт дубликаты ранее добавленных ночей.',
+          const Text('Выберите ZIP-архив, экспортированный из приложения «Здоровье». Перед сохранением приложение покажет найденные записи.',
+            style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4)),
+          const SizedBox(height: 8),
+          const Text('Синхронизация доступна вручную. Повторный импорт не создаёт дубликаты ранее добавленных ночей. Повторный импорт не создаёт дубликаты ранее добавленных ночей.',
             style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4)),
         ],
       )),
