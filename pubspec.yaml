@@ -25,6 +25,10 @@ dependencies:
   pdf: ^3.11.3
   audioplayers: ^6.1.0
 
+dependency_overrides:
+  # device_info_plus 12.4.0 requires Xcode 26.1+; keep compatibility with current macos-15 runner.
+  device_info_plus: 12.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
