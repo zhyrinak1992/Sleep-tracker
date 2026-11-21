@@ -14,7 +14,7 @@ jobs:
     runs-on: macos-15
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -26,6 +26,9 @@ jobs:
         shell: bash
         run: |
           flutter create --platforms=ios --project-name sleep_tracker .
+          # Flutter may generate a stock widget test that targets a demo MyApp.
+          # This project has its own focused tests; remove only that generated scaffold.
+          rm -f test/widget_test.dart
           # Keep the permanent application identifier used by AltStore updates.
           sed -i '' 's/PRODUCT_BUNDLE_IDENTIFIER = [^;]*/PRODUCT_BUNDLE_IDENTIFIER = ru.sleeptracker.app/g' ios/Runner.xcodeproj/project.pbxproj
           /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName "Трекер сна"' ios/Runner/Info.plist || \
