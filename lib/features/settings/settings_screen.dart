@@ -234,7 +234,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Text('Выберите ZIP-архив, экспортированный из приложения «Здоровье». Перед сохранением приложение покажет найденные записи.',
             style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4)),
           const SizedBox(height: 8),
-          const Text('Синхронизация доступна вручную. Повторный импорт не создаёт дубликаты ранее добавленных ночей. Повторный импорт не создаёт дубликаты ранее добавленных ночей.',
+          const Text('Синхронизация доступна вручную. Повторный импорт не создаёт дубликаты ранее добавленных ночей.',
             style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4)),
         ],
       )),

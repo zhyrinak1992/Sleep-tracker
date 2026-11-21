@@ -165,8 +165,11 @@ class AppleHealthFileImportService {
       if (type == 'HKCategoryTypeIdentifierSleepAnalysis' && sleep != null) {
         records.add(_HealthRecord(type, value, start, end, source, unit, null, sleep));
       } else if (metric != null) {
-        final number = double.tryParse(value);
-        if (number != null && number.isFinite) {
+        final parsed = double.tryParse(value);
+        if (parsed != null && parsed.isFinite) {
+          final number = type == 'HKQuantityTypeIdentifierOxygenSaturation' && parsed <= 1
+              ? parsed * 100
+              : parsed;
           records.add(_HealthRecord(type, value, start, end, source, unit, number, metric.$1));
         }
       }
