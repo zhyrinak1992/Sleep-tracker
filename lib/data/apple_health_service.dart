@@ -112,7 +112,7 @@ class AppleHealthService {
         if (!point.dateTo.isBefore(from.subtract(const Duration(hours: 1))) && !point.dateTo.isAfter(to.add(const Duration(hours: 1)))) {
           final first = group.first;
           final sessionId = 'health_${first.uuid.replaceAll('-', '_')}';
-          await SleepDatabase.instance.addSleepMetric(id: 'health_metric_${point.uuid.replaceAll('-', '_')}', sessionId: sessionId, type: metric.$1, value: (point.value as NumericHealthValue).numericValue, unit: metric.$2, measuredAt: point.dateTo, source: 'Apple Health: ${point.sourceName}');
+          await SleepDatabase.instance.addSleepMetric(id: 'health_metric_${point.uuid.replaceAll('-', '_')}', sessionId: sessionId, type: metric.$1, value: (point.value as NumericHealthValue).numericValue.toDouble(), unit: metric.$2, measuredAt: point.dateTo, source: 'Apple Health: ${point.sourceName}');
           break;
         }
       }
