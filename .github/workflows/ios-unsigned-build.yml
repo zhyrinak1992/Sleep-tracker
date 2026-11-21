@@ -1,0 +1,160 @@
+name: iOS unsigned IPA (AltStore)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    runs-on: macos-15
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate iOS runner project
+        shell: bash
+        run: |
+          flutter create --platforms=ios --project-name sleep_tracker .
+          # Keep the permanent application identifier used by AltStore updates.
+          sed -i '' 's/PRODUCT_BUNDLE_IDENTIFIER = [^;]*/PRODUCT_BUNDLE_IDENTIFIER = ru.sleeptracker.app/g' ios/Runner.xcodeproj/project.pbxproj
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName "Трекер сна"' ios/Runner/Info.plist || \
+            /usr/libexec/PlistBuddy -c 'Add :CFBundleDisplayName string "Трекер сна"' ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c 'Add :NSHealthShareUsageDescription string "Трекер сна считывает интервалы сна и доступные показатели из Apple Health для формирования дневника и аналитики."' ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c 'Add :NSHealthUpdateUsageDescription string "Разрешение записи в Apple Health не используется приложением; ключ добавлен для совместимости HealthKit."' ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c 'Add :NSMicrophoneUsageDescription string "Микрофон используется для обнаружения звуковых событий и сохранения отдельных аудиофрагментов во время ночного наблюдения."' ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c 'Add :UIBackgroundModes array' ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c 'Add :UIBackgroundModes:0 string audio' ios/Runner/Info.plist
+          mkdir -p ios/Runner
+          cat > ios/Runner/Runner.entitlements <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>com.apple.developer.healthkit</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = 15.0/g' ios/Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/PRODUCT_BUNDLE_IDENTIFIER = ru.sleeptracker.app;/PRODUCT_BUNDLE_IDENTIFIER = ru.sleeptracker.app; CODE_SIGN_ENTITLEMENTS = Runner\/Runner.entitlements;/g' ios/Runner.xcodeproj/project.pbxproj
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          app = Path("ios/Runner/AppDelegate.swift")
+          source = app.read_text()
+          if "import SoundAnalysis" not in source:
+              source = source.replace("import UIKit", "import UIKit\nimport SoundAnalysis")
+          hook = "GeneratedPluginRegistrant.register(with: self)"
+          registration = """GeneratedPluginRegistrant.register(with: self)
+              let registrar = self.registrar(forPlugin: "SoundAnalysisBridge")!
+              let channel = FlutterMethodChannel(name: "ru.sleeptracker/sound_classifier", binaryMessenger: registrar.messenger())
+              let classifier = SoundAnalysisBridge()
+              channel.setMethodCallHandler { call, result in
+                  guard call.method == "classifyFile", let args = call.arguments as? [String: Any], let path = args["path"] as? String else {
+                      result(FlutterMethodNotImplemented); return
+                  }
+                  classifier.classify(path: path, completion: result)
+              }"""
+          if hook in source and "SoundAnalysisBridge()" not in source:
+              source = source.replace(hook, registration)
+          source += r'''
+
+          private final class SoundAnalysisObserver: NSObject, SNResultsObserving {
+              var scores: [String: Double] = [:]
+              var onComplete: ((Bool) -> Void)?
+              var failure: String?
+
+              func request(_ request: SNRequest, didProduce result: SNResult) {
+                  guard let classificationResult = result as? SNClassificationResult else { return }
+                  for item in classificationResult.classifications {
+                      scores[item.identifier] = max(scores[item.identifier] ?? 0, Double(item.confidence))
+                  }
+              }
+              func request(_ request: SNRequest, didFailWithError error: Error) { failure = error.localizedDescription }
+              func requestDidComplete(_ request: SNRequest) {}
+              func finish(_ success: Bool) { onComplete?(success) }
+          }
+
+          private final class SoundAnalysisBridge {
+              private var active: [String: (SNAudioFileAnalyzer, SoundAnalysisObserver)] = [:]
+
+              func classify(path: String, completion: @escaping FlutterResult) {
+                  do {
+                      let analyzer = try SNAudioFileAnalyzer(url: URL(fileURLWithPath: path))
+                      let request = try SNClassifySoundRequest(classifierIdentifier: .version1)
+                      let observer = SoundAnalysisObserver()
+                      let key = UUID().uuidString
+                      try analyzer.add(request, withObserver: observer)
+                      active[key] = (analyzer, observer)
+                      observer.onComplete = { [weak self] success in
+                          DispatchQueue.main.async {
+                              let candidates = observer.scores.compactMap { label, score -> (String, Double)? in
+                                  let category = Self.mapLabel(label)
+                                  return category == "unknown" ? nil : (category, score)
+                              }
+                              let best = candidates.max { $0.1 < $1.1 }
+                              observer.onComplete = nil
+                              let mapped = best?.0 ?? "unknown"
+                              let confidence = best?.1 ?? 0
+                              self?.active.removeValue(forKey: key)
+                              completion(["category": success && confidence >= 0.55 ? mapped : "unknown", "confidence": confidence])
+                          }
+                      }
+                      analyzer.analyze { success in observer.finish(success) }
+                  } catch {
+                      completion(FlutterError(code: "SOUND_ANALYSIS_FAILED", message: error.localizedDescription, details: nil))
+                  }
+              }
+
+              private static func mapLabel(_ label: String) -> String {
+                  let value = label.lowercased()
+                  if value.contains("snor") { return "snore" }
+                  if value.contains("cough") { return "cough" }
+                  if value.contains("laugh") { return "laugh" }
+                  if value.contains("speech") || value.contains("talking") || value.contains("conversation") || value.contains("human voice") { return "speech" }
+                  if value.contains("groan") || value.contains("moan") { return "groan" }
+                  if value.contains("noise") || value.contains("traffic") || value.contains("wind") { return "noise" }
+                  return "unknown"
+              }
+          }
+          '''
+          app.write_text(source)
+          PYCODE
+
+      - name: Resolve packages
+        run: flutter pub get
+
+      - name: Analyze Dart source
+        run: flutter analyze
+
+      - name: Run tests
+        run: flutter test --reporter expanded
+
+      - name: Build iOS app without Apple signing
+        run: flutter build ios --release --no-codesign
+
+      - name: Package IPA for AltStore signing
+        shell: bash
+        run: |
+          mkdir -p Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/Runner.app
+          /usr/bin/zip -qry SleepTracker-unsigned.ipa Payload
+          rm -rf Payload
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SleepTracker-unsigned-IPA
+          path: SleepTracker-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
