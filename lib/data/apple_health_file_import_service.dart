@@ -12,8 +12,8 @@ class AppleHealthFilePreview {
     required this.nights,
     required this.stages,
     required this.metrics,
-    required this._sessions,
-  });
+    required List<_ImportedNight> sessions,
+  }) : _sessions = sessions;
 
   final int nights;
   final int stages;
@@ -230,7 +230,7 @@ class AppleHealthFileImportService {
       nights: nights.length,
       stages: nights.fold(0, (sum, n) => sum + n.stages.length),
       metrics: nights.fold(0, (sum, n) => sum + n.metrics.length),
-      _sessions: nights,
+      sessions: nights,
     );
   }
 
