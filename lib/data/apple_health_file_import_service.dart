@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
@@ -34,7 +35,8 @@ class AppleHealthFilePreview {
             ? 'Apple Health (импорт из файла)'
             : '${night.sourceName} · импорт из файла',
       );
-      if (inserted) importedNights++;
+      if (!inserted) continue;
+      importedNights++;
 
       for (final stage in night.stages) {
         await db.addSleepStage(
@@ -148,7 +150,7 @@ class AppleHealthFileImportService {
     if (content is! List<int>) {
       throw const FormatException('Не удалось прочитать export.xml из архива.');
     }
-    final document = XmlDocument.parse(String.fromCharCodes(content));
+    final document = XmlDocument.parse(utf8.decode(content));
     final records = <_HealthRecord>[];
     for (final element in document.findAllElements('Record')) {
       final type = element.getAttribute('type') ?? '';

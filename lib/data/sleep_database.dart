@@ -241,6 +241,14 @@ class SleepDatabase {
   }) async {
     if (!endedAt.isAfter(startedAt)) return false;
     final db = await database;
+    final existing = await db.query(
+      'sleep_sessions',
+      columns: ['id'],
+      where: 'started_at = ? AND ended_at = ? AND source LIKE ?',
+      whereArgs: [startedAt.toUtc().toIso8601String(), endedAt.toUtc().toIso8601String(), 'apple_health:%'],
+      limit: 1,
+    );
+    if (existing.isNotEmpty) return false;
     final now = DateTime.now().toUtc().toIso8601String();
     final inserted = await db.insert('sleep_sessions', {
       'id': id,
