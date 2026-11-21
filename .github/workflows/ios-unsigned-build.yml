@@ -3,6 +3,8 @@ name: iOS unsigned IPA (AltStore)
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
 
