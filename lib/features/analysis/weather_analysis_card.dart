@@ -73,9 +73,9 @@ class _WeatherAnalysisCardState extends State<WeatherAnalysisCard> {
     }
     final location = WeatherLocation.fromJson(decoded);
     final valid = widget.sessions.map((session) {
-      final start = session.actualSleepStartedAt ?? session.startedAt;
-      final end = session.actualSleepEndedAt ?? session.endedAt;
-      if (end == null || !end.isAfter(start)) return null;
+      final start = session.actualSleepStartedAt;
+      final end = session.actualSleepEndedAt;
+      if (start == null || end == null || !end.isAfter(start)) return null;
       return (session: session, start: start, end: end);
     }).whereType<({SleepSession session, DateTime start, DateTime end})>().toList();
     if (valid.isEmpty) {
