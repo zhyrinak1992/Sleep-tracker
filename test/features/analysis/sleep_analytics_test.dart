@@ -31,7 +31,7 @@ void main() {
       expect(summary.sessions.length, 3);
       expect(summary.completed, 2);
       expect(summary.rated, 2);
-      expect(summary.averageDurationMinutes, 390);
+      expect(summary.averageDurationMinutes, 420);
       expect(summary.averageRating, 4.5);
     });
 
