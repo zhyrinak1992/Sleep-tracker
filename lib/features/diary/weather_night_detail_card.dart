@@ -44,7 +44,11 @@ class _WeatherNightDetailCardState extends State<WeatherNightDetailCard> {
   @override
   void didUpdateWidget(covariant WeatherNightDetailCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.session.id != widget.session.id) _future = _load();
+    if (oldWidget.session.id != widget.session.id ||
+        oldWidget.session.actualSleepStartedAt != widget.session.actualSleepStartedAt ||
+        oldWidget.session.actualSleepEndedAt != widget.session.actualSleepEndedAt) {
+      _future = _load();
+    }
   }
 
   Future<_NightWeatherData?> _load() async {
