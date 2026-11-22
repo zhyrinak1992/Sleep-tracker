@@ -249,10 +249,13 @@ class AppleHealthService {
             switch (point.type) {
               case HealthDataType.STEPS:
                 activity['steps'] = value.round();
+                break;
               case HealthDataType.ACTIVE_ENERGY_BURNED:
                 activity['activeEnergyKcal'] = value;
+                break;
               case HealthDataType.EXERCISE_TIME:
                 activity['exerciseMinutes'] = value;
+                break;
               default:
                 break;
             }
