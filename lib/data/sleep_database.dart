@@ -818,6 +818,28 @@ class SleepDatabase {
     return rows.map((row) => row['tag_key']! as String).toList();
   }
 
+  /// Loads tag keys for many sessions in bounded SQL batches.
+  Future<Map<String, Set<String>>> getTagsForSessions(List<String> sessionIds) async {
+    final ids = sessionIds.toSet().where((id) => id.trim().isNotEmpty).toList();
+    final result = <String, Set<String>>{for (final id in ids) id: <String>{}};
+    if (ids.isEmpty) return result;
+    final db = await database;
+    for (var offset = 0; offset < ids.length; offset += 900) {
+      final batch = ids.skip(offset).take(900).toList();
+      final placeholders = List.filled(batch.length, '?').join(', ');
+      final rows = await db.rawQuery(
+        'SELECT session_id, tag_key FROM sleep_session_tags WHERE session_id IN ($placeholders)',
+        batch,
+      );
+      for (final row in rows) {
+        final sessionId = row['session_id'] as String;
+        final tagKey = row['tag_key'] as String;
+        result.putIfAbsent(sessionId, () => <String>{}).add(tagKey);
+      }
+    }
+    return result;
+  }
+
   Future<void> setTagsForSession(String sessionId, List<SleepTag> tags) async {
     final db = await database;
     await db.transaction((txn) async {
