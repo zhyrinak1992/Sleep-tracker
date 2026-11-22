@@ -43,18 +43,24 @@ class MoonPhaseAnalytics {
   static List<MoonPhaseGroup> summarize(Iterable<SleepSession> sessions) {
     final buckets = List<List<SleepSession>>.generate(8, (_) => <SleepSession>[]);
     for (final session in sessions) {
-      final end = session.actualSleepEndedAt ?? session.endedAt;
-      if (end == null || !end.isAfter(session.startedAt)) continue;
-      final midpoint = session.startedAt.add(Duration(microseconds: end.difference(session.startedAt).inMicroseconds ~/ 2));
+      final start = session.actualSleepStartedAt;
+      final end = session.actualSleepEndedAt;
+      if (start == null || end == null || !end.isAfter(start)) continue;
+      final midpoint = start.add(Duration(microseconds: end.difference(start).inMicroseconds ~/ 2));
       buckets[indexAt(midpoint)].add(session);
     }
     return List.generate(8, (i) {
       final bucket = buckets[i];
-      final durations = bucket.map((s)=>s.duration?.inMinutes).whereType<int>().where((v)=>v>0).toList();
+      final durations = bucket.map((s) {
+        final start = s.actualSleepStartedAt!;
+        final end = s.actualSleepEndedAt!;
+        return end.difference(start).inMinutes;
+      }).where((v)=>v>0).toList();
       final ratings = bucket.map((s)=>s.morningRating).whereType<int>().toList();
       final illumination = bucket.map((s) {
-        final end = s.actualSleepEndedAt ?? s.endedAt!;
-        final midpoint = s.startedAt.add(Duration(microseconds: end.difference(s.startedAt).inMicroseconds ~/ 2));
+        final start = s.actualSleepStartedAt!;
+        final end = s.actualSleepEndedAt!;
+        final midpoint = start.add(Duration(microseconds: end.difference(start).inMicroseconds ~/ 2));
         return at(midpoint).illumination;
       }).toList();
       return MoonPhaseGroup(
@@ -67,9 +73,10 @@ class MoonPhaseAnalytics {
   }
 
   static bool phaseChangedDuring(SleepSession session) {
-    final end = session.actualSleepEndedAt ?? session.endedAt;
-    if (end == null || !end.isAfter(session.startedAt)) return false;
-    return indexAt(session.startedAt) != indexAt(end);
+    final start = session.actualSleepStartedAt;
+    final end = session.actualSleepEndedAt;
+    if (start == null || end == null || !end.isAfter(start)) return false;
+    return indexAt(start) != indexAt(end);
   }
 
   static String percent(double? value) => value == null ? 'Нет данных' : '${(value*100).round()}%';
