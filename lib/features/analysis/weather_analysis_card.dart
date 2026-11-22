@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../data/sleep_database.dart';
@@ -42,6 +43,7 @@ class WeatherAnalysisCard extends StatefulWidget {
 }
 
 class _WeatherAnalysisCardState extends State<WeatherAnalysisCard> {
+  static bool _timeZonesInitialized = false;
   late Future<_WeatherAnalysisData> _future;
 
   String get _sessionSignature =>
@@ -50,6 +52,10 @@ class _WeatherAnalysisCardState extends State<WeatherAnalysisCard> {
   @override
   void initState() {
     super.initState();
+    if (!_timeZonesInitialized) {
+      tzdata.initializeTimeZones();
+      _timeZonesInitialized = true;
+    }
     _future = _load();
   }
 
@@ -237,6 +243,12 @@ class _WeatherAnalysisCardState extends State<WeatherAnalysisCard> {
     return '${rounded ~/ 60} ч ${rounded % 60} мин';
   }
 
+  String _daylight(double? seconds) {
+    if (seconds == null || !seconds.isFinite || seconds <= 0) return '—';
+    final minutes = (seconds / 60).round();
+    return '${minutes ~/ 60} ч ${minutes % 60} мин';
+  }
+
   String _solarTime(DateTime? value, WeatherLocation location) {
     if (value == null) return '—';
     try {
@@ -328,7 +340,7 @@ class _WeatherAnalysisCardState extends State<WeatherAnalysisCard> {
           else
             ...solarRows.take(7).map((night) => _WeatherMetricRow(
               label: DateFormat('d MMM', 'ru').format(night.startedAt),
-              value: 'Закат ${_solarTime(night.summary.sunsetUtc, location)} · восход ${_solarTime(night.summary.sunriseUtc, location)}',
+              value: 'Закат ${_solarTime(night.summary.sunsetUtc, location)} · восход ${_solarTime(night.summary.sunriseUtc, location)} · день ${_daylight(night.summary.daylightDurationSeconds)}',
             )),
           const Divider(height: 18, color: AppTheme.surfaceLight),
           const Text('Продолжительность сна при разной температуре',
