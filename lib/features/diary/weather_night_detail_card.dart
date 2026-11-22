@@ -34,12 +34,13 @@ class WeatherNightDetailCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final start = session.actualSleepStartedAt ?? session.startedAt;
-    final end = session.actualSleepEndedAt ?? session.endedAt;
-    final midpoint = end != null && end.isAfter(start)
-        ? start.add(Duration(microseconds: end.difference(start).inMicroseconds ~/ 2))
-        : start;
-    final moon = MoonPhaseAnalytics.at(midpoint);
+    final actualStart = session.actualSleepStartedAt;
+    final actualEnd = session.actualSleepEndedAt;
+    final hasActualInterval = actualStart != null && actualEnd != null && actualEnd.isAfter(actualStart);
+    final midpoint = hasActualInterval
+        ? actualStart.add(Duration(microseconds: actualEnd.difference(actualStart).inMicroseconds ~/ 2))
+        : null;
+    final moon = midpoint == null ? null : MoonPhaseAnalytics.at(midpoint);
 
     return SectionCard(
       child: FutureBuilder<WeatherNightRecord?>(
@@ -94,8 +95,8 @@ class WeatherNightDetailCard extends StatelessWidget {
                 style: const TextStyle(color: AppTheme.muted, fontSize: 10, height: 1.35)),
             ],
             const Divider(height: 18, color: AppTheme.surfaceLight),
-            _row('Фаза Луны на середину сна', moon.label),
-            _row('Расчётная освещённость Луны', '${(moon.illumination * 100).round()}%'),
+            _row('Фаза Луны на середину сна', moon?.label ?? 'Нет фактического интервала сна'),
+            _row('Расчётная освещённость Луны', moon == null ? 'Нет данных' : '${(moon.illumination * 100).round()}%'),
             const Text(
               'Погодные значения — архивные оценки поставщика с часовым разрешением; полнота зависит от доступности данных. Фаза и освещённость Луны рассчитываются локально и не измеряют яркость в спальне.',
               style: TextStyle(color: AppTheme.muted, fontSize: 10, height: 1.4),
