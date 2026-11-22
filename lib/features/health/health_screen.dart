@@ -16,6 +16,7 @@ class HealthScreen extends StatefulWidget {
 class _HealthScreenState extends State<HealthScreen> {
   late Future<_HealthSnapshot> _future;
   int _days = 30;
+  DateTimeRange? _customRange;
 
   @override
   void initState() {
@@ -24,7 +25,7 @@ class _HealthScreenState extends State<HealthScreen> {
   }
 
   Future<_HealthSnapshot> _load() async {
-    final sessions = await widget.database.getSessions(limit: 365);
+    final sessions = await widget.database.getSessions(limit: 5000);
     final samples = <String, List<_MetricSample>>{};
     for (final session in sessions) {
       final rows = await widget.database.getMetrics(session.id);
@@ -53,17 +54,38 @@ class _HealthScreenState extends State<HealthScreen> {
     await _future;
   }
 
+  Future<void> _chooseRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(now.year, now.month, now.day),
+      initialDateRange: _customRange ?? DateTimeRange(start: now.subtract(const Duration(days: 29)), end: now),
+      helpText: 'Выберите период анализа',
+      saveText: 'Применить',
+    );
+    if (picked != null && mounted) setState(() => _customRange = picked);
+  }
+
   @override
   Widget build(BuildContext context) => FutureBuilder<_HealthSnapshot>(
     future: _future,
     builder: (context, snapshot) {
       final data = snapshot.data;
-      final cutoff = DateTime.now().subtract(Duration(days: _days));
+      final now = DateTime.now();
+      final selectedStart = _customRange?.start ?? DateTime(now.year, now.month, now.day).subtract(Duration(days: _days - 1));
+      final selectedEnd = _customRange == null ? now : DateTime(_customRange!.end.year, _customRange!.end.month, _customRange!.end.day, 23, 59, 59);
+      final durationDays = selectedEnd.difference(selectedStart).inDays + 1;
+      final previousStart = selectedStart.subtract(Duration(days: durationDays));
+      final previousEnd = selectedStart.subtract(const Duration(microseconds: 1));
       final visible = <String, List<_MetricSample>>{};
+      final previous = <String, List<_MetricSample>>{};
       if (data != null) {
         for (final entry in data.samples.entries) {
-          final points = entry.value.where((sample) => !sample.measuredAt.isBefore(cutoff)).toList();
-          if (points.isNotEmpty) visible[entry.key] = points;
+          final currentPoints = entry.value.where((sample) => !sample.measuredAt.isBefore(selectedStart) && !sample.measuredAt.isAfter(selectedEnd)).toList();
+          final previousPoints = entry.value.where((sample) => !sample.measuredAt.isBefore(previousStart) && !sample.measuredAt.isAfter(previousEnd)).toList();
+          if (currentPoints.isNotEmpty) visible[entry.key] = currentPoints;
+          if (previousPoints.isNotEmpty) previous[entry.key] = previousPoints;
         }
       }
       return ListView(
@@ -109,13 +131,24 @@ class _HealthScreenState extends State<HealthScreen> {
                 ButtonSegment(value: 365, label: Text('Год')),
               ],
               selected: {_days},
-              onSelectionChanged: (value) => setState(() => _days = value.first),
+              onSelectionChanged: (value) => setState(() { _days = value.first; _customRange = null; }),
             ),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(child: OutlinedButton.icon(
+                onPressed: _chooseRange,
+                icon: const Icon(Icons.date_range_rounded),
+                label: Text(_customRange == null ? 'Произвольный период' : '${_date(_customRange!.start)} — ${_date(_customRange!.end)}'),
+              )),
+              if (_customRange != null) IconButton(tooltip: 'Сбросить период', onPressed: () => setState(() => _customRange = null), icon: const Icon(Icons.close_rounded)),
+            ]),
             const SizedBox(height: 12),
             if (visible.isEmpty)
               const SectionCard(child: Text('За выбранный период измерений нет. Отсутствие записей не означает нулевые значения.', style: TextStyle(color: AppTheme.muted)))
             else ...[
               _CoverageCard(samples: visible),
+              const SizedBox(height: 12),
+              _ComparisonCard(current: visible, previous: previous, previousStart: previousStart, previousEnd: previousEnd),
               const SizedBox(height: 12),
               for (final entry in visible.entries)
                 Padding(
@@ -132,6 +165,64 @@ class _HealthScreenState extends State<HealthScreen> {
       );
     },
   );
+}
+
+class _ComparisonCard extends StatelessWidget {
+  const _ComparisonCard({required this.current, required this.previous, required this.previousStart, required this.previousEnd});
+  final Map<String, List<_MetricSample>> current;
+  final Map<String, List<_MetricSample>> previous;
+  final DateTime previousStart;
+  final DateTime previousEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    final common = current.keys.where((key) => previous.containsKey(key)).toList();
+    if (common.isEmpty) {
+      return const SectionCard(child: Text('Для сравнения пока недостаточно измерений в предыдущем равном по длительности периоде.', style: TextStyle(color: AppTheme.muted)));
+    }
+    return SectionCard(child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Сравнение с предыдущим периодом', style: TextStyle(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 4),
+        Text('${_date(previousStart)} — ${_date(previousEnd)}', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+        const SizedBox(height: 10),
+        for (final key in common) ...[
+          _ComparisonRow(type: key, current: current[key]!, previous: previous[key]!),
+          if (key != common.last) const Divider(height: 18),
+        ],
+        const SizedBox(height: 6),
+        const Text('Сравниваются средние значения доступных измерений. Разница сама по себе не является медицинской оценкой.', style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.35)),
+      ],
+    ));
+  }
+}
+
+class _ComparisonRow extends StatelessWidget {
+  const _ComparisonRow({required this.type, required this.current, required this.previous});
+  final String type;
+  final List<_MetricSample> current;
+  final List<_MetricSample> previous;
+
+  double _average(List<_MetricSample> values) => values.fold<double>(0, (sum, item) => sum + item.value) / values.length;
+
+  @override
+  Widget build(BuildContext context) {
+    final currentAverage = _average(current);
+    final previousAverage = _average(previous);
+    final delta = currentAverage - previousAverage;
+    final unit = current.last.unit;
+    final percent = previousAverage == 0 ? null : delta / previousAverage * 100;
+    final deltaText = (delta > 0 ? '+' : '') + _number(delta) + ' ' + unit;
+    final percentText = percent == null ? '' : ' (' + (percent > 0 ? '+' : '') + _number(percent) + '%)';
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(type, style: const TextStyle(fontWeight: FontWeight.w600)),
+      const SizedBox(height: 4),
+      Text('Сейчас: ${_number(currentAverage)} $unit · ранее: ${_number(previousAverage)} $unit', style: const TextStyle(fontSize: 12)),
+      Text('Изменение: $deltaText$percentText', style: const TextStyle(color: AppTheme.muted, fontSize: 12)),
+      Text('${current.length} / ${previous.length} измерений', style: const TextStyle(color: AppTheme.muted, fontSize: 10)),
+    ]);
+  }
 }
 
 class _HealthSnapshot {
