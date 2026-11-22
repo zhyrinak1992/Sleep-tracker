@@ -84,7 +84,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: sessions.map((session) =>
         Padding(padding: const EdgeInsets.only(top: 8), child: Row(children: [
           SizedBox(width: 48, child: Text(DateFormat('HH:mm').format(session.startedAt), style: const TextStyle(fontWeight: FontWeight.w600))),
-          Expanded(child: Text(_duration(session.duration))),
+          Expanded(child: Text(_duration(session.duration!.inMinutes.toDouble()))),
           if (session.morningRating != null) Text('Оценка ${session.morningRating}/5', style: const TextStyle(color: AppTheme.muted, fontSize: 12)),
         ]))).toList());
     }
@@ -213,7 +213,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               const SizedBox(height: 4),
               const Text('Среднее для дней с завершёнными сессиями · шкала 0–12 ч', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
               const SizedBox(height: 18),
-              SizedBox(height: 150, child: _DurationChart(values: chart, period: _period, onTap: (index) => _showChartDetails(context, all, start, previousStart, index)),
+              SizedBox(height: 150, child: _DurationChart(values: chart, period: _period, onTap: (index) => _showChartDetails(context, all, start, previousStart, index))),
             ])),
             const SizedBox(height: 14),
             SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
