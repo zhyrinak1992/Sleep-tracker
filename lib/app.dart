@@ -147,6 +147,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       await YandexSmartHomeService.instance.refreshConfiguredDeviceIfNeeded();
     } catch (error, stackTrace) {
       debugPrint('Yandex climate sampling failed: $error\\n$stackTrace');
+    } finally {
+      _climateRefreshInProgress = false;
     }
   }
 
