@@ -10,6 +10,7 @@ import 'individual_sleep_need_card.dart';
 import 'weekday_comparison_screen.dart';
 import 'moon_phase_screen.dart';
 import 'climate_analytics.dart';
+import 'climate_trend_chart.dart';
 import 'daytime_sleep_card.dart';
 import 'activity_summary_card.dart';
 import 'activity_analysis_card.dart';
@@ -406,9 +407,9 @@ class _ClimateSummary extends StatelessWidget {
         const SizedBox(height: 5),
         const Text('Показания выбранного датчика за последние 30 дней', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
         const SizedBox(height: 12),
-        _ClimateMetricLine(title: 'Температура', summary: temperature),
+        _ClimateMetricLine(title: 'Температура', summary: temperature, samples: samples, metricType: 'temperature'),
         const Divider(height: 18, color: AppTheme.surfaceLight),
-        _ClimateMetricLine(title: 'Влажность', summary: humidity),
+        _ClimateMetricLine(title: 'Влажность', summary: humidity, samples: samples, metricType: 'humidity'),
         const SizedBox(height: 8),
         Text('Всего измерений: ${samples.length}. Новые значения появляются при доступности датчика и работе приложения. Отсутствующие интервалы не заполняются искусственными данными.',
           style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4)),
@@ -418,9 +419,11 @@ class _ClimateSummary extends StatelessWidget {
 }
 
 class _ClimateMetricLine extends StatelessWidget {
-  const _ClimateMetricLine({required this.title, required this.summary});
+  const _ClimateMetricLine({required this.title, required this.summary, required this.samples, required this.metricType});
   final String title;
   final ClimateMetricSummary? summary;
+  final List<Map<String, Object?>> samples;
+  final String metricType;
 
   @override
   Widget build(BuildContext context) {
@@ -437,6 +440,8 @@ class _ClimateMetricLine extends StatelessWidget {
       Text('Последнее: ${value.lastValue.toStringAsFixed(1)}${value.unit} · $last · точек: ${value.count}', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
       if (value.coveragePercent != null)
         Text('Покрытие 15-минутного интервала: ${value.coveragePercent!.toStringAsFixed(0)}%', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+      const SizedBox(height: 8),
+      ClimateTrendChart(samples: samples, metricType: metricType, unit: value.unit),
     ]);
   }
 }
