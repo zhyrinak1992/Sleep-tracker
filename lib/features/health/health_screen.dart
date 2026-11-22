@@ -570,7 +570,7 @@ class _HealthDayCalendarCardState extends State<_HealthDayCalendarCard> {
           height: 42,
           margin: const EdgeInsets.symmetric(horizontal: 1),
           decoration: BoxDecoration(
-            color: isSelected ? AppTheme.accent.withValues(alpha: 0.22) : null,
+            color: isSelected ? AppTheme.teal.withValues(alpha: 0.22) : null,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: isSelected ? AppTheme.accent : selectedToday ? AppTheme.accent.withValues(alpha: 0.55) : Colors.transparent),
           ),
