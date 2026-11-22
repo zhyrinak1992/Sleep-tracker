@@ -68,7 +68,7 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
     });
   }
 
-  void _onUserActivity(PointerDownEvent event) {
+  void _onUserActivity(PointerEvent event) {
     _armIdleTimer();
   }
 
@@ -184,6 +184,8 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
     if (!_unlocked) return _lockScreen(privacyOnly: false);
     return Listener(
       onPointerDown: _onUserActivity,
+      onPointerMove: _onUserActivity,
+      onPointerSignal: _onUserActivity,
       behavior: HitTestBehavior.translucent,
       child: widget.child,
     );
