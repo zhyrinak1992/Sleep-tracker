@@ -280,11 +280,11 @@ class AppleHealthFileImportService {
           'В ZIP найдены XML-файлы, но записи сна Apple Health не обнаружены. Файлы: $names. Проверьте, что выбран основной экспорт, а не export_cda.',
         );
       }
-      return await parseXmlStream(extractedXml!.openRead());
+      return await parseXmlStream(extractedXml.openRead());
     } finally {
       await input.close();
-      if (extractedXml != null && await extractedXml!.exists()) {
-        await extractedXml!.delete();
+      if (extractedXml != null && await extractedXml.exists()) {
+        await extractedXml.delete();
       }
     }
   }
