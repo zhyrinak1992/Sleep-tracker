@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 /// Aggregates real HealthKit samples for one night without mixing units
 /// or manufacturing values for missing intervals.
 class SleepMetricSummary {
@@ -50,8 +48,8 @@ class SleepMetricSummary {
         metricType: entry.key.$1,
         unit: entry.key.$2,
         count: values.length,
-        minimum: numbers.reduce(math.min),
-        maximum: numbers.reduce(math.max),
+        minimum: numbers.reduce((a, b) => a < b ? a : b),
+        maximum: numbers.reduce((a, b) => a > b ? a : b),
         average: numbers.reduce((a, b) => a + b) / numbers.length,
         firstMeasuredAt: values.first.$2,
         lastMeasuredAt: values.last.$2,
