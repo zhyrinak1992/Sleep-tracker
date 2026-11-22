@@ -118,6 +118,31 @@ class HourlyWeatherPoint {
   }
 }
 
+class SolarEvent {
+  const SolarEvent({required this.date, this.sunriseUtc, this.sunsetUtc});
+
+  final String date;
+  final DateTime? sunriseUtc;
+  final DateTime? sunsetUtc;
+
+  Map<String, Object?> toJson() => {
+    'date': date,
+    'sunriseUtc': sunriseUtc?.toUtc().toIso8601String(),
+    'sunsetUtc': sunsetUtc?.toUtc().toIso8601String(),
+  };
+
+  factory SolarEvent.fromJson(Map value) {
+    final date = value['date'];
+    if (date is! String) throw const FormatException('В солнечном архиве отсутствует дата.');
+    DateTime? parse(String key) {
+      final raw = value[key];
+      if (raw is! String) return null;
+      return _parseWeatherUtc(raw);
+    }
+    return SolarEvent(date: date, sunriseUtc: parse('sunriseUtc'), sunsetUtc: parse('sunsetUtc'));
+  }
+}
+
 class WeatherNightSummary {
   const WeatherNightSummary({
     required this.sampleCount,
@@ -126,6 +151,8 @@ class WeatherNightSummary {
     this.totalPrecipitationMm,
     this.averageWindKmh,
     this.averagePressureHpa,
+    this.sunriseUtc,
+    this.sunsetUtc,
   });
 
   final int sampleCount;
@@ -134,11 +161,14 @@ class WeatherNightSummary {
   final double? totalPrecipitationMm;
   final double? averageWindKmh;
   final double? averagePressureHpa;
+  final DateTime? sunriseUtc;
+  final DateTime? sunsetUtc;
 
   static WeatherNightSummary summarize(
     Iterable<HourlyWeatherPoint> points, {
     required DateTime start,
     required DateTime end,
+    Iterable<SolarEvent> solarEvents = const [],
   }) {
     final selected = points.where((point) {
       final time = point.time.toUtc();
@@ -160,6 +190,16 @@ class WeatherNightSummary {
           : precipitation.reduce((a, b) => a + b),
       averageWindKmh: average(values((point) => point.windKmh)),
       averagePressureHpa: average(values((point) => point.pressureHpa)),
+      sunsetUtc: _nearestSolarEvent(
+        solarEvents.map((event) => event.sunsetUtc).whereType<DateTime>(),
+        start.toUtc(),
+        before: true,
+      ),
+      sunriseUtc: _nearestSolarEvent(
+        solarEvents.map((event) => event.sunriseUtc).whereType<DateTime>(),
+        end.toUtc(),
+        before: false,
+      ),
     );
   }
 }
@@ -190,6 +230,19 @@ class WeatherService {
         .whereType<Map>()
         .map(WeatherLocation.fromJson)
         .toList();
+  }
+
+  static DateTime? _nearestSolarEvent(
+    Iterable<DateTime> events,
+    DateTime reference, {
+    required bool before,
+  }) {
+    final candidates = events.map((event) => event.toUtc()).where((event) =>
+      before ? !event.isAfter(reference) : !event.isBefore(reference)).toList();
+    if (candidates.isEmpty) return null;
+    return before
+      ? candidates.reduce((a, b) => a.isAfter(b) ? a : b)
+      : candidates.reduce((a, b) => a.isBefore(b) ? a : b);
   }
 
   Future<List<HourlyWeatherPoint>> loadHistoricalWeather({
@@ -309,6 +362,103 @@ class WeatherService {
     return merged;
   }
 
+  Future<List<SolarEvent>> loadSolarEvents({
+    required SleepDatabase database,
+    required WeatherLocation location,
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    final startDate = _date(start.toUtc().subtract(const Duration(days: 2)));
+    final endDate = _date(end.toUtc().add(const Duration(days: 2)));
+    final cacheKey = 'sleep_tracker_solar_cache_v1_${location.id}';
+    final cachedRaw = await database.getAppMetadata(cacheKey);
+    Map<String, dynamic>? cached;
+    List<SolarEvent> cachedEvents = const [];
+    if (cachedRaw != null && cachedRaw.isNotEmpty) {
+      final decoded = jsonDecode(cachedRaw);
+      if (decoded is! Map) {
+        throw const FormatException('Кэш восхода и заката повреждён. Сохранённые данные не перезаписаны.');
+      }
+      cached = Map<String, dynamic>.from(decoded);
+      final rawEvents = cached['events'];
+      if (rawEvents is! List) {
+        throw const FormatException('В кэше восхода и заката отсутствует список событий.');
+      }
+      cachedEvents = rawEvents.whereType<Map>().map(SolarEvent.fromJson).toList();
+      final cachedStart = cached['startDate'];
+      final cachedEnd = cached['endDate'];
+      if (cachedStart is String && cachedEnd is String &&
+          cachedStart.compareTo(startDate) <= 0 && cachedEnd.compareTo(endDate) >= 0) {
+        return cachedEvents;
+      }
+    }
+
+    final uri = Uri.https('archive-api.open-meteo.com', '/v1/archive', {
+      'latitude': location.latitude.toStringAsFixed(5),
+      'longitude': location.longitude.toStringAsFixed(5),
+      'start_date': startDate,
+      'end_date': endDate,
+      'daily': 'sunrise,sunset',
+      'timezone': 'UTC',
+      'timeformat': 'iso8601',
+    });
+    http.Response response;
+    try {
+      response = await http.get(uri).timeout(const Duration(seconds: 30));
+    } catch (_) {
+      if (cachedEvents.isNotEmpty) return cachedEvents;
+      rethrow;
+    }
+    if (response.statusCode != 200) {
+      if (cachedEvents.isNotEmpty) return cachedEvents;
+      throw Exception('Архив восхода и заката ответил кодом ${response.statusCode}.');
+    }
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map || decoded['daily'] is! Map) {
+      if (cachedEvents.isNotEmpty) return cachedEvents;
+      throw const FormatException('Сервис не вернул данные восхода и заката.');
+    }
+    final daily = decoded['daily'] as Map;
+    final dates = daily['time'];
+    final sunrises = daily['sunrise'];
+    final sunsets = daily['sunset'];
+    if (dates is! List || sunrises is! List || sunsets is! List) {
+      if (cachedEvents.isNotEmpty) return cachedEvents;
+      throw const FormatException('В ответе архива отсутствуют солнечные события.');
+    }
+    final fetched = <SolarEvent>[];
+    for (var i = 0; i < dates.length; i++) {
+      final date = dates[i];
+      if (date is! String) continue;
+      DateTime? parse(List values) {
+        if (i >= values.length || values[i] is! String) return null;
+        return _parseWeatherUtc(values[i] as String);
+      }
+      fetched.add(SolarEvent(date: date, sunriseUtc: parse(sunrises), sunsetUtc: parse(sunsets)));
+    }
+    if (fetched.isEmpty) {
+      if (cachedEvents.isNotEmpty) return cachedEvents;
+      return const [];
+    }
+    final merged = <String, SolarEvent>{
+      for (final event in cachedEvents) event.date: event,
+      for (final event in fetched) event.date: event,
+    }.values.toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
+    final oldStart = cached?['startDate'];
+    final oldEnd = cached?['endDate'];
+    final mergedStart = oldStart is String && oldStart.compareTo(startDate) < 0 ? oldStart : startDate;
+    final mergedEnd = oldEnd is String && oldEnd.compareTo(endDate) > 0 ? oldEnd : endDate;
+    await database.setAppMetadata(cacheKey, jsonEncode({
+      'schemaVersion': 1,
+      'locationId': location.id,
+      'startDate': mergedStart,
+      'endDate': mergedEnd,
+      'events': merged.map((event) => event.toJson()).toList(),
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+    }));
+    return merged;
+  }
   static String _date(DateTime value) =>
       '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
 }
