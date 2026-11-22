@@ -1,6 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:timezone/data/latest.dart' as tzdata;
+import 'package:timezone/timezone.dart' as tz;
 
 import '../../data/sleep_database.dart';
 import '../../data/weather_service.dart';
@@ -10,9 +13,10 @@ import '../../widgets/section_card.dart';
 import 'weather_sleep_analysis.dart';
 
 class _WeatherNight {
-  const _WeatherNight({required this.summary, required this.sleepMinutes});
+  const _WeatherNight({required this.summary, required this.sleepMinutes, required this.startedAt});
   final WeatherNightSummary summary;
   final double sleepMinutes;
+  final DateTime startedAt;
 }
 
 class _WeatherAnalysisData {
@@ -39,6 +43,7 @@ class WeatherAnalysisCard extends StatefulWidget {
 }
 
 class _WeatherAnalysisCardState extends State<WeatherAnalysisCard> {
+  static bool _timeZonesInitialized = false;
   late Future<_WeatherAnalysisData> _future;
 
   String get _sessionSignature =>
@@ -47,6 +52,10 @@ class _WeatherAnalysisCardState extends State<WeatherAnalysisCard> {
   @override
   void initState() {
     super.initState();
+    if (!_timeZonesInitialized) {
+      tzdata.initializeTimeZones();
+      _timeZonesInitialized = true;
+    }
     _future = _load();
   }
 
@@ -80,15 +89,29 @@ class _WeatherAnalysisCardState extends State<WeatherAnalysisCard> {
     }
     final start = valid.map((item) => item.start).reduce((a, b) => a.isBefore(b) ? a : b);
     final end = valid.map((item) => item.end).reduce((a, b) => a.isAfter(b) ? a : b);
-    final points = await WeatherService.instance.loadHistoricalWeather(
+    final pointsFuture = WeatherService.instance.loadHistoricalWeather(
       database: widget.database,
       location: location,
       start: start,
       end: end,
     );
+    final solarFuture = WeatherService.instance.loadSolarEvents(
+      database: widget.database,
+      location: location,
+      start: start,
+      end: end,
+    );
+    final points = await pointsFuture;
+    final solarEvents = await solarFuture;
     final nights = valid.map((item) => _WeatherNight(
-      summary: WeatherNightSummary.summarize(points, start: item.start, end: item.end),
+      summary: WeatherNightSummary.summarize(
+        points,
+        start: item.start,
+        end: item.end,
+        solarEvents: solarEvents,
+      ),
       sleepMinutes: item.end.difference(item.start).inMinutes.toDouble(),
+      startedAt: item.start,
     )).toList();
     return _WeatherAnalysisData(location: location, nights: nights);
   }
@@ -220,6 +243,18 @@ class _WeatherAnalysisCardState extends State<WeatherAnalysisCard> {
     return '${rounded ~/ 60} ч ${rounded % 60} мин';
   }
 
+  String _solarTime(DateTime? value, WeatherLocation location) {
+    if (value == null) return '—';
+    try {
+      final local = tz.TZDateTime.from(value, tz.getLocation(location.timezone));
+      return DateFormat('HH:mm').format(local);
+    } catch (_) {
+      return DateFormat('HH:mm').format(value.toLocal());
+    }
+  }
+
+
+
   double? _average(Iterable<double?> values) {
     final present = values.whereType<double>().toList();
     if (present.isEmpty) return null;
@@ -261,6 +296,8 @@ class _WeatherAnalysisCardState extends State<WeatherAnalysisCard> {
         ));
       }
       final available = data.nights.where((night) => night.summary.sampleCount > 0).toList();
+      final solarRows = data.nights.where((night) => night.summary.sunriseUtc != null || night.summary.sunsetUtc != null).toList()
+        ..sort((a, b) => b.startedAt.compareTo(a.startedAt));
       final temperatureNights = data.nights.where((night) => night.summary.averageTemperatureC != null).toList();
       final comparison = WeatherSleepComparison.fromSamples(temperatureNights.map((night) =>
         WeatherSleepSample(
@@ -291,6 +328,16 @@ class _WeatherAnalysisCardState extends State<WeatherAnalysisCard> {
           _WeatherMetricRow(label: 'Средняя скорость ветра', value: _number(_average(available.map((n) => n.summary.averageWindKmh)), 'км/ч')),
           const SizedBox(height: 6),
           _WeatherMetricRow(label: 'Атмосферное давление', value: _number(_average(available.map((n) => n.summary.averagePressureHpa)), 'гПа')),
+          const Divider(height: 18, color: AppTheme.surfaceLight),
+          const Text('Восход и закат по ночам', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+          const SizedBox(height: 6),
+          if (solarRows.isEmpty)
+            const Text('Солнечные события за выбранные даты недоступны.', style: TextStyle(color: AppTheme.muted, fontSize: 11))
+          else
+            ...solarRows.take(7).map((night) => _WeatherMetricRow(
+              label: DateFormat('d MMM', 'ru').format(night.startedAt),
+              value: 'Закат ${_solarTime(night.summary.sunsetUtc, location)} · восход ${_solarTime(night.summary.sunriseUtc, location)}',
+            )),
           const Divider(height: 18, color: AppTheme.surfaceLight),
           const Text('Продолжительность сна при разной температуре',
             style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
