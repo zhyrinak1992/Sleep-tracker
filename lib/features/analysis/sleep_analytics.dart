@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../../models/sleep_session.dart';
 
 enum AnalysisPeriod { week, month }
@@ -16,6 +18,18 @@ class SleepPeriodSummary {
   final int rated;
   final double? averageDurationMinutes;
   final double? averageRating;
+}
+
+class SleepRegularitySummary {
+  const SleepRegularitySummary({
+    required this.sampleCount,
+    required this.bedtimeDeviationMinutes,
+    required this.wakeTimeDeviationMinutes,
+  });
+
+  final int sampleCount;
+  final double? bedtimeDeviationMinutes;
+  final double? wakeTimeDeviationMinutes;
 }
 
 class SleepAnalytics {
@@ -61,6 +75,45 @@ class SleepAnalytics {
       averageDurationMinutes: durationAverage,
       averageRating: ratingAverage,
     );
+  }
+
+  static SleepRegularitySummary regularity(Iterable<SleepSession> sessions) {
+    final completed = sessions.where((session) {
+      final start = session.actualSleepStartedAt ?? session.startedAt;
+      final end = session.actualSleepEndedAt ?? session.endedAt;
+      return end != null && end.isAfter(start);
+    }).toList()..sort((a, b) => a.startedAt.compareTo(b.startedAt));
+    final bedtimes = <int>[];
+    final wakeTimes = <int>[];
+    for (final session in completed) {
+      final start = session.actualSleepStartedAt ?? session.startedAt;
+      final end = session.actualSleepEndedAt ?? session.endedAt!;
+      bedtimes.add(start.hour * 60 + start.minute);
+      wakeTimes.add(end.hour * 60 + end.minute);
+    }
+    return SleepRegularitySummary(
+      sampleCount: completed.length,
+      bedtimeDeviationMinutes: _circularMeanAbsoluteDeviation(bedtimes),
+      wakeTimeDeviationMinutes: _circularMeanAbsoluteDeviation(wakeTimes),
+    );
+  }
+
+  // Circular statistics keep 23:55 and 00:05 close rather than a day apart.
+  static double? _circularMeanAbsoluteDeviation(List<int> minutes) {
+    if (minutes.length < 2) return null;
+    const dayMinutes = 24 * 60;
+    final sine = minutes.fold<double>(0, (sum, value) =>
+      sum + math.sin(value * 2 * math.pi / dayMinutes));
+    final cosine = minutes.fold<double>(0, (sum, value) =>
+      sum + math.cos(value * 2 * math.pi / dayMinutes));
+    if (sine.abs() < 1e-9 && cosine.abs() < 1e-9) return null;
+    var mean = math.atan2(sine, cosine) * dayMinutes / (2 * math.pi);
+    if (mean < 0) mean += dayMinutes;
+    final deviations = minutes.map((value) {
+      final raw = (value - mean).abs();
+      return math.min(raw, dayMinutes - raw);
+    });
+    return deviations.reduce((x, y) => x + y) / deviations.length;
   }
 
   static List<double?> chartValues(SleepPeriodSummary summary, AnalysisPeriod period) {
