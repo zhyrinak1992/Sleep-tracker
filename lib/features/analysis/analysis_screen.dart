@@ -216,7 +216,7 @@ class _MetricCard extends StatelessWidget {
       ]),
       if (previousValue != null) ...[
         const SizedBox(height: 5),
-        Text('Предыдущий период: ${unit == 'мин' ? _duration(previousValue) : '${previousValue.toStringAsFixed(1)} из 5'}',
+        Text('Предыдущий период: ${unit == 'мин' ? _duration(previousValue) : '${previousValue!.toStringAsFixed(1)} из 5'}',
           style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
       ],
     ]));
