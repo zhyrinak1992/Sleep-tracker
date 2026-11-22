@@ -45,7 +45,7 @@ class MoonPhaseAnalytics {
     for (final session in sessions) {
       final end = session.actualSleepEndedAt ?? session.endedAt;
       if (end == null || !end.isAfter(session.startedAt)) continue;
-      final midpoint = session.startedAt.add(end.difference(session.startedAt) ~/ 2);
+      final midpoint = session.startedAt.add(Duration(microseconds: end.difference(session.startedAt).inMicroseconds ~/ 2));
       buckets[indexAt(midpoint)].add(session);
     }
     return List.generate(8, (i) {
