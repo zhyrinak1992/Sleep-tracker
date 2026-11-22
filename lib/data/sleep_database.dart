@@ -637,6 +637,43 @@ class SleepDatabase {
     return expired.length;
   }
   Future<Map<String, Object?>?> getMorningReport(String sessionId) async { final rows = await (await database).query('morning_reports', where: 'session_id = ?', whereArgs: [sessionId], limit: 1); return rows.isEmpty ? null : rows.first; }
+
+  Future<Map<String, Map<String, Object?>>> getMorningReportsForSessions(
+    Iterable<String> sessionIds,
+  ) async {
+    final ids = sessionIds.toSet().toList();
+    if (ids.isEmpty) return {};
+    final placeholders = List<String>.filled(ids.length, '?').join(',');
+    final rows = await (await database).query(
+      'morning_reports',
+      where: 'session_id IN ($placeholders)',
+      whereArgs: ids,
+    );
+    return {
+      for (final row in rows)
+        row['session_id']! as String: row,
+    };
+  }
+
+  Future<Map<String, List<Map<String, Object?>>>> getStagesForSessions(
+    Iterable<String> sessionIds,
+  ) async {
+    final ids = sessionIds.toSet().toList();
+    if (ids.isEmpty) return {};
+    final placeholders = List<String>.filled(ids.length, '?').join(',');
+    final rows = await (await database).query(
+      'sleep_stages',
+      where: 'session_id IN ($placeholders)',
+      whereArgs: ids,
+      orderBy: 'started_at',
+    );
+    final result = <String, List<Map<String, Object?>>>{};
+    for (final row in rows) {
+      final id = row['session_id']! as String;
+      (result[id] ??= []).add(row);
+    }
+    return result;
+  }
   Future<void> saveMorningReport({required String sessionId, required int? wellbeing, required int? quality, required String answersJson}) async {
     await (await database).insert('morning_reports', {'id': _uuid.v4(), 'session_id': sessionId, 'report_date': DateTime.now().toIso8601String().substring(0, 10), 'wellbeing': wellbeing, 'sleep_quality': quality, 'answers_json': answersJson, 'created_at': DateTime.now().toUtc().toIso8601String()}, conflictAlgorithm: ConflictAlgorithm.replace);
   }
