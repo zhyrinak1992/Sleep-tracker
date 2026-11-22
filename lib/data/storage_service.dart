@@ -68,7 +68,7 @@ class StorageService {
 
     final freeBytes = await _safeDiskValue(() => DiskUsage.freeSpace());
     final totalDiskBytes = await _safeDiskValue(() => DiskUsage.totalSpace());
-    final otherBytes = (appBytes - databaseBytes - audioBytes - reportBytes - backupBytes).clamp(0, appBytes);
+    final otherBytes = (appBytes - databaseBytes - audioBytes - reportBytes - backupBytes - cacheBytes).clamp(0, appBytes);
 
     // These values are computed separately to make sure a path-provider
     // directory is not accidentally counted twice in the app total.
