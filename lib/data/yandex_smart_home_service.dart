@@ -47,12 +47,14 @@ class YandexDeviceAuthorization {
     required this.verificationUrl,
     required this.intervalSeconds,
     required this.expiresInSeconds,
+    required this.requestedAt,
   });
   final String deviceCode;
   final String userCode;
   final String verificationUrl;
   final int intervalSeconds;
   final int expiresInSeconds;
+  final DateTime requestedAt;
 }
 
 class YandexHomeSnapshot {
@@ -119,6 +121,7 @@ class YandexSmartHomeService {
       verificationUrl: verificationUrl,
       intervalSeconds: (data['interval'] as num?)?.toInt() ?? 5,
       expiresInSeconds: (data['expires_in'] as num?)?.toInt() ?? 300,
+      requestedAt: DateTime.now(),
     );
   }
 
@@ -143,8 +146,8 @@ class YandexSmartHomeService {
   }
 
   Future<void> completeDeviceAuthorization(YandexDeviceAuthorization authorization) async {
-    final deadline = DateTime.now().add(Duration(seconds: authorization.expiresInSeconds));
-    var interval = authorization.intervalSeconds.clamp(2, 30).toInt();
+    final deadline = authorization.requestedAt.add(Duration(seconds: authorization.expiresInSeconds));
+    var interval = authorization.intervalSeconds < 1 ? 1 : authorization.intervalSeconds;
     while (DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(Duration(seconds: interval));
       if (!DateTime.now().isBefore(deadline)) break;
