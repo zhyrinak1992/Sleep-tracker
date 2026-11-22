@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'data/notification_service.dart';
 import 'data/sleep_database.dart';
 import 'features/home/home_screen.dart';
@@ -34,6 +35,9 @@ class SleepTrackerApp extends StatelessWidget {
       title: 'Трекер сна',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      supportedLocales: const [Locale('ru'), Locale('en')],
+      locale: const Locale('ru'),
       home: const AppShell(),
     );
   }
