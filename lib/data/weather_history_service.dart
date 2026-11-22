@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
@@ -172,7 +174,7 @@ class WeatherHistoryService {
       final toKey = _hourKey(lastHour);
       final indices = <int>[];
       for (var index = 0; index < times.length; index++) {
-        final key = times[index];
+        final key = _normalizeHourKey(times[index]);
         if (key.compareTo(fromKey) >= 0 && key.compareTo(toKey) <= 0) {
           indices.add(index);
         }
@@ -197,7 +199,13 @@ class WeatherHistoryService {
       final sunriseValue = dayIndex >= 0 && dayIndex < sunrise.length ? sunrise[dayIndex] : null;
       final sunsetValue = dayIndex >= 0 && dayIndex < sunset.length ? sunset[dayIndex] : null;
       final daylightSeconds = dayIndex >= 0 && dayIndex < daylight.length ? daylight[dayIndex] : null;
-      final sampleCount = temperature?.count ?? 0;
+      final sampleCount = indices.where((index) =>
+        (index < temp.length && temp[index] != null) ||
+        (index < humidity.length && humidity[index] != null) ||
+        (index < pressure.length && pressure[index] != null) ||
+        (index < wind.length && wind[index] != null) ||
+        (index < precipitation.length && precipitation[index] != null)
+      ).length;
       final available = temperature != null || humiditySummary != null ||
           pressureSummary != null || windSummary != null ||
           precipitationTotal != null || sunriseValue != null ||
@@ -244,6 +252,8 @@ class WeatherHistoryService {
 
   static String _hourKey(tz.TZDateTime date) =>
       '${_dateKey(date)}T${date.hour.toString().padLeft(2, '0')}:00';
+
+  static String _normalizeHourKey(String value) => value.length >= 16 ? value.substring(0, 16) : value;
 
   static tz.TZDateTime _ceilHour(tz.TZDateTime value) {
     final floor = tz.TZDateTime(value.location, value.year, value.month, value.day, value.hour);
