@@ -7,6 +7,7 @@ import '../../widgets/section_card.dart';
 import 'sleep_session_detail_screen.dart';
 import 'sleep_session_comparison_screen.dart';
 import 'sleep_session_editor_screen.dart';
+import 'sleep_trash_screen.dart';
 
 class DiaryScreen extends StatefulWidget {
   const DiaryScreen({super.key, required this.database});
