@@ -16,7 +16,6 @@ class AppTheme {
       surface: surface,
       error: Color(0xFFFF8A8A),
     );
-    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(16));
 
     return ThemeData(
       brightness: Brightness.dark,
