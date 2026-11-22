@@ -63,34 +63,87 @@ class BackupService {
         decoded['data'] is! Map<String, dynamic>) {
       throw const FormatException('Файл не является поддерживаемой резервной копией Sleep Tracker.');
     }
+
     final data = Map<String, dynamic>.from(decoded['data'] as Map<String, dynamic>);
     final previousAudio = await SleepDatabase.instance.getAudioEvents();
     final existingAudioIds = previousAudio.map((row) => row['id'] as String).toSet();
-    final audioRows = (data['audio_events'] as List?)?.cast<Map<String, dynamic>>() ?? <Map<String, dynamic>>[];
-    if (audioRows.isNotEmpty) {
-      final docs = await getApplicationDocumentsDirectory();
-      final audioDir = Directory(p.join(docs.path, 'audio_events'));
-      await audioDir.create(recursive: true);
-      final restoredRows = <Map<String, dynamic>>[];
+    final rawAudioRows = data['audio_events'];
+    if (rawAudioRows != null && rawAudioRows is! List) {
+      throw const FormatException('Раздел аудиозаписей в резервной копии повреждён.');
+    }
+    final audioRows = (rawAudioRows as List?)
+            ?.map((row) {
+              if (row is! Map) throw const FormatException('Некорректная запись аудио в резервной копии.');
+              return Map<String, dynamic>.from(row);
+            }).toList() ??
+        <Map<String, dynamic>>[];
+
+    final docs = await getApplicationDocumentsDirectory();
+    final audioDir = Directory(p.join(docs.path, 'audio_events'));
+    await audioDir.create(recursive: true);
+    final createdFiles = <File>[];
+    final restoredRows = <Map<String, dynamic>>[];
+    try {
       for (var i = 0; i < audioRows.length; i++) {
         final row = audioRows[i];
         if (merge && existingAudioIds.contains(row['id'])) continue;
         final encoded = row.remove('audioDataB64');
-        if (encoded is! String) continue; // Never restore a broken path from another iPhone.
-        final bytes = base64Decode(encoded);
-        final extension = p.extension(row['file_path'] as String? ?? '.wav');
-        final restored = File(p.join(audioDir.path, 'restored_${DateTime.now().microsecondsSinceEpoch}_$i$extension'));
-        await restored.writeAsBytes(bytes, flush: true);
+        // Old backups may contain metadata without the original audio bytes.
+        // Such entries are skipped rather than retaining an invalid path from another device.
+        if (encoded == null) continue;
+        if (encoded is! String) {
+          throw const FormatException('Повреждён аудиофайл в резервной копии.');
+        }
+        late final List<int> audioBytes;
+        try {
+          audioBytes = base64Decode(encoded);
+        } on FormatException {
+          throw const FormatException('Не удалось декодировать аудиофайл из резервной копии.');
+        }
+        final originalPath = row['file_path'];
+        final extension = originalPath is String ? p.extension(originalPath) : '';
+        final safeExtension = RegExp(r'^\\.[a-zA-Z0-9]{1,8}$').hasMatch(extension)
+            ? extension
+            : '.audio';
+        final id = row['id'];
+        if (id is! String || id.isEmpty) {
+          throw const FormatException('У аудиозаписи в резервной копии отсутствует ID.');
+        }
+        final restored = File(p.join(
+          audioDir.path,
+          'restored_${DateTime.now().microsecondsSinceEpoch}_${i}_${id.hashCode.abs()}$safeExtension',
+        ));
+        await restored.writeAsBytes(audioBytes, flush: true);
+        createdFiles.add(restored);
         row['file_path'] = restored.path;
         restoredRows.add(row);
       }
+
       data['audio_events'] = restoredRows;
+      // Database replacement is atomic. If validation or SQLite fails, newly
+      // written audio files are removed and the current installation is untouched.
+      await SleepDatabase.instance.restoreSnapshot(data, merge: merge);
+
+      if (!merge) {
+        for (final row in previousAudio) {
+          final oldPath = row['file_path'];
+          if (oldPath is String) {
+            try {
+              final oldFile = File(oldPath);
+              if (!createdFiles.any((file) => file.path == oldFile.path)) {
+                await oldFile.delete();
+              }
+            } catch (_) {}
+          }
+        }
+      }
+      return BackupImportResult.imported;
+    } catch (_) {
+      for (final file in createdFiles) {
+        try { await file.delete(); } catch (_) {}
+      }
+      rethrow;
     }
-    await SleepDatabase.instance.restoreSnapshot(data, merge: merge);
-    if (!merge) {
-      for (final row in previousAudio) { try { await File(row['file_path']! as String).delete(); } catch (_) {} }
-    }
-    return BackupImportResult.imported;
   }
 }
 
