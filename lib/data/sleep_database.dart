@@ -19,7 +19,7 @@ class SleepDatabase {
     final dbPath = p.join(directory.path, 'sleep_tracker.sqlite');
     _db = await openDatabase(
       dbPath,
-      version: 7,
+      version: 8,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: (db, version) async {
         await db.execute('''
@@ -75,6 +75,7 @@ class SleepDatabase {
         await _createV5Columns(db);
         await _createV6Tables(db);
         await _createV7Columns(db);
+        await _createV8AudioRetention(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // Добавочная миграция: существующие ночи и их ID не изменяются.
@@ -123,6 +124,7 @@ class SleepDatabase {
         if (oldVersion < 5) await _createV5Columns(db);
         if (oldVersion < 6) await _createV6Tables(db);
         if (oldVersion < 7) await _createV7Columns(db);
+        if (oldVersion < 8) await _createV8AudioRetention(db);
       },
     );
     return _db!;
@@ -279,7 +281,7 @@ class SleepDatabase {
   Future<void> _createV4Tables(DatabaseExecutor db) async {
     await db.execute('CREATE TABLE IF NOT EXISTS sleep_stages (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, stage TEXT NOT NULL, started_at TEXT NOT NULL, ended_at TEXT NOT NULL, source TEXT NOT NULL, FOREIGN KEY (session_id) REFERENCES sleep_sessions(id) ON DELETE CASCADE)');
     await db.execute('CREATE TABLE IF NOT EXISTS sleep_metrics (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, metric_type TEXT NOT NULL, value REAL NOT NULL, unit TEXT NOT NULL, measured_at TEXT NOT NULL, source TEXT NOT NULL, FOREIGN KEY (session_id) REFERENCES sleep_sessions(id) ON DELETE CASCADE)');
-    await db.execute("CREATE TABLE IF NOT EXISTS audio_events (id TEXT PRIMARY KEY, session_id TEXT, file_path TEXT NOT NULL, category TEXT NOT NULL DEFAULT 'unknown', confidence REAL, captured_at TEXT NOT NULL, expires_at TEXT NOT NULL, duration_ms INTEGER NOT NULL, user_corrected INTEGER NOT NULL DEFAULT 0, FOREIGN KEY (session_id) REFERENCES sleep_sessions(id) ON DELETE SET NULL)");
+    await db.execute("CREATE TABLE IF NOT EXISTS audio_events (id TEXT PRIMARY KEY, session_id TEXT, file_path TEXT, category TEXT NOT NULL DEFAULT 'unknown', confidence REAL, captured_at TEXT NOT NULL, expires_at TEXT NOT NULL, duration_ms INTEGER NOT NULL, user_corrected INTEGER NOT NULL DEFAULT 0, FOREIGN KEY (session_id) REFERENCES sleep_sessions(id) ON DELETE SET NULL)");
     await db.execute('CREATE TABLE IF NOT EXISTS morning_reports (id TEXT PRIMARY KEY, session_id TEXT NOT NULL UNIQUE, report_date TEXT NOT NULL, wellbeing INTEGER, sleep_quality INTEGER, answers_json TEXT, created_at TEXT NOT NULL, FOREIGN KEY (session_id) REFERENCES sleep_sessions(id) ON DELETE CASCADE)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_stages_session ON sleep_stages(session_id, started_at)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_metrics_session ON sleep_metrics(session_id, measured_at)');
@@ -306,6 +308,34 @@ class SleepDatabase {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_climate_samples_time ON climate_samples(measured_at)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_climate_samples_session ON climate_samples(session_id, metric_type, measured_at)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_climate_samples_device ON climate_samples(device_id, metric_type, measured_at)');
+  }
+
+  /// Schema v8: сохраняем метаданные события после удаления аудиофайла.
+  /// file_path становится nullable; сама строка события остаётся в истории.
+  Future<void> _createV8AudioRetention(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE audio_events_v8 (
+        id TEXT PRIMARY KEY,
+        session_id TEXT,
+        file_path TEXT,
+        category TEXT NOT NULL DEFAULT 'unknown',
+        confidence REAL,
+        captured_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        user_corrected INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (session_id) REFERENCES sleep_sessions(id) ON DELETE SET NULL
+      )
+    ''');
+    await db.execute('''
+      INSERT INTO audio_events_v8
+      (id, session_id, file_path, category, confidence, captured_at, expires_at, duration_ms, user_corrected)
+      SELECT id, session_id, file_path, category, confidence, captured_at, expires_at, duration_ms, user_corrected
+      FROM audio_events
+    ''');
+    await db.execute('DROP TABLE audio_events');
+    await db.execute('ALTER TABLE audio_events_v8 RENAME TO audio_events');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_audio_expiry ON audio_events(expires_at)');
   }
 
   Future<void> _createV7Columns(DatabaseExecutor db) async {
@@ -465,13 +495,38 @@ class SleepDatabase {
   Future<void> saveAudioEvent({required String id, required String? sessionId, required String filePath, required String category, required DateTime capturedAt, required int durationMs}) async {
     await (await database).insert('audio_events', {'id': id, 'session_id': sessionId, 'file_path': filePath, 'category': category, 'confidence': null, 'captured_at': capturedAt.toUtc().toIso8601String(), 'expires_at': capturedAt.toUtc().add(const Duration(days: 7)).toIso8601String(), 'duration_ms': durationMs, 'user_corrected': 0});
   }
-  Future<void> deleteAudioEvent(String id) async { final db = await database; final rows = await db.query('audio_events', where: 'id = ?', whereArgs: [id]); if (rows.isEmpty) return; try { await File(rows.first['file_path']! as String).delete(); } catch (_) {} await db.delete('audio_events', where: 'id = ?', whereArgs: [id]); }
+  Future<void> deleteAudioEvent(String id) async {
+    final db = await database;
+    final rows = await db.query('audio_events', columns: ['file_path'], where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return;
+    final path = rows.first['file_path'];
+    if (path is String && path.isNotEmpty) { try { await File(path).delete(); } catch (_) {} }
+    await db.delete('audio_events', where: 'id = ?', whereArgs: [id]);
+  }
   Future<void> updateAudioClassification(String id, String category, double confidence) async => (await database).update('audio_events', {'category': category, 'confidence': confidence, 'user_corrected': 0}, where: 'id = ?', whereArgs: [id]);
   Future<void> updateAudioCategory(String id, String category) async => (await database).update('audio_events', {'category': category, 'user_corrected': 1}, where: 'id = ?', whereArgs: [id]);
+  /// Удаляет только аудиофайлы старше срока хранения; карточки событий
+  /// остаются в БД для истории, статистики и резервного копирования.
   Future<int> deleteExpiredAudioEvents(DateTime now) async {
-    final db = await database; final expired = await db.query('audio_events', where: 'expires_at <= ?', whereArgs: [now.toUtc().toIso8601String()]);
-    for (final row in expired) { try { await File(row['file_path']! as String).delete(); } catch (_) {} }
-    return db.delete('audio_events', where: 'expires_at <= ?', whereArgs: [now.toUtc().toIso8601String()]);
+    final db = await database;
+    final expired = await db.query('audio_events',
+      columns: ['id', 'file_path'],
+      where: 'expires_at <= ? AND file_path IS NOT NULL',
+      whereArgs: [now.toUtc().toIso8601String()]);
+    if (expired.isEmpty) return 0;
+    await db.transaction((txn) async {
+      for (final row in expired) {
+        await txn.update('audio_events', {'file_path': null},
+          where: 'id = ?', whereArgs: [row['id']]);
+      }
+    });
+    for (final row in expired) {
+      final path = row['file_path'];
+      if (path is String && path.isNotEmpty) {
+        try { await File(path).delete(); } catch (_) {}
+      }
+    }
+    return expired.length;
   }
   Future<Map<String, Object?>?> getMorningReport(String sessionId) async { final rows = await (await database).query('morning_reports', where: 'session_id = ?', whereArgs: [sessionId], limit: 1); return rows.isEmpty ? null : rows.first; }
   Future<void> saveMorningReport({required String sessionId, required int? wellbeing, required int? quality, required String answersJson}) async {
