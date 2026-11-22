@@ -54,7 +54,7 @@ class MoonPhaseAnalytics {
       final ratings = bucket.map((s)=>s.morningRating).whereType<int>().toList();
       final illumination = bucket.map((s) {
         final end = s.actualSleepEndedAt ?? s.endedAt!;
-        final midpoint = s.startedAt.add(end.difference(s.startedAt) ~/ 2);
+        final midpoint = s.startedAt.add(Duration(microseconds: end.difference(s.startedAt).inMicroseconds ~/ 2));
         return at(midpoint).illumination;
       }).toList();
       return MoonPhaseGroup(
