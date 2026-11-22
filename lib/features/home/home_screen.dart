@@ -315,25 +315,57 @@ class _HomeScreenState extends State<HomeScreen> {
     if (session == null || session.isOpen) return;
     var wellbeing = 3;
     var quality = 3;
-    final saved = await showDialog<bool>(context: context, builder: (dialogContext) => StatefulBuilder(
-      builder: (context, setDialogState) => AlertDialog(
-        title: const Text('Утренний отчёт'),
-        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Как вы себя чувствуете?'),
-          DropdownButton<int>(value: wellbeing, isExpanded: true, items: List.generate(5, (i) => DropdownMenuItem(value: i + 1, child: Text('${i + 1} из 5'))), onChanged: (v) => setDialogState(() => wellbeing = v ?? 3)),
-          const SizedBox(height: 12),
-          const Text('Как оцениваете качество сна?'),
-          DropdownButton<int>(value: quality, isExpanded: true, items: List.generate(5, (i) => DropdownMenuItem(value: i + 1, child: Text('${i + 1} из 5'))), onChanged: (v) => setDialogState(() => quality = v ?? 3)),
-          const SizedBox(height: 8),
-          const Text('Оценки сохраняются в истории. Они не являются медицинской оценкой.', style: TextStyle(fontSize: 12, color: AppTheme.muted)),
-        ]),
-        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Отмена')), FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Сохранить'))],
+    var sleepiness = 3;
+    final comment = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Утренний отчёт'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Насколько хорошо вы спали?'),
+              Text('$quality из 5', style: const TextStyle(color: AppTheme.teal, fontWeight: FontWeight.w700)),
+              Slider(min: 1, max: 5, divisions: 4, value: quality.toDouble(), onChanged: (v) => setDialogState(() => quality = v.round())),
+              const Text('1 — очень плохо · 5 — отлично', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
+              const SizedBox(height: 14),
+              const Text('Насколько вы чувствуете себя отдохнувшей?'),
+              Text('$wellbeing из 5', style: const TextStyle(color: AppTheme.teal, fontWeight: FontWeight.w700)),
+              Slider(min: 1, max: 5, divisions: 4, value: wellbeing.toDouble(), onChanged: (v) => setDialogState(() => wellbeing = v.round())),
+              const Text('1 — совсем не отдохнула · 5 — полностью отдохнула', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
+              const SizedBox(height: 14),
+              const Text('Насколько сильно хочется спать сейчас?'),
+              Text('$sleepiness из 5', style: const TextStyle(color: AppTheme.teal, fontWeight: FontWeight.w700)),
+              Slider(min: 1, max: 5, divisions: 4, value: sleepiness.toDouble(), onChanged: (v) => setDialogState(() => sleepiness = v.round())),
+              const Text('1 — совсем не хочется · 5 — очень сильная сонливость', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
+              const SizedBox(height: 10),
+              TextField(controller: comment, minLines: 1, maxLines: 3, decoration: const InputDecoration(labelText: 'Комментарий (необязательно)')),
+              const SizedBox(height: 8),
+              const Text('Оценки субъективные и сохраняются отдельно для этой ночи.', style: TextStyle(fontSize: 12, color: AppTheme.muted)),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, 'cancel'), child: const Text('Отмена')),
+            TextButton(onPressed: () => Navigator.pop(dialogContext, 'skip'), child: const Text('Пропустить')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, 'save'), child: const Text('Сохранить')),
+          ],
+        ),
       ),
-    ));
-    if (saved != true) return;
-    await widget.database.saveMorningReport(sessionId: session.id, wellbeing: wellbeing, quality: quality,
-      answersJson: jsonEncode({'wellbeing': wellbeing, 'sleepQuality': quality}));
+    );
+    if (!mounted) { comment.dispose(); return; }
+    if (result == 'skip') {
+      await widget.database.saveMorningReport(sessionId: session.id, wellbeing: null, quality: null, answersJson: jsonEncode({'skipped': true}));
+      comment.dispose();
+      await _refresh();
+      return;
+    }
+    if (result != 'save') { comment.dispose(); return; }
+    await widget.database.saveMorningReport(
+      sessionId: session.id, wellbeing: wellbeing, quality: quality,
+      answersJson: jsonEncode({'wellbeing': wellbeing, 'sleepQuality': quality, 'sleepiness': sleepiness, 'comment': comment.text.trim(), 'skipped': false}),
+    );
     await widget.database.updateMorningRating(session.id, wellbeing);
+    comment.dispose();
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Утренний отчёт сохранён.')));
     await _refresh();
   }
