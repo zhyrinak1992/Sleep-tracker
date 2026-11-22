@@ -125,7 +125,7 @@ class _WeatherNightDetailCardState extends State<WeatherNightDetailCard> {
           else if (state.hasError)
             Text('Не удалось загрузить архив погоды: ${state.error}',
               style: const TextStyle(color: AppTheme.accentPink, fontSize: 12))
-          else if (widget.session.isOpen || widget.session.endedAt == null)
+          else if ((widget.session.actualSleepEndedAt ?? widget.session.endedAt) == null)
             const Text('Погодные данные появятся после завершения ночной сессии.',
               style: TextStyle(color: AppTheme.muted, fontSize: 12))
           else if (state.data == null)
