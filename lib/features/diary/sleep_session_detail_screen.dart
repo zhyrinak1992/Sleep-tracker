@@ -422,6 +422,7 @@ class _NightClimateMetric extends StatelessWidget {
       Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
       const SizedBox(height: 4),
       Text('Мин. ${value.minimum.toStringAsFixed(1)} ${value.unit} · сред. ${value.average.toStringAsFixed(1)} ${value.unit} · макс. ${value.maximum.toStringAsFixed(1)} ${value.unit}'),
+      Text('Колебания за ночь (σ): ${value.standardDeviation.toStringAsFixed(2)} ${value.unit}', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
       Text('Последнее: ${value.lastValue.toStringAsFixed(1)} ${value.unit} · ${DateFormat('HH:mm').format(value.lastMeasuredAt)}',
         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
       Text('${value.count} точек · ${first}–${last}', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
