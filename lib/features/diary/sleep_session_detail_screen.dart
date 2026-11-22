@@ -423,7 +423,7 @@ class _NightClimateMetric extends StatelessWidget {
           width: double.infinity,
           child: CustomPaint(painter: _ClimateSparklinePainter(
             values: samples.map((row) => (row['value'] as num).toDouble()).toList(),
-            color: title == 'Температура' ? AppTheme.teal : AppTheme.purple,
+            color: title == 'Температура' ? AppTheme.teal : AppTheme.accentPink,
           )),
         ),
       ],
