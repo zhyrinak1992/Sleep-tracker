@@ -4,6 +4,7 @@ import '../../data/sleep_database.dart';
 import '../../models/sleep_note.dart';
 import '../../models/sleep_session.dart';
 import '../../models/sleep_tag.dart';
+import 'note_tag_filter.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/screen_header.dart';
@@ -22,6 +23,8 @@ class _NotesScreenState extends State<NotesScreen> {
   late Future<List<SleepNote>> _notes;
   DateTime? _month;
   String _query = '';
+  final Set<String> _selectedTags = <String>{};
+  Future<Set<String>> _taggedSessionIds = Future.value(<String>{});
 
   @override
   void initState() {
@@ -38,6 +41,7 @@ class _NotesScreenState extends State<NotesScreen> {
   void _reload() {
     _sessions = widget.database.getSessions(limit: 500);
     _notes = widget.database.getNotes(search: _query, month: _month);
+    _taggedSessionIds = widget.database.getSessionIdsWithTags(_selectedTags.toList());
   }
 
   Future<void> _addNote(SleepSession session) async {
@@ -173,6 +177,15 @@ class _NotesScreenState extends State<NotesScreen> {
         future: _notes,
         builder: (context, noteSnapshot) {
           final notes = noteSnapshot.data ?? const <SleepNote>[];
+          return FutureBuilder<Set<String>>(
+            future: _taggedSessionIds,
+            builder: (context, tagSnapshot) {
+              final taggedSessionIds = tagSnapshot.data ?? const <String>{};
+              final visibleNotes = filterNotesByTaggedSessions(
+                notes,
+                taggedSessionIds,
+                enabled: _selectedTags.isNotEmpty,
+              );
           return ListView(padding: const EdgeInsets.all(20), children: [
             const ScreenHeader(
               title: 'Заметки',
@@ -194,8 +207,28 @@ class _NotesScreenState extends State<NotesScreen> {
               if (_month != null) TextButton(onPressed: () => setState(() { _month = null; _reload(); }),
                 child: const Text('Сбросить')),
             ]),
+            const SizedBox(height: 10),
+            const Text('Фильтр по отметкам', style: TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 6),
+            Wrap(spacing: 7, runSpacing: 2, children: [
+              ...SleepTag.catalog.map((tag) => FilterChip(
+                label: Text(tag.label),
+                selected: _selectedTags.contains(tag.key),
+                onSelected: (selected) => setState(() {
+                  if (selected) {
+                    _selectedTags.add(tag.key);
+                  } else {
+                    _selectedTags.remove(tag.key);
+                  }
+                  _reload();
+                }),
+              )),
+              if (_selectedTags.isNotEmpty)
+                ActionChip(label: const Text('Сбросить отметки'),
+                  onPressed: () => setState(() { _selectedTags.clear(); _reload(); })),
+            ]),
             const SizedBox(height: 12),
-            if (sessionSnapshot.connectionState == ConnectionState.waiting || noteSnapshot.connectionState == ConnectionState.waiting)
+            if (sessionSnapshot.connectionState == ConnectionState.waiting || noteSnapshot.connectionState == ConnectionState.waiting || tagSnapshot.connectionState == ConnectionState.waiting)
               const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))
             else if (sessions.isEmpty)
               const SectionCard(child: Text('Сначала создай ночную сессию на главном экране.'))
@@ -220,14 +253,14 @@ class _NotesScreenState extends State<NotesScreen> {
               ])),
               const SizedBox(height: 16),
               Row(children: [
-                Expanded(child: Text('Текстовые заметки (${notes.length})',
+                Expanded(child: Text('Текстовые заметки (${visibleNotes.length})',
                   style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16))),
               ]),
               const SizedBox(height: 8),
-              if (notes.isEmpty)
+              if (visibleNotes.isEmpty)
                 const SectionCard(child: Text('Заметок по выбранным условиям пока нет.',
                   style: TextStyle(color: AppTheme.muted)))
-              else ...notes.map((note) => Padding(
+              else ...visibleNotes.map((note) => Padding(
                 padding: const EdgeInsets.only(bottom: 9),
                 child: SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [
@@ -244,6 +277,8 @@ class _NotesScreenState extends State<NotesScreen> {
             OutlinedButton.icon(onPressed: () => setState(_reload),
               icon: const Icon(Icons.refresh), label: const Text('Обновить')),
           ]);
+            },
+          );
         },
       );
     },

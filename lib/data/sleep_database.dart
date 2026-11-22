@@ -827,6 +827,20 @@ class SleepDatabase {
     return {for (final row in rows) row['tag_key']! as String: row['total']! as int};
   }
 
+  /// Returns night session IDs carrying any of the selected tags.
+  /// An empty selection returns an empty set and does not scan the table.
+  Future<Set<String>> getSessionIdsWithTags(List<String> tagKeys) async {
+    final keys = tagKeys.toSet().where((key) => key.trim().isNotEmpty).toList();
+    if (keys.isEmpty) return <String>{};
+    final db = await database;
+    final placeholders = List.filled(keys.length, '?').join(', ');
+    final rows = await db.rawQuery(
+      'SELECT DISTINCT session_id FROM sleep_session_tags WHERE tag_key IN ($placeholders)',
+      keys,
+    );
+    return rows.map((row) => row['session_id']! as String).toSet();
+  }
+
   Future<List<SleepNote>> getNotes({String? search, DateTime? month, String? sessionId}) async {
     final db = await database;
     final clauses = <String>[];
