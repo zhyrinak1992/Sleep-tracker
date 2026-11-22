@@ -221,15 +221,23 @@ class WeatherNightSummary {
       end.toUtc(),
       before: false,
     );
-    double? daylightDuration;
-    if (sunrise != null) {
+    SolarEvent? solarDay;
+    final wakeDate = _date(end.toUtc());
+    for (final event in solar) {
+      if (event.date == wakeDate) {
+        solarDay = event;
+        break;
+      }
+    }
+    if (solarDay == null && sunrise != null) {
       for (final event in solar) {
         if (event.sunriseUtc?.toUtc() == sunrise) {
-          daylightDuration = event.daylightDurationSeconds;
+          solarDay = event;
           break;
         }
       }
     }
+    final daylightDuration = solarDay?.daylightDurationSeconds;
     return WeatherNightSummary(
       sampleCount: selected.length,
       averageTemperatureC: average(values((point) => point.temperatureC)),
@@ -389,6 +397,40 @@ class WeatherService {
       'updatedAt': DateTime.now().toUtc().toIso8601String(),
     }));
     return merged;
+  }
+
+  Future<DateTime?> loadLatestCacheUpdatedAt({
+    required SleepDatabase database,
+    required WeatherLocation location,
+  }) async {
+    final keys = [
+      '$_cachePrefix${location.id}',
+      'sleep_tracker_solar_cache_v1_${location.id}',
+    ];
+    final updates = <DateTime>[];
+    for (final key in keys) {
+      final raw = await database.getAppMetadata(key);
+      if (raw == null || raw.isEmpty) continue;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) continue;
+      final value = decoded['updatedAt'];
+      if (value is String) {
+        final parsed = DateTime.tryParse(value);
+        if (parsed != null) updates.add(parsed.toLocal());
+      }
+    }
+    if (updates.isEmpty) return null;
+    return updates.reduce((a, b) => a.isAfter(b) ? a : b);
+  }
+
+  Future<WeatherLocation?> loadSelectedLocation({required SleepDatabase database}) async {
+    final raw = await database.getAppMetadata(locationStorageKey);
+    if (raw == null || raw.isEmpty) return null;
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map) {
+      throw const FormatException('Сохранённое местоположение повреждено.');
+    }
+    return WeatherLocation.fromJson(decoded);
   }
 
   Future<DateTime?> loadLatestCacheUpdatedAt({
