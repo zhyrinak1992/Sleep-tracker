@@ -28,11 +28,11 @@ class _MoonPhaseScreenState extends State<MoonPhaseScreen> {
         if(state.hasError) return Center(child:Text('Не удалось загрузить историю: ${state.error}'));
         final sessions=state.data??const <SleepSession>[];
         final groups=MoonPhaseAnalytics.summarize(sessions);
-        final usable=sessions.where((s)=>s.endedAt!=null && s.endedAt!.isAfter(s.startedAt)).length;
+        final usable=sessions.where((s)=>s.actualSleepStartedAt!=null && s.actualSleepEndedAt!=null && s.actualSleepEndedAt!.isAfter(s.actualSleepStartedAt!)).length;
         return ListView(padding:const EdgeInsets.all(20),children:[
           const Text('Сопоставление с астрономической фазой Луны',style:TextStyle(color:AppTheme.muted)),
           const SizedBox(height:8),
-          const Text('Для каждой завершённой ночи фаза определяется по середине фактического интервала сна. Если фаза менялась в течение ночи, это можно увидеть в карточке ниже.',style:TextStyle(color:AppTheme.muted,fontSize:12,height:1.45)),
+          const Text('Для каждой ночи фаза определяется по середине фактического интервала сна, если источник предоставил обе границы. Если фаза менялась в течение ночи, это можно увидеть в карточке ниже.',style:TextStyle(color:AppTheme.muted,fontSize:12,height:1.45)),
           const SizedBox(height:14),
           SectionCard(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
             const Text('Накопленные данные',style:TextStyle(fontWeight:FontWeight.w700)),
@@ -59,8 +59,8 @@ class _MoonPhaseScreenState extends State<MoonPhaseScreen> {
               const Text('Смена фазы в течение ночи',style:TextStyle(fontWeight:FontWeight.w700)),
               const SizedBox(height:8),
               ...sessions.where(MoonPhaseAnalytics.phaseChangedDuring).map((session){
-                final end=session.actualSleepEndedAt??session.endedAt!;
-                final startPhase=MoonPhaseAnalytics.at(session.startedAt).label;
+                final end=session.actualSleepEndedAt!;
+                final startPhase=MoonPhaseAnalytics.at(session.actualSleepStartedAt!).label;
                 final endPhase=MoonPhaseAnalytics.at(end).label;
                 return Padding(padding:const EdgeInsets.symmetric(vertical:5),child:Row(children:[
                   Expanded(child:Text(DateFormat('d MMM yyyy','ru').format(session.startedAt))),
