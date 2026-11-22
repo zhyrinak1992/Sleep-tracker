@@ -409,6 +409,15 @@ class SleepDatabase {
     });
   }
 
+  Future<String?> getAppMetadata(String key) async {
+    final rows = await (await database).query('app_metadata', columns: ['value'], where: 'key = ?', whereArgs: [key], limit: 1);
+    return rows.isEmpty ? null : rows.first['value'] as String?;
+  }
+
+  Future<void> setAppMetadata(String key, String value) async {
+    await (await database).insert('app_metadata', {'key': key, 'value': value}, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
   Future<Map<String, int>> getTagUsageCounts() async {
     final db = await database;
     final rows = await db.rawQuery('SELECT tag_key, COUNT(*) AS total FROM sleep_session_tags GROUP BY tag_key ORDER BY total DESC, tag_key ASC');
