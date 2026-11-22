@@ -80,6 +80,7 @@ class WeekdayComparison {
     if (sinSum.abs() < 1e-9 && cosSum.abs() < 1e-9) return null;
     var result = math.atan2(sinSum, cosSum) / (2 * math.pi) * 1440;
     if (result < 0) result += 1440;
+    if (1440 - result < 1e-6) result = 0;
     return result;
   }
 
