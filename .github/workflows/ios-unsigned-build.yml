@@ -1,7 +1,15 @@
 name: iOS unsigned IPA (AltStore)
 
 on:
-  # Run manually to avoid spending macOS Actions minutes on every source commit.
+  # Build a fresh iOS artifact when app code or dependencies change.
+  push:
+    branches: [main]
+    paths:
+      - 'lib/**'
+      - 'assets/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.github/workflows/ios-unsigned-build.yml'
   workflow_dispatch:
 
 permissions:
