@@ -5,6 +5,7 @@ import '../../models/sleep_session.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import 'sleep_analytics.dart';
+import 'weekday_comparison_screen.dart';
 
 class AnalysisScreen extends StatefulWidget {
   const AnalysisScreen({super.key, required this.database});
@@ -56,6 +57,14 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           Text('Анализ', style: Theme.of(context).textTheme.headlineMedium),
           const SizedBox(height: 6),
           const Text('Динамика по сохранённым данным', style: TextStyle(color: AppTheme.muted)),
+          const SizedBox(height: 14),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => WeekdayComparisonScreen(database: widget.database),
+            )),
+            icon: const Icon(Icons.date_range_outlined),
+            label: const Text('Сравнить сон по дням недели'),
+          ),
           const SizedBox(height: 18),
           SegmentedButton<AnalysisPeriod>(
             segments: const [
