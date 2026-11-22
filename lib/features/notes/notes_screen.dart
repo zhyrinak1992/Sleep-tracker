@@ -6,6 +6,7 @@ import '../../models/sleep_session.dart';
 import '../../models/sleep_tag.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
+import '../../widgets/screen_header.dart';
 
 class NotesScreen extends StatefulWidget {
   const NotesScreen({super.key, required this.database});
