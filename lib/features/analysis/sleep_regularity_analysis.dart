@@ -116,7 +116,6 @@ class SleepRegularityAnalysis {
     final bedMad = median(bedDistances);
     final wakeMad = median(wakeDistances);
     final durationMedian = median(durationValues);
-    final durationSorted = [...durationValues]..sort();
     final durationMad = durationMedian == null ? null : median(durationValues.map((v) => (v - durationMedian).abs()).toList());
 
     final nights = <SleepRegularityNight>[];
