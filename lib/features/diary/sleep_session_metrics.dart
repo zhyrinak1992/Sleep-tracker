@@ -77,11 +77,15 @@ class SleepSessionMetrics {
         (bedEnd == null || !actualStart.isAfter(bedEnd))
         ? actualStart.difference(bedStart).inMinutes
         : null;
-    final firstAwakening = actualStart == null
-        ? null
-        : (awake.map((x) => x.start).where((x) => !x.isBefore(actualStart))
+    final awakeningCandidates = actualStart == null
+        ? <DateTime>[]
+        : awake.map((x) => x.start)
+            .where((x) => !x.isBefore(actualStart))
             .toList()
-          ..sort()).firstOrNull;
+          ..sort();
+    final firstAwakening = awakeningCandidates.isEmpty
+        ? null
+        : awakeningCandidates.first;
     final finalWake = actualEnd ?? bedEnd;
     final coverage = inBed == null || inBed <= 0
         ? null
