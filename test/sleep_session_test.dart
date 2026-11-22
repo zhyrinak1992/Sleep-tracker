@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import '../lib/models/sleep_session.dart';
 import 'package:sleep_tracker/models/sleep_session.dart';
 
 void main() {
@@ -33,30 +32,28 @@ void main() {
     expect(session.isOpen, isTrue);
     expect(session.duration, isNull);
   });
-}
+  test('schema v5 preserves button timestamps separately from actual sleep interval', () {
+    final started = DateTime(2026, 11, 21, 23, 10);
+    final ended = DateTime(2026, 11, 22, 7, 20);
+    final buttonStart = DateTime(2026, 11, 21, 22, 55);
+    final buttonEnd = DateTime(2026, 11, 22, 7, 25);
+    final session = SleepSession(
+      id: 'schema-v5',
+      startedAt: started,
+      endedAt: ended,
+      source: 'manual',
+      buttonStartedAt: buttonStart,
+      buttonEndedAt: buttonEnd,
+      actualSleepStartedAt: started,
+      actualSleepEndedAt: ended,
+      userEdited: true,
+    );
+    final restored = SleepSession.fromMap(session.toMap());
+    expect(restored.buttonStartedAt, buttonStart);
+    expect(restored.buttonEndedAt, buttonEnd);
+    expect(restored.actualSleepStartedAt, started);
+    expect(restored.actualSleepEndedAt, ended);
+    expect(restored.userEdited, isTrue);
+  });
 
-
-void mainSleepSessionTimestampTests() {
-  // Kept separate from the existing test group to verify schema-v5 fields.
-  final started = DateTime(2026, 11, 21, 23, 10);
-  final ended = DateTime(2026, 11, 22, 7, 20);
-  final buttonStart = DateTime(2026, 11, 21, 22, 55);
-  final buttonEnd = DateTime(2026, 11, 22, 7, 25);
-  final session = SleepSession(
-    id: 'schema-v5',
-    startedAt: started,
-    endedAt: ended,
-    source: 'manual',
-    buttonStartedAt: buttonStart,
-    buttonEndedAt: buttonEnd,
-    actualSleepStartedAt: started,
-    actualSleepEndedAt: ended,
-    userEdited: true,
-  );
-  final restored = SleepSession.fromMap(session.toMap());
-  assert(restored.buttonStartedAt == buttonStart);
-  assert(restored.buttonEndedAt == buttonEnd);
-  assert(restored.actualSleepStartedAt == started);
-  assert(restored.actualSleepEndedAt == ended);
-  assert(restored.userEdited);
 }
