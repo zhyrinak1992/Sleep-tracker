@@ -11,7 +11,7 @@ SleepSession _session({
   id: id,
   startedAt: start,
   endedAt: start.add(Duration(minutes: durationMinutes)),
-  source: 'health',
+  source: 'apple_health:Apple Watch',
   morningRating: rating,
   createdAt: start,
   updatedAt: start,
@@ -49,6 +49,34 @@ void main() {
       expect(result.withTag.average, 450);
       expect(result.withoutTag.average, 390);
       expect(result.difference, 60);
+    });
+
+    test('does not treat manual button times as actual sleep duration', () {
+      final sessions = <SleepSession>[
+        for (var i = 0; i < 4; i++)
+          _session(id: 'tag-$i', start: start.add(Duration(days: i))),
+        for (var i = 0; i < 4; i++)
+          _session(id: 'plain-$i', start: start.add(Duration(days: i + 5))),
+      ].map((session) => SleepSession(
+        id: session.id,
+        startedAt: session.startedAt,
+        endedAt: session.endedAt,
+        source: 'manual',
+      )).toList();
+      final tags = <String, Set<String>>{
+        for (var i = 0; i < 4; i++) 'tag-$i': {'caffeine'},
+      };
+      final result = TagSleepComparison.calculate(
+        sessions: sessions,
+        tagsBySession: tags,
+        tagKey: 'caffeine',
+        start: start,
+        endExclusive: end,
+        metric: TagSleepMetric.sleepDuration,
+      );
+      expect(result.withTag.nights, 0);
+      expect(result.withoutTag.nights, 0);
+      expect(result.difference, isNull);
     });
 
     test('does not calculate a difference when either group is too small', () {
