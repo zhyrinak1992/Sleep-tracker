@@ -26,7 +26,7 @@ class WeatherNightDetailCard extends StatelessWidget {
 
   String _metric(WeatherMetricSummary? value) {
     if (value == null) return 'Нет данных';
-    return 'Мин. ${value.minimum.toStringAsFixed(1)} · сред. ${value.average.toStringAsFixed(1)} · макс. ${value.maximum.toStringAsFixed(1)} ${value.unit}';
+    return 'Мин. ${value.minimum.toStringAsFixed(1)} · сред. ${value.average.toStringAsFixed(1)} · макс. ${value.maximum.toStringAsFixed(1)} ${value.unit} · ${value.count} точек';
   }
 
   String _clock(String? value) =>
