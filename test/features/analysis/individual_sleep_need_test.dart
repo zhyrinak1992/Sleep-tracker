@@ -77,7 +77,7 @@ void main() {
     test('handles bedtime observations straddling midnight as nearby times', () {
       final result = IndividualSleepNeedAnalysis.evaluate(
         sessions: nights(
-          startMinute: (index) => index.isEven ? 55 : 5,
+          startMinute: (index) => index.isEven ? 55 : 65,
         ),
         morningReports: const {},
         stagesBySession: const {},
