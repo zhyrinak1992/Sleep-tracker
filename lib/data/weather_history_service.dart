@@ -157,8 +157,8 @@ class WeatherHistoryService {
     final precipitation = _numberList(hourly['precipitation']);
     final wind = _numberList(hourly['wind_speed_10m']);
     final dailyTimes = _stringList(daily['time']);
-    final sunrise = _stringList(daily['sunrise']);
-    final sunset = _stringList(daily['sunset']);
+    final sunrise = _nullableStringList(daily['sunrise']);
+    final sunset = _nullableStringList(daily['sunset']);
     final daylight = _numberList(daily['daylight_duration']);
 
     var nightsWithData = 0;
@@ -266,6 +266,9 @@ class WeatherHistoryService {
 
   static List<String> _stringList(Object? value) =>
       value is List ? value.whereType<String>().toList() : const [];
+
+  static List<String?> _nullableStringList(Object? value) =>
+      value is List ? value.map((item) => item is String ? item : null).toList() : const [];
 
   static List<double?> _numberList(Object? value) => value is List
       ? value.map((item) => item is num && item.toDouble().isFinite ? item.toDouble() : null).toList()
