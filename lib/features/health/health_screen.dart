@@ -324,6 +324,8 @@ class _HealthTagStatsCard extends StatefulWidget {
 
 class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
   String? _selectedTag;
+  final Set<String> _overviewTags = {};
+  bool _matchAllOverviewTags = false;
 
   @override
   Widget build(BuildContext context) => FutureBuilder<Map<DateTime, _HealthDayEntry>>(
@@ -369,6 +371,14 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
       final recentDates = dates.where((d) => !d.isBefore(twelveMonthStart)).toList();
       final recordedDays = entries.keys.where((d) => !d.isBefore(twelveMonthStart)).length;
       final percentage = recordedDays == 0 ? 0.0 : recentDates.length / recordedDays * 100;
+      final overviewTags = _overviewTags.where(tags.contains).toSet();
+      final matchedEntries = entries.entries.where((entry) {
+        if (overviewTags.isEmpty) return false;
+        final dayTags = entry.value.tags.toSet();
+        return _matchAllOverviewTags
+            ? overviewTags.every(dayTags.contains)
+            : overviewTags.any(dayTags.contains);
+      }).toList()..sort((a, b) => b.key.compareTo(a.key));
       final monthlyCounts = List<int>.generate(12, (index) {
         final start = DateTime(now.year, now.month - 11 + index);
         final end = DateTime(start.year, start.month + 1);
@@ -426,6 +436,51 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
               title: Text(_date(dates[index]), style: const TextStyle(fontSize: 12)),
             ),
           )),
+          const Divider(height: 22),
+          const Text('Совместный обзор отметок', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+          const SizedBox(height: 4),
+          const Text('Выберите несколько отметок и задайте правило совпадения дат.', style: TextStyle(color: AppTheme.muted, fontSize: 11)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 6, runSpacing: 4, children: [
+            for (final tag in tags)
+              FilterChip(
+                label: Text(tag),
+                selected: overviewTags.contains(tag),
+                onSelected: (selected) => setState(() { if (selected) { _overviewTags.add(tag); } else { _overviewTags.remove(tag); } }),
+              ),
+          ]),
+          if (overviewTags.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('Любая отметка')),
+                ButtonSegment(value: true, label: Text('Все отметки')),
+              ],
+              selected: {_matchAllOverviewTags},
+              onSelectionChanged: (value) => setState(() => _matchAllOverviewTags = value.first),
+            ),
+            const SizedBox(height: 8),
+            Text('Найдено дат: ${matchedEntries.length}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+            for (final tag in overviewTags)
+              Text('$tag: ${matchedEntries.where((entry) => entry.value.tags.contains(tag)).length}', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+            SizedBox(height: 120, child: matchedEntries.isEmpty
+              ? const Center(child: Text('Совпадений нет', style: TextStyle(color: AppTheme.muted, fontSize: 11)))
+              : ListView.builder(
+                  itemCount: matchedEntries.length,
+                  itemBuilder: (context, index) {
+                    final entry = matchedEntries[index];
+                    final matched = entry.value.tags.where(overviewTags.contains).toList()..sort();
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.event_note_rounded, size: 18),
+                      title: Text(_date(entry.key), style: const TextStyle(fontSize: 12)),
+                      subtitle: Text(matched.join(' · '), style: const TextStyle(fontSize: 10)),
+                    );
+                  },
+                )),
+          ],
+
         ],
       ));
     },
