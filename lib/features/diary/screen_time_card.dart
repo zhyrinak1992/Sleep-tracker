@@ -41,6 +41,10 @@ class _ScreenTimeCardState extends State<ScreenTimeCard> {
       if (entry.sessionId != widget.session.id) {
         throw const FormatException('Запись относится к другой ночи.');
       }
+      final elapsed = _sleepStart.difference(entry.lastUseAt);
+      if (elapsed.isNegative || elapsed > const Duration(hours: 24)) {
+        throw const FormatException('Время последнего использования находится вне допустимого окна до сна.');
+      }
       _damaged = false;
       return entry;
     } on FormatException {
@@ -122,16 +126,15 @@ class _ScreenTimeCardState extends State<ScreenTimeCard> {
                   setDialogState(() => validationError = 'Введи целое число от 0 до 360.');
                   return;
                 }
-                var lastUse = DateTime(
-                  _sleepStart.year, _sleepStart.month, _sleepStart.day,
-                  selectedTime.hour, selectedTime.minute,
-                );
-                if (lastUse.isAfter(_sleepStart)) {
-                  lastUse = lastUse.subtract(const Duration(days: 1));
-                }
-                if (lastUse.isAfter(_sleepStart) ||
-                    _sleepStart.difference(lastUse) > const Duration(hours: 24)) {
-                  setDialogState(() => validationError = 'Время должно быть в пределах 24 часов до начала сна.');
+                late DateTime lastUse;
+                try {
+                  lastUse = ScreenTimeEntry.resolveLastUseTime(
+                    _sleepStart,
+                    hour: selectedTime.hour,
+                    minute: selectedTime.minute,
+                  );
+                } on FormatException catch (error) {
+                  setDialogState(() => validationError = error.message);
                   return;
                 }
                 Navigator.pop(dialogContext, ScreenTimeEntry(
