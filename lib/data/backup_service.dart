@@ -69,7 +69,7 @@ class BackupService {
     final decoded = jsonDecode(utf8.decode(bytes));
     if (decoded is! Map<String, dynamic> ||
         decoded['format'] != format ||
-        (decoded['formatVersion'] != 1 && decoded['formatVersion'] != 2 && decoded['formatVersion'] != formatVersion) ||
+        (decoded['formatVersion'] != 1 && decoded['formatVersion'] != 2 && decoded['formatVersion'] != 3 && decoded['formatVersion'] != formatVersion) ||
         decoded['data'] is! Map<String, dynamic>) {
       throw const FormatException('Файл не является поддерживаемой резервной копией Sleep Tracker.');
     }
