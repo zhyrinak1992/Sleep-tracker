@@ -808,6 +808,7 @@ class _MetricCard extends StatelessWidget {
   }
 
   void _showHistory(BuildContext context) {
+    final pageContext = context;
     final rows = [...samples]..sort((a, b) => b.measuredAt.compareTo(a.measuredAt));
     showDialog<void>(
       context: context,
@@ -828,9 +829,12 @@ class _MetricCard extends StatelessWidget {
               return InkWell(
                 borderRadius: BorderRadius.circular(12),
                 onTap: canOpenNight
-                    ? () => Navigator.of(context).push(MaterialPageRoute<void>(
+                    ? () {
+                        Navigator.pop(dialogContext);
+                        Navigator.of(pageContext).push(MaterialPageRoute<void>(
                           builder: (_) => SleepSessionDetailScreen(database: database, session: session),
-                        ))
+                        ));
+                      }
                     : null,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
