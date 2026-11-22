@@ -132,7 +132,7 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
                             const SizedBox(height: 2),
                             Text(
                               unlocked
-                                  ? '${achievement.description} Получено ${DateFormat('d MMM yyyy', 'ru').format(date!)}.'
+                                  ? '${achievement.description} Получено ${DateFormat('d MMM yyyy', 'ru').format(date)}.'
                                   : achievement.description,
                               style: const TextStyle(
                                 color: AppTheme.muted,
