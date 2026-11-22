@@ -49,7 +49,7 @@ class ClimateMetricSummary {
     final sum = values.fold<double>(0, (total, value) => total + value);
     final average = sum / values.length;
     final variance = values.fold<double>(0,
-      (total, value) => total + math.pow(value - average, 2)) / values.length;
+      (total, value) => total + math.pow(value - average, 2).toDouble()) / values.length;
     final first = DateTime.parse(valid.first['measured_at']! as String).toLocal();
     final last = DateTime.parse(valid.last['measured_at']! as String).toLocal();
     double? coverage;
@@ -66,8 +66,8 @@ class ClimateMetricSummary {
       metricType: metricType,
       unit: valid.last['unit'] as String? ?? '',
       count: values.length,
-      minimum: values.reduce(math.min),
-      maximum: values.reduce(math.max),
+      minimum: values.reduce((a, b) => a < b ? a : b),
+      maximum: values.reduce((a, b) => a > b ? a : b),
       average: average,
       lastValue: values.last,
       lastMeasuredAt: last,
