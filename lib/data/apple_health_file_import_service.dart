@@ -262,12 +262,10 @@ class AppleHealthFileImportService {
           output.close();
         }
 
-        final file = await candidate.open();
-        final probe = await file.read(8 * 1024 * 1024);
-        await file.close();
-        final textProbe = utf8.decode(probe, allowMalformed: true);
-        if (textProbe.contains('HKCategoryTypeIdentifierSleepAnalysis') ||
-            textProbe.contains('HKCategoryValueSleepAnalysis')) {
+        // Sleep records may occur near the end of a large Apple Health
+        // export. Scan the complete XML incrementally, not just its header.
+        final containsSleep = await _containsSleepRecords(candidate);
+        if (containsSleep) {
           extractedXml = candidate;
           break;
         }
@@ -287,6 +285,22 @@ class AppleHealthFileImportService {
         await extractedXml.delete();
       }
     }
+  }
+
+  Future<bool> _containsSleepRecords(File file) async {
+    const markers = <String>[
+      'HKCategoryTypeIdentifierSleepAnalysis',
+      'HKCategoryValueSleepAnalysis',
+    ];
+    var carry = '';
+    await for (final chunk in file.openRead().transform(utf8.decoder.allowMalformed(true))) {
+      final text = carry + chunk;
+      if (markers.any(text.contains)) return true;
+      // Preserve enough trailing characters to catch a marker split between
+      // adjacent UTF-8 stream chunks.
+      carry = text.length > 96 ? text.substring(text.length - 96) : text;
+    }
+    return false;
   }
 
   AppleHealthFilePreview _createPreview(List<_HealthRecord> records) {
