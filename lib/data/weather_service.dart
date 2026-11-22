@@ -324,10 +324,13 @@ class WeatherService {
       final dataEndRaw = cached['dataEnd'];
       final dataEnd = dataEndRaw is String ? DateTime.tryParse(dataEndRaw) : null;
       final solarCache = cached['dailySolar'];
-      final hasSolarCache = solarCache is List && solarCache.isNotEmpty;
+      final solarDates = solarCache is List
+          ? solarCache.whereType<Map>().map((row) => row['date']).whereType<String>().toSet()
+          : <String>{};
+      final hasSolarCoverage = solarDates.contains(startDate) && solarDates.contains(endDate);
       if (cachedStart is String && cachedEnd is String && dataEnd != null &&
           cachedStart.compareTo(startDate) <= 0 && cachedEnd.compareTo(endDate) >= 0 &&
-          !dataEnd.isBefore(endUtc.subtract(const Duration(hours: 2))) && hasSolarCache) {
+          !dataEnd.isBefore(endUtc.subtract(const Duration(hours: 2))) && hasSolarCoverage) {
         return cachedPoints;
       }
     }
@@ -388,10 +391,6 @@ class WeatherService {
         windKmh: at(wind, i),
         pressureHpa: at(pressure, i),
       ));
-    }
-    if (fetched.isEmpty) {
-      if (cachedPoints.isNotEmpty) return cachedPoints;
-      return const [];
     }
     final merged = <String, HourlyWeatherPoint>{
       for (final point in cachedPoints) point.time.toUtc().toIso8601String(): point,
