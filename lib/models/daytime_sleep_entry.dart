@@ -4,7 +4,7 @@ class DaytimeSleepEntry {
     required this.startedAt,
     required this.endedAt,
     this.note = '',
-  }) : assert(endedAt.isAfter(startedAt));
+  });
 
   final String id;
   final DateTime startedAt;
