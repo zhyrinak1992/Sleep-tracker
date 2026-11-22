@@ -80,4 +80,42 @@ void main() {
       const WeatherSleepSample(averageTemperatureC: 8, sleepMinutes: 480),
     ]), isNull);
   });
+  test('selects the nearest sunset before sleep and sunrise after wake', () {
+    final events = [
+      SolarEvent(
+        date: '2026-11-21',
+        sunsetUtc: DateTime.utc(2026, 11, 21, 15),
+        sunriseUtc: DateTime.utc(2026, 11, 21, 6),
+      ),
+      SolarEvent(
+        date: '2026-11-22',
+        sunsetUtc: DateTime.utc(2026, 11, 22, 15),
+        sunriseUtc: DateTime.utc(2026, 11, 22, 6, 30),
+      ),
+      SolarEvent(
+        date: '2026-11-23',
+        sunsetUtc: DateTime.utc(2026, 11, 23, 15),
+        sunriseUtc: DateTime.utc(2026, 11, 23, 6, 20),
+      ),
+    ];
+    final summary = WeatherNightSummary.summarize(
+      const [],
+      start: DateTime.utc(2026, 11, 21, 21),
+      end: DateTime.utc(2026, 11, 22, 6),
+      solarEvents: events,
+    );
+    expect(summary.sunsetUtc, DateTime.utc(2026, 11, 21, 15));
+    expect(summary.sunriseUtc, DateTime.utc(2026, 11, 22, 6, 30));
+  });
+
+  test('keeps solar events absent when no matching events are returned', () {
+    final summary = WeatherNightSummary.summarize(
+      const [],
+      start: DateTime.utc(2026, 11, 21, 21),
+      end: DateTime.utc(2026, 11, 22, 6),
+    );
+    expect(summary.sunsetUtc, isNull);
+    expect(summary.sunriseUtc, isNull);
+  });
+
 }
