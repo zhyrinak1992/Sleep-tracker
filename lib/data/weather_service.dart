@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:timezone/data/latest.dart' as tzdata;
+import 'package:timezone/timezone.dart' as tz;
 
 import 'sleep_database.dart';
 
@@ -164,12 +166,125 @@ class WeatherNightSummary {
   }
 }
 
+class WeatherSolarDay {
+  const WeatherSolarDay({
+    required this.date,
+    this.sunriseUtc,
+    this.sunsetUtc,
+    this.daylightDurationSeconds,
+  });
+
+  final String date;
+  final DateTime? sunriseUtc;
+  final DateTime? sunsetUtc;
+  final double? daylightDurationSeconds;
+
+  factory WeatherSolarDay.fromJson(Map value) {
+    final date = value['date'];
+    if (date is! String) throw const FormatException('В записи солнечных событий отсутствует дата.');
+    DateTime? instant(String key) {
+      final raw = value[key];
+      if (raw is! String) return null;
+      return _parseWeatherUtc(raw);
+    }
+    final daylight = value['daylightDurationSeconds'];
+    return WeatherSolarDay(
+      date: date,
+      sunriseUtc: instant('sunriseUtc'),
+      sunsetUtc: instant('sunsetUtc'),
+      daylightDurationSeconds: daylight is num && daylight.toDouble().isFinite
+          ? daylight.toDouble() : null,
+    );
+  }
+
+  Map<String, Object?> toJson() => {
+    'date': date,
+    'sunriseUtc': sunriseUtc?.toUtc().toIso8601String(),
+    'sunsetUtc': sunsetUtc?.toUtc().toIso8601String(),
+    'daylightDurationSeconds': daylightDurationSeconds,
+  };
+}
+
 class WeatherService {
   WeatherService._();
   static final WeatherService instance = WeatherService._();
 
   static const locationStorageKey = 'sleep_tracker_weather_location_v1';
   static const _cachePrefix = 'sleep_tracker_weather_cache_v1_';
+  static bool _timezoneReady = false;
+
+  Future<WeatherLocation?> loadSelectedLocation({required SleepDatabase database}) async {
+    final raw = await database.getAppMetadata(locationStorageKey);
+    if (raw == null || raw.isEmpty) return null;
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map) throw const FormatException('Сохранённое местоположение повреждено.');
+    return WeatherLocation.fromJson(decoded);
+  }
+
+  Future<List<HourlyWeatherPoint>> loadCachedWeather({
+    required SleepDatabase database,
+    required WeatherLocation location,
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    final raw = await database.getAppMetadata('$_cachePrefix${location.id}');
+    if (raw == null || raw.isEmpty) return const [];
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map || decoded['points'] is! List) {
+      throw const FormatException('Кэш погоды повреждён. Сохранённые данные не изменены.');
+    }
+    return (decoded['points'] as List)
+        .whereType<Map>()
+        .map(HourlyWeatherPoint.fromJson)
+        .where((point) => !point.time.isBefore(start.toUtc()) && !point.time.isAfter(end.toUtc()))
+        .toList();
+  }
+
+  Future<DateTime?> loadCacheUpdatedAt({
+    required SleepDatabase database,
+    required WeatherLocation location,
+  }) async {
+    final raw = await database.getAppMetadata('$_cachePrefix${location.id}');
+    if (raw == null || raw.isEmpty) return null;
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map) throw const FormatException('Кэш погоды повреждён.');
+    final value = decoded['updatedAt'];
+    if (value is! String) return null;
+    return DateTime.tryParse(value)?.toLocal();
+  }
+
+  Future<WeatherSolarDay?> loadSolarDay({
+    required SleepDatabase database,
+    required WeatherLocation location,
+    required DateTime utcDate,
+  }) async {
+    final raw = await database.getAppMetadata('$_cachePrefix${location.id}');
+    if (raw == null || raw.isEmpty) return null;
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map) throw const FormatException('Кэш погоды повреждён.');
+    final rows = decoded['dailySolar'];
+    if (rows is! List) return null;
+    final date = _date(utcDate.toUtc());
+    for (final row in rows.whereType<Map>()) {
+      if (row['date'] == date) return WeatherSolarDay.fromJson(row);
+    }
+    return null;
+  }
+
+  String formatSolarTime(DateTime? utcTime, String timezone) {
+    if (utcTime == null) return 'Нет данных';
+    if (!_timezoneReady) {
+      tzdata.initializeTimeZones();
+      _timezoneReady = true;
+    }
+    try {
+      final location = tz.getLocation(timezone);
+      final local = tz.TZDateTime.from(utcTime.toUtc(), location);
+      return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return 'Нет данных';
+    }
+  }
 
   Future<List<WeatherLocation>> searchLocations(String query) async {
     final trimmed = query.trim();
@@ -221,9 +336,14 @@ class WeatherService {
       final cachedEnd = cached['endDate'];
       final dataEndRaw = cached['dataEnd'];
       final dataEnd = dataEndRaw is String ? DateTime.tryParse(dataEndRaw) : null;
+      final solarCache = cached['dailySolar'];
+      final solarDates = solarCache is List
+          ? solarCache.whereType<Map>().map((row) => row['date']).whereType<String>().toSet()
+          : <String>{};
+      final hasSolarCoverage = solarDates.contains(startDate) && solarDates.contains(endDate);
       if (cachedStart is String && cachedEnd is String && dataEnd != null &&
           cachedStart.compareTo(startDate) <= 0 && cachedEnd.compareTo(endDate) >= 0 &&
-          !dataEnd.isBefore(endUtc.subtract(const Duration(hours: 2)))) {
+          !dataEnd.isBefore(endUtc.subtract(const Duration(hours: 2))) && hasSolarCoverage) {
         return cachedPoints;
       }
     }
@@ -234,6 +354,7 @@ class WeatherService {
       'start_date': startDate,
       'end_date': endDate,
       'hourly': 'temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,pressure_msl',
+      'daily': 'sunrise,sunset,daylight_duration',
       'timezone': 'UTC',
       'timeformat': 'iso8601',
     });
@@ -284,15 +405,40 @@ class WeatherService {
         pressureHpa: at(pressure, i),
       ));
     }
-    if (fetched.isEmpty) {
-      if (cachedPoints.isNotEmpty) return cachedPoints;
-      return const [];
-    }
     final merged = <String, HourlyWeatherPoint>{
       for (final point in cachedPoints) point.time.toUtc().toIso8601String(): point,
       for (final point in fetched) point.time.toUtc().toIso8601String(): point,
     }.values.toList()
       ..sort((a, b) => a.time.compareTo(b.time));
+    final daily = decoded['daily'];
+    final solarByDate = <String, WeatherSolarDay>{
+      if (cached?['dailySolar'] is List)
+        for (final row in (cached!['dailySolar'] as List).whereType<Map>())
+          if (row['date'] is String) row['date'] as String: WeatherSolarDay.fromJson(row),
+    };
+    if (daily is Map && daily['time'] is List) {
+      final dates = daily['time'] as List;
+      final sunrises = daily['sunrise'] is List ? daily['sunrise'] as List : const [];
+      final sunsets = daily['sunset'] is List ? daily['sunset'] as List : const [];
+      final daylight = daily['daylight_duration'] is List ? daily['daylight_duration'] as List : const [];
+      for (var i = 0; i < dates.length; i++) {
+        final date = dates[i];
+        if (date is! String) continue;
+        String? isoAt(List values) {
+          if (i >= values.length || values[i] is! String) return null;
+          return _parseWeatherUtc(values[i] as String).toIso8601String();
+        }
+        final daylightValue = i < daylight.length && daylight[i] is num
+            ? (daylight[i] as num).toDouble() : null;
+        solarByDate[date] = WeatherSolarDay(
+          date: date,
+          sunriseUtc: isoAt(sunrises) == null ? null : DateTime.parse(isoAt(sunrises)!).toUtc(),
+          sunsetUtc: isoAt(sunsets) == null ? null : DateTime.parse(isoAt(sunsets)!).toUtc(),
+          daylightDurationSeconds: daylightValue != null && daylightValue.isFinite ? daylightValue : null,
+        );
+      }
+    }
+    final solarRows = solarByDate.values.toList()..sort((a, b) => a.date.compareTo(b.date));
     final oldStart = cached?['startDate'];
     final oldEnd = cached?['endDate'];
     final mergedStart = oldStart is String && oldStart.compareTo(startDate) < 0 ? oldStart : startDate;
@@ -304,6 +450,7 @@ class WeatherService {
       'endDate': mergedEnd,
       'dataEnd': merged.isEmpty ? null : merged.last.time.toUtc().toIso8601String(),
       'points': merged.map((point) => point.toJson()).toList(),
+      'dailySolar': solarRows.map((day) => day.toJson()).toList(),
       'updatedAt': DateTime.now().toUtc().toIso8601String(),
     }));
     return merged;
