@@ -8,6 +8,7 @@ import '../../data/sleep_database.dart';
 import '../../models/sleep_session.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
+import '../../widgets/storage_warning_banner.dart';
 
 class NightSessionScreen extends StatefulWidget {
   const NightSessionScreen({super.key, required this.database, required this.session});
@@ -419,6 +420,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
+          const StorageWarningBanner(),
           Container(
             height: 390,
             decoration: BoxDecoration(
