@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sleep_tracker/data/night_environment_service.dart';
+import 'package:timezone/data/latest.dart' as tzdata;
 
 void main() {
+  tzdata.initializeTimeZones();
   test('formats selected location and validates coordinate bounds', () {
     const location = EnvironmentLocation(
       name: 'Дубна',
@@ -45,4 +47,16 @@ void main() {
     expect(decoded.sunriseEpoch, summary.sunriseEpoch);
     expect(decoded.hasWeather, isTrue);
   });
+  test('sunrise and sunset use the selected location timezone including DST', () {
+    final summerEpoch = DateTime.utc(2026, 6, 21, 3).millisecondsSinceEpoch ~/ 1000;
+    final summary = NightEnvironmentSummary(
+      locationName: 'Berlin, Germany',
+      sampleCount: 1,
+      utcOffsetSeconds: 3600,
+      timezoneName: 'Europe/Berlin',
+      sunriseEpoch: summerEpoch,
+    );
+    expect(summary.sunriseLocalWallTime!.hour, 5);
+  });
+
 }
