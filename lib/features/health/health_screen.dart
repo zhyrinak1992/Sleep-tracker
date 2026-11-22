@@ -237,6 +237,7 @@ class _MetricCard extends StatelessWidget {
         title: Text('История: ' + title),
         content: SizedBox(
           width: double.maxFinite,
+          height: 420,
           child: ListView.separated(
             shrinkWrap: true,
             itemCount: rows.length,
