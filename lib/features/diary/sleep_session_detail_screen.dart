@@ -140,7 +140,28 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
       final session = snapshot.data ?? widget.session;
       final dateLabel = DateFormat('d MMMM yyyy', 'ru').format(session.startedAt);
       return Scaffold(
-        appBar: AppBar(title: const Text('Карточка ночи')),
+        appBar: AppBar(
+          title: const Text('Карточка ночи'),
+          actions: [
+            if (!session.isOpen) IconButton(
+              tooltip: 'Переместить в корзину',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () async {
+                final confirm = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+                  title: const Text('Переместить ночь в корзину?'),
+                  content: const Text('Запись и связанные данные сохранятся. Вы сможете восстановить ночь из корзины.'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+                    FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('В корзину')),
+                  ],
+                ));
+                if (confirm != true || !mounted) return;
+                await widget.database.moveSessionToTrash(session.id);
+                if (mounted) Navigator.pop(context, true);
+              },
+            ),
+          ],
+        ),
         body: snapshot.connectionState == ConnectionState.waiting
             ? const Center(child: CircularProgressIndicator())
             : RefreshIndicator(
