@@ -342,7 +342,7 @@ class YandexSmartHomeService {
       final metricType = instance as String;
       final unit = metricType == 'temperature' ? '°C' : '%';
       final stableId = 'yandex_${deviceId}_${metricType}_${rawUpdated.toString()}';
-      await SleepDatabase.instance.saveClimateSample(
+      final inserted = await SleepDatabase.instance.saveClimateSample(
         id: stableId,
         sessionId: sessionId,
         deviceId: deviceId,
@@ -354,7 +354,7 @@ class YandexSmartHomeService {
         source: 'yandex_smart_home',
         measuredAt: measuredAt,
       );
-      saved++;
+      if (inserted) saved++;
     }
     return saved;
   }
@@ -373,7 +373,10 @@ class YandexSmartHomeService {
       if (received != null && DateTime.now().toUtc().difference(received) < minimumInterval) return 0;
     }
     final activeSession = await SleepDatabase.instance.getOpenSession();
-    return refreshSelectedDevice(deviceId: deviceId, sessionId: activeSession?.id);
+    // Keep each sample tied to a real sleep session; do not create orphaned
+    // measurements while the user is not tracking a night.
+    if (activeSession == null) return 0;
+    return refreshSelectedDevice(deviceId: deviceId, sessionId: activeSession.id);
   }
 
   void dispose() => _client.close();
