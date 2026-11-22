@@ -348,14 +348,18 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                           const Divider(height: 18),
                           const Text('Отдельные измерения', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
                           const SizedBox(height: 4),
-                          ...rows.where((row) =>
+                          ...(rows.where((row) =>
                             row['metric_type'] is String &&
                             row['value'] is num &&
                             (row['value'] as num).toDouble().isFinite &&
                             row['measured_at'] is String
                           ).toList()
-                            ..sort((a, b) => DateTime.parse(a['measured_at']! as String).compareTo(DateTime.parse(b['measured_at']! as String))),
-                        ].where((item) => item is! Map).toList());
+                            ..sort((a, b) => DateTime.parse(a['measured_at']! as String).compareTo(DateTime.parse(b['measured_at']! as String))))
+                            .map((row) => _detailRow(
+                              row['metric_type']! as String,
+                              '${(row['value'] as num).toStringAsFixed(1)} ${row['unit']} · ${DateFormat('HH:mm').format(DateTime.parse(row['measured_at']! as String).toLocal())}',
+                            )),
+                        ]);
                       }),
                       const SizedBox(height: 8),
                       const Text('Показываются только измерения, реально полученные из Apple Health. Их отсутствие не заменяется оценками.', style: TextStyle(color: AppTheme.teal, fontSize: 12, height: 1.4)),
