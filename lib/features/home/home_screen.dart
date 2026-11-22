@@ -604,7 +604,6 @@ class _HomeScreenState extends State<HomeScreen> {
 class _PremiumSleepPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
     final center = Offset(size.width / 2, size.height * .49);
     final radius = size.width * .39;
 
