@@ -144,7 +144,7 @@ class YandexSmartHomeService {
 
   Future<void> completeDeviceAuthorization(YandexDeviceAuthorization authorization) async {
     final deadline = DateTime.now().add(Duration(seconds: authorization.expiresInSeconds));
-    var interval = authorization.intervalSeconds.clamp(2, 30);
+    var interval = authorization.intervalSeconds.clamp(2, 30).toInt();
     while (DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(Duration(seconds: interval));
       if (!DateTime.now().isBefore(deadline)) break;
