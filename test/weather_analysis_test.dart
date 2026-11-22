@@ -121,4 +121,22 @@ void main() {
     expect(summary.daylightDurationSeconds, isNull);
   });
 
+  test('keeps daylight duration even when polar conditions have no sunrise or sunset', () {
+    final event = SolarEvent.fromJson({
+      'date': '2026-11-22',
+      'sunriseUtc': null,
+      'sunsetUtc': null,
+      'daylightDurationSeconds': 86400,
+    });
+    final summary = WeatherNightSummary.summarize(
+      const [],
+      start: DateTime.utc(2026, 11, 21, 21),
+      end: DateTime.utc(2026, 11, 22, 7),
+      solarEvents: [event],
+    );
+    expect(summary.sunriseUtc, isNull);
+    expect(summary.sunsetUtc, isNull);
+    expect(summary.daylightDurationSeconds, 86400);
+  });
+
 }
