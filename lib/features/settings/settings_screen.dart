@@ -21,6 +21,35 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _busy = false;
+  bool _healthConnected = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHealthOnboarding();
+  }
+
+  Future<void> _loadHealthOnboarding() async {
+    final db = SleepDatabase.instance;
+    final connected = await db.getAppMetadata('apple_health_connected') == 'true';
+    final shown = await db.getAppMetadata('apple_health_intro_shown') == 'true';
+    if (!mounted) return;
+    setState(() => _healthConnected = connected);
+    if (!shown) {
+      await db.setAppMetadata('apple_health_intro_shown', 'true');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showDialog<void>(context: context, builder: (ctx) => AlertDialog(
+          title: const Text('Подключить Apple Health?'),
+          content: const Text('Можно импортировать записанные в приложении «Здоровье» интервалы сна и доступные показатели. Sleep Tracker запрашивает только чтение — данные в Apple Health не изменяются.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Позже')),
+            FilledButton(onPressed: () { Navigator.pop(ctx); _syncAppleHealth(); }, child: const Text('Подключить')),
+          ],
+        ));
+      });
+    }
+  }
 
   Future<void> _run(Future<void> Function() action, String success) async {
     if (_busy) return;
@@ -44,7 +73,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _busy = true);
     try {
       final result = await AppleHealthService.instance.syncRecentSleep();
+      await SleepDatabase.instance.setAppMetadata('apple_health_connected', 'true');
       if (!mounted) return;
+      setState(() => _healthConnected = true);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Apple Health: найдено ночей — ${result.found}, добавлено новых — ${result.imported}.'),
       ));
@@ -212,17 +243,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SectionCard(child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Apple Health и Apple Watch', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+          Row(children: [
+            const Expanded(child: Text('Apple Health и Apple Watch', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17))),
+            Icon(_healthConnected ? Icons.check_circle : Icons.link, color: _healthConnected ? AppTheme.teal : AppTheme.muted),
+          ]),
           const SizedBox(height: 8),
           const Text(
-            'Импорт доступных интервалов сна за последние 30 дней. Доступ зависит от разрешений iOS и данных, которые действительно записаны в Apple Health. Отсутствующие фазы не восстанавливаются догадками.',
+            'Подключите Apple Health, чтобы импортировать интервалы сна и доступные показатели за последние 30 дней. Приложение запрашивает только чтение. Доступ зависит от разрешений iOS и данных, которые действительно записаны в Apple Health; отсутствующие фазы не восстанавливаются догадками.',
             style: TextStyle(color: AppTheme.muted, height: 1.5),
           ),
           const SizedBox(height: 12),
           SizedBox(width: double.infinity, child: OutlinedButton.icon(
             onPressed: _busy ? null : _syncAppleHealth,
             icon: const Icon(Icons.favorite_outline),
-            label: const Text('Импортировать данные сна'),
+            label: Text(_healthConnected ? 'Синхронизировать данные сна' : 'Подключить Apple Health и синхронизировать'),
           )),
           const SizedBox(height: 10),
           SizedBox(width: double.infinity, child: FilledButton.icon(
@@ -234,7 +268,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Text('Выберите ZIP-архив, экспортированный из приложения «Здоровье». Перед сохранением приложение покажет найденные записи.',
             style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4)),
           const SizedBox(height: 8),
-          const Text('Синхронизация доступна вручную. Повторный импорт не создаёт дубликаты ранее добавленных ночей.',
+          Text(_healthConnected ? 'Apple Health подключён. Синхронизацию можно запускать вручную; повторный импорт не создаёт дубликаты ранее добавленных ночей.' : 'Подключение выполняется только после вашего нажатия. Разрешение можно изменить в настройках iOS.',
             style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4)),
         ],
       )),
