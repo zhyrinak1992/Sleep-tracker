@@ -56,7 +56,6 @@ void main() {
     expect(result.sleepDurationMinutes, 300);
     expect(result.timeInBedMinutes, 480);
   });
-}
 
   test('counts separate awakenings and avoids generic sleep double counting', () {
     final start = DateTime(2026, 11, 21, 22);
@@ -80,3 +79,5 @@ void main() {
     expect(result.stageBreakdownMinutes['Сон без уточнения'], 355);
     expect(result.sleepDurationMinutes, 467);
   });
+
+}
