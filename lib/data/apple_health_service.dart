@@ -272,6 +272,10 @@ class AppleHealthService {
           final uniqueWorkouts = _health.removeDuplicates(workouts);
           if (uniqueWorkouts.isNotEmpty) {
             activity['workoutCount'] = uniqueWorkouts.length;
+            activity['workoutDurationMinutes'] = uniqueWorkouts.fold<int>(
+              0,
+              (sum, point) => sum + point.dateTo.difference(point.dateFrom).inMinutes,
+            );
             activity['workouts'] = uniqueWorkouts.map((point) => <String, Object?>{
               'type': point.workoutSummary?.workoutType.toString() ?? 'Тренировка',
               'startedAt': point.dateFrom.toUtc().toIso8601String(),
@@ -284,7 +288,8 @@ class AppleHealthService {
         }
         if (activity.keys.any((key) =>
             key == 'steps' || key == 'activeEnergyKcal' ||
-            key == 'exerciseMinutes' || key == 'workoutCount')) {
+            key == 'exerciseMinutes' || key == 'workoutCount' ||
+            key == 'workoutDurationMinutes')) {
           await SleepDatabase.instance.setAppMetadata(
             'sleep_tracker_activity_v1_$sessionId',
             jsonEncode(activity),
