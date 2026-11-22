@@ -17,6 +17,7 @@ class _HealthScreenState extends State<HealthScreen> {
   late Future<_HealthSnapshot> _future;
   int _days = 30;
   DateTimeRange? _customRange;
+  DateTimeRange? _comparisonRange;
 
   @override
   void initState() {
@@ -67,6 +68,19 @@ class _HealthScreenState extends State<HealthScreen> {
     if (picked != null && mounted) setState(() => _customRange = picked);
   }
 
+  Future<void> _chooseComparisonRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(now.year, now.month, now.day),
+      initialDateRange: _comparisonRange ?? DateTimeRange(start: now.subtract(const Duration(days: 59)), end: now.subtract(const Duration(days: 30))),
+      helpText: 'Выберите период для сравнения',
+      saveText: 'Сравнить',
+    );
+    if (picked != null && mounted) setState(() => _comparisonRange = picked);
+  }
+
   @override
   Widget build(BuildContext context) => FutureBuilder<_HealthSnapshot>(
     future: _future,
@@ -76,8 +90,10 @@ class _HealthScreenState extends State<HealthScreen> {
       final selectedStart = _customRange?.start ?? DateTime(now.year, now.month, now.day).subtract(Duration(days: _days - 1));
       final selectedEnd = _customRange == null ? now : DateTime(_customRange!.end.year, _customRange!.end.month, _customRange!.end.day, 23, 59, 59);
       final durationDays = selectedEnd.difference(selectedStart).inDays + 1;
-      final previousStart = selectedStart.subtract(Duration(days: durationDays));
-      final previousEnd = selectedStart.subtract(const Duration(microseconds: 1));
+      final defaultPreviousStart = selectedStart.subtract(Duration(days: durationDays));
+      final defaultPreviousEnd = selectedStart.subtract(const Duration(microseconds: 1));
+      final previousStart = _comparisonRange?.start ?? defaultPreviousStart;
+      final previousEnd = _comparisonRange == null ? defaultPreviousEnd : DateTime(_comparisonRange!.end.year, _comparisonRange!.end.month, _comparisonRange!.end.day, 23, 59, 59);
       final visible = <String, List<_MetricSample>>{};
       final previous = <String, List<_MetricSample>>{};
       if (data != null) {
@@ -141,6 +157,15 @@ class _HealthScreenState extends State<HealthScreen> {
                 label: Text(_customRange == null ? 'Произвольный период' : '${_date(_customRange!.start)} — ${_date(_customRange!.end)}'),
               )),
               if (_customRange != null) IconButton(tooltip: 'Сбросить период', onPressed: () => setState(() => _customRange = null), icon: const Icon(Icons.close_rounded)),
+            ]),
+            const SizedBox(height: 6),
+            Row(children: [
+              Expanded(child: OutlinedButton.icon(
+                onPressed: _chooseComparisonRange,
+                icon: const Icon(Icons.compare_arrows_rounded),
+                label: Text(_comparisonRange == null ? 'Сравнить с предыдущим равным периодом' : 'Сравнение: ${_date(_comparisonRange!.start)} — ${_date(_comparisonRange!.end)}'),
+              )),
+              if (_comparisonRange != null) IconButton(tooltip: 'Сбросить период сравнения', onPressed: () => setState(() => _comparisonRange = null), icon: const Icon(Icons.close_rounded)),
             ]),
             const SizedBox(height: 12),
             if (visible.isEmpty)
