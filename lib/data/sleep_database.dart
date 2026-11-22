@@ -453,51 +453,87 @@ class SleepDatabase {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_sleep_sessions_deleted_at ON sleep_sessions(deleted_at)');
   }
 
-  /// Перемещает ночь в корзину, не удаляя связанные данные и аудиофайлы.
-  Future<void> moveSessionToTrash(String sessionId) async {
+  /// Перемещает одну завершённую ночь в корзину.
+  Future<void> moveSessionToTrash(String sessionId) => moveSessionsToTrash([sessionId]);
+
+  /// Перемещает выбранные завершённые ночи в корзину одной транзакцией.
+  Future<void> moveSessionsToTrash(Iterable<String> sessionIds) async {
+    final ids = sessionIds.toSet().toList();
+    if (ids.isEmpty) return;
     final db = await database;
-    final rows = await db.query('sleep_sessions', columns: ['id', 'ended_at', 'deleted_at'],
-      where: 'id = ?', whereArgs: [sessionId], limit: 1);
-    if (rows.isEmpty) throw StateError('Ночная запись не найдена.');
-    if (rows.single['ended_at'] == null) throw StateError('Нельзя переместить активную сессию в корзину.');
-    if (rows.single['deleted_at'] != null) return;
-    await db.update('sleep_sessions', {
-      'deleted_at': DateTime.now().toUtc().toIso8601String(),
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    }, where: 'id = ?', whereArgs: [sessionId]);
+    final now = DateTime.now().toUtc().toIso8601String();
+    await db.transaction((txn) async {
+      for (final id in ids) {
+        final rows = await txn.query('sleep_sessions', columns: ['id', 'ended_at', 'deleted_at'], where: 'id = ?', whereArgs: [id], limit: 1);
+        if (rows.isEmpty) throw StateError('Ночная запись не найдена.');
+        if (rows.single['ended_at'] == null) throw StateError('Нельзя переместить активную сессию в корзину.');
+        if (rows.single['deleted_at'] == null) {
+          await txn.update('sleep_sessions', {'deleted_at': now, 'updated_at': now}, where: 'id = ?', whereArgs: [id]);
+        }
+      }
+    });
   }
 
   Future<void> restoreSessionFromTrash(String sessionId) async {
-    final count = await (await database).update('sleep_sessions', {
-      'deleted_at': null,
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    }, where: 'id = ? AND deleted_at IS NOT NULL', whereArgs: [sessionId]);
+    final count = await (await database).update('sleep_sessions', {'deleted_at': null, 'updated_at': DateTime.now().toUtc().toIso8601String()}, where: 'id = ? AND deleted_at IS NOT NULL', whereArgs: [sessionId]);
     if (count == 0) throw StateError('Запись не найдена в корзине.');
   }
 
-  Future<void> permanentlyDeleteSession(String sessionId) async {
+  Future<int> restoreAllTrashedSessions() async {
+    final now = DateTime.now().toUtc().toIso8601String();
+    return (await database).update('sleep_sessions', {'deleted_at': null, 'updated_at': now}, where: 'deleted_at IS NOT NULL');
+  }
+
+  Future<void> permanentlyDeleteSession(String sessionId) => permanentlyDeleteSessions([sessionId]);
+
+  Future<void> permanentlyDeleteSessions(Iterable<String> sessionIds) async {
+    final ids = sessionIds.toSet().toList();
+    if (ids.isEmpty) return;
     final db = await database;
     final audioPaths = <String>[];
     await db.transaction((txn) async {
-      final rows = await txn.query('sleep_sessions', columns: ['id', 'deleted_at'],
-        where: 'id = ?', whereArgs: [sessionId], limit: 1);
-      if (rows.isEmpty) return;
-      if (rows.single['deleted_at'] == null) {
-        throw StateError('Сначала переместите запись в корзину.');
+      for (final id in ids) {
+        final rows = await txn.query('sleep_sessions', columns: ['id', 'deleted_at'], where: 'id = ?', whereArgs: [id], limit: 1);
+        if (rows.isEmpty) continue;
+        if (rows.single['deleted_at'] == null) throw StateError('Сначала переместите запись в корзину.');
+        final audio = await txn.query('audio_events', columns: ['file_path'], where: 'session_id = ?', whereArgs: [id]);
+        audioPaths.addAll(audio.map((row) => row['file_path']).whereType<String>());
+        await txn.delete('sleep_sessions', where: 'id = ?', whereArgs: [id]);
       }
-      final audio = await txn.query('audio_events', columns: ['file_path'],
-        where: 'session_id = ?', whereArgs: [sessionId]);
-      audioPaths.addAll(audio.map((row) => row['file_path']).whereType<String>());
-      await txn.delete('sleep_sessions', where: 'id = ?', whereArgs: [sessionId]);
     });
-    // Файлы удаляются только после успешного commit SQLite.
-    for (final path in audioPaths) {
-      try { await File(path).delete(); } catch (_) {}
-    }
+    for (final path in audioPaths) { try { await File(path).delete(); } catch (_) {} }
   }
+
+  Future<void> permanentlyDeleteAllTrashedSessions() async {
+    final rows = await (await database).query('sleep_sessions', columns: ['id'], where: 'deleted_at IS NOT NULL');
+    await permanentlyDeleteSessions(rows.map((row) => row['id']! as String));
+  }
+
+  Future<int> purgeExpiredTrash({DateTime? now}) async {
+    final db = await database;
+    final cutoff = (now ?? DateTime.now()).toUtc().subtract(const Duration(days: 30)).toIso8601String();
+    final audioPaths = <String>[];
+    var deletedCount = 0;
+    await db.transaction((txn) async {
+      final expired = await txn.query('sleep_sessions', columns: ['id'], where: 'deleted_at IS NOT NULL AND deleted_at <= ?', whereArgs: [cutoff]);
+      for (final row in expired) {
+        final id = row['id']! as String;
+        final audio = await txn.query('audio_events', columns: ['file_path'], where: 'session_id = ?', whereArgs: [id]);
+        audioPaths.addAll(audio.map((item) => item['file_path']).whereType<String>());
+        deletedCount += await txn.delete('sleep_sessions', where: 'id = ? AND deleted_at IS NOT NULL', whereArgs: [id]);
+      }
+    });
+    for (final path in audioPaths) { try { await File(path).delete(); } catch (_) {} }
+    return deletedCount;
+  }
+
+  Future<List<DateTime>> getTrashExpiryDates() async {
+    final rows = await (await database).query('sleep_sessions', columns: ['deleted_at'], where: 'deleted_at IS NOT NULL');
+    return rows.map((row) => DateTime.parse(row['deleted_at']! as String).toLocal().add(const Duration(days: 30))).toList();
+  }
+
   Future<List<SleepSession>> getTrashedSessions() async {
-    final rows = await (await database).query('sleep_sessions',
-      where: 'deleted_at IS NOT NULL', orderBy: 'deleted_at DESC');
+    final rows = await (await database).query('sleep_sessions', where: 'deleted_at IS NOT NULL', orderBy: 'deleted_at DESC');
     return rows.map(SleepSession.fromMap).toList();
   }
 
