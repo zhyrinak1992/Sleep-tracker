@@ -56,10 +56,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       return ListView(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
         children: [
-          Text('Анализ', style: Theme.of(context).textTheme.headlineMedium),
-          const SizedBox(height: 6),
-          const Text('Динамика по сохранённым данным', style: TextStyle(color: AppTheme.muted)),
-          const SizedBox(height: 14),
+          const ScreenHeader(
+            title: 'Анализ',
+            subtitle: 'Динамика по сохранённым данным',
+            icon: Icons.insights_rounded,
+          ),
+          const SizedBox(height: 2),
           OutlinedButton.icon(
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => WeekdayComparisonScreen(database: widget.database),
