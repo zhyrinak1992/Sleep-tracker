@@ -1,12 +1,8 @@
 name: iOS unsigned IPA (AltStore)
 
 on:
+  # Run manually to avoid spending macOS Actions minutes on every source commit.
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    tags:
-      - 'v*'
 
 permissions:
   contents: read
