@@ -37,6 +37,28 @@ void main() {
       expect(result.averageRating, 5);
     });
 
+    test('compares bedtime and wake-time regularity across midnight', () {
+      final data = [
+        session('a', DateTime(2026, 11, 1, 22), end: DateTime(2026, 11, 2, 6)),
+        session('b', DateTime(2026, 11, 2, 22, 10), end: DateTime(2026, 11, 3, 6, 10)),
+        session('open', DateTime(2026, 11, 3, 22)),
+      ];
+      final result = SleepPeriodComparison.summarize(
+        data, DateTime(2026, 11, 1), DateTime(2026, 11, 3));
+      expect(result.regularitySampleCount, 2);
+      expect(result.bedtimeDeviationMinutes, closeTo(5, 0.01));
+      expect(result.wakeTimeDeviationMinutes, closeTo(5, 0.01));
+    });
+
+    test('does not invent regularity with fewer than two completed nights', () {
+      final result = SleepPeriodComparison.summarize(
+        [session('only', DateTime(2026, 11, 1, 23), end: DateTime(2026, 11, 2, 7))],
+        DateTime(2026, 11, 1), DateTime(2026, 11, 1));
+      expect(result.regularitySampleCount, 1);
+      expect(result.bedtimeDeviationMinutes, isNull);
+      expect(result.wakeTimeDeviationMinutes, isNull);
+    });
+
     test('rejects reversed ranges', () {
       expect(
         () => SleepPeriodComparison.summarize(
