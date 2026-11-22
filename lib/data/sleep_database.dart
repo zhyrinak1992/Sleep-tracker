@@ -190,6 +190,7 @@ class SleepDatabase {
       if (!merge) {
         await txn.delete('sleep_notes');
         await txn.delete('sleep_session_tags');
+        await txn.delete('climate_samples');
         await txn.delete('sleep_sessions');
         await txn.delete('app_metadata');
         for (final table in tables) {
