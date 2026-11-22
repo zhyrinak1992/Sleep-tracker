@@ -100,8 +100,12 @@ class BackupService {
         final encoded = row.remove('audioDataB64');
         // Format v3 promises a complete audio archive; reject damaged archives.
         if (encoded == null) {
-          if (decoded['formatVersion'] == 3 && row['file_path'] != null) throw const FormatException('В резервной копии отсутствует аудиофайл, который должен быть в архиве. Импорт отменён без изменения текущих данных.');
-          // Legacy archives may contain metadata without original audio bytes.
+          if ((decoded['formatVersion'] == 3 || decoded['formatVersion'] == 4) && row['file_path'] != null) {
+            throw const FormatException('В резервной копии отсутствует аудиофайл, который должен быть в архиве. Импорт отменён без изменения текущих данных.');
+          }
+          // Expired clips have no file, but their event metadata must survive.
+          row['file_path'] = null;
+          restoredRows.add(row);
           continue;
         }
         if (encoded is! String) {
