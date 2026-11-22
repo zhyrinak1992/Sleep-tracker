@@ -83,4 +83,25 @@ void main() {
     expect(result.stageMinutes['deep'], 180);
     expect(result.stageMinutes['light'], 120);
   });
+  test('merges overlapping awake samples into one awakening event', () {
+    final start = DateTime(2026, 11, 21, 22);
+    final result = SleepSessionMetrics.calculate(
+      session: SleepSession(
+        id: 'night-overlap',
+        startedAt: start,
+        endedAt: DateTime(2026, 11, 22, 7),
+        actualSleepStartedAt: DateTime(2026, 11, 21, 22, 30),
+        actualSleepEndedAt: DateTime(2026, 11, 22, 6, 30),
+      ),
+      stages: [
+        {'stage': 'Лёгкий сон', 'started_at': DateTime(2026, 11, 21, 22, 30).toUtc().toIso8601String(), 'ended_at': DateTime(2026, 11, 22, 0, 30).toUtc().toIso8601String()},
+        {'stage': 'Бодрствование', 'started_at': DateTime(2026, 11, 22, 0, 30).toUtc().toIso8601String(), 'ended_at': DateTime(2026, 11, 22, 0, 45).toUtc().toIso8601String()},
+        {'stage': 'Бодрствование', 'started_at': DateTime(2026, 11, 22, 0, 40).toUtc().toIso8601String(), 'ended_at': DateTime(2026, 11, 22, 0, 50).toUtc().toIso8601String()},
+        {'stage': 'REM-сон', 'started_at': DateTime(2026, 11, 22, 0, 50).toUtc().toIso8601String(), 'ended_at': DateTime(2026, 11, 22, 6, 30).toUtc().toIso8601String()},
+      ],
+    );
+    expect(result.awakeningCount, 1);
+    expect(result.awakeningIntervals.single.durationMinutes, 20);
+  });
+
 }
