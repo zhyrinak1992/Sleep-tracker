@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/screen_header.dart';
 import 'sleep_analytics.dart';
+import 'individual_sleep_need_card.dart';
 import 'weekday_comparison_screen.dart';
 import 'moon_phase_screen.dart';
 import 'climate_analytics.dart';
@@ -239,6 +240,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             ])),
             const SizedBox(height: 14),
             _RegularityCard(summary: SleepAnalytics.regularity(current.sessions)),
+            const SizedBox(height: 14),
+            IndividualSleepNeedCard(database: widget.database),
             const SizedBox(height: 14),
             DaytimeSleepCard(database: widget.database, sessions: current.sessions),
             const SizedBox(height: 14),
