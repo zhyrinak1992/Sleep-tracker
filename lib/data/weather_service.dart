@@ -4,6 +4,9 @@ import 'package:http/http.dart' as http;
 
 import 'sleep_database.dart';
 
+String _weatherDateKey(DateTime value) =>
+    '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+
 DateTime _parseWeatherUtc(String value) {
   final hasOffset = RegExp(r'(Z|[+-]\d{2}:\d{2})$').hasMatch(value);
   if (hasOffset) return DateTime.parse(value).toUtc();
@@ -222,7 +225,7 @@ class WeatherNightSummary {
       before: false,
     );
     SolarEvent? solarDay;
-    final wakeDate = _date(end.toUtc());
+    final wakeDate = _weatherDateKey(end.toUtc());
     for (final event in solar) {
       if (event.date == wakeDate) {
         solarDay = event;
