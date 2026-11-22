@@ -3,6 +3,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'dart:io';
 
 import '../../data/backup_service.dart';
+import '../../data/app_lock_service.dart';
 import '../../data/apple_health_service.dart';
 import '../../data/apple_health_file_import_service.dart';
 import '../../data/audio_observation_service.dart';
@@ -27,6 +28,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _loadHealthOnboarding();
+  }
+
+
+  Future<void> _changeAppLock(bool value) async {
+    final service = AppLockService.instance;
+    if (value) {
+      if (!await service.isAvailable()) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('На устройстве не обнаружена поддержка системной биометрии или блокировки кодом.')),
+        );
+        return;
+      }
+      await service.setEnabled(true);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Защита включена. При возвращении в приложение потребуется подтверждение личности.')),
+      );
+      return;
+    }
+    final confirmed = await service.authenticate(reason: 'Подтвердите отключение защиты Sleep Tracker');
+    if (!confirmed) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Отключение отменено. Защита осталась включённой.')),
+      );
+      return;
+    }
+    await service.setEnabled(false);
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Защита приложения отключена.')),
+    );
   }
 
   Future<void> _loadHealthOnboarding() async {
@@ -206,6 +236,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     children: [
       Text('Настройки', style: Theme.of(context).textTheme.headlineMedium),
       const SizedBox(height: 20),
+      SectionCard(child: ValueListenableBuilder<bool>(
+        valueListenable: AppLockService.instance.enabled,
+        builder: (context, enabled, _) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Защита приложения', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+          const SizedBox(height: 8),
+          const Text('Используется системная биометрия Face ID / Touch ID или код-пароль устройства. При сворачивании приложения экран блокируется; при следующем открытии потребуется подтверждение. Биометрические данные не сохраняются в Sleep Tracker.', style: TextStyle(color: AppTheme.muted, height: 1.45)),
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Блокировать приложение'),
+            subtitle: Text(enabled ? 'Защита включена' : 'Защита выключена'),
+            value: enabled,
+            onChanged: _busy ? null : _changeAppLock,
+          ),
+        ]),
+      )),
+      const SizedBox(height: 12),
       SectionCard(child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
