@@ -7,6 +7,7 @@ import '../analysis/climate_analytics.dart';
 import 'screen_time_card.dart';
 import 'weather_night_detail_card.dart';
 import 'sleep_session_metrics_card.dart';
+import 'sleep_metric_summary.dart';
 import '../../models/sleep_session.dart';
 import '../../models/sleep_note.dart';
 import '../../theme/app_theme.dart';
@@ -329,7 +330,36 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                         final rows = state.data ?? const <Map<String, Object?>>[];
                         if (state.connectionState == ConnectionState.waiting) return const LinearProgressIndicator();
                         if (rows.isEmpty) return const Text('За эту ночь доступные физиологические измерения не импортированы.', style: TextStyle(color: AppTheme.muted));
-                        return Column(children: rows.map((row) => _detailRow(row['metric_type']! as String, '${(row['value'] as num).toStringAsFixed(1)} ${row['unit']} · ${DateFormat('HH:mm').format(DateTime.parse(row['measured_at']! as String).toLocal())}')).toList());
+                        final summaries = SleepMetricSummary.fromSamples(rows);
+                        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          for (final summary in summaries) ...[
+                            _detailRow(
+                              summary.metricType,
+                              'Среднее ${summary.average.toStringAsFixed(1)} ${summary.unit} · мин. ${summary.minimum.toStringAsFixed(1)} · макс. ${summary.maximum.toStringAsFixed(1)}',
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Text(
+                                '${summary.count} измерений · ${DateFormat('HH:mm').format(summary.firstMeasuredAt)}–${DateFormat('HH:mm').format(summary.lastMeasuredAt)}',
+                                style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+                              ),
+                            ),
+                          ],
+                          const Divider(height: 18),
+                          const Text('Отдельные измерения', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                          const SizedBox(height: 4),
+                          ...(rows.where((row) =>
+                            row['metric_type'] is String &&
+                            row['value'] is num &&
+                            (row['value'] as num).toDouble().isFinite &&
+                            row['measured_at'] is String
+                          ).toList()
+                            ..sort((a, b) => DateTime.parse(a['measured_at']! as String).compareTo(DateTime.parse(b['measured_at']! as String))))
+                            .map((row) => _detailRow(
+                              row['metric_type']! as String,
+                              '${(row['value'] as num).toStringAsFixed(1)} ${row['unit']} · ${DateFormat('HH:mm').format(DateTime.parse(row['measured_at']! as String).toLocal())}',
+                            )),
+                        ]);
                       }),
                       const SizedBox(height: 8),
                       const Text('Показываются только измерения, реально полученные из Apple Health. Их отсутствие не заменяется оценками.', style: TextStyle(color: AppTheme.teal, fontSize: 12, height: 1.4)),
