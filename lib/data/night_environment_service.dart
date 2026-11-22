@@ -216,11 +216,15 @@ class NightEnvironmentService {
 
     for (final session in valid) {
       final key = '$_cachePrefix${session.id}_$locationId';
+      final sessionStartEpoch = (session.actualSleepStartedAt ?? session.startedAt).toUtc().millisecondsSinceEpoch ~/ 1000;
+      final sessionEndEpoch = (session.actualSleepEndedAt ?? session.endedAt!).toUtc().millisecondsSinceEpoch ~/ 1000;
       final raw = await db.getAppMetadata(key);
       if (raw != null && raw.isNotEmpty) {
         try {
           final cache = jsonDecode(raw);
-          if (cache is Map && cache['fetchedAt'] is String) {
+          if (cache is Map && cache['fetchedAt'] is String &&
+              cache['startEpoch'] == sessionStartEpoch &&
+              cache['endEpoch'] == sessionEndEpoch) {
             final fetchedAt = DateTime.tryParse(cache['fetchedAt'] as String);
             final data = cache['summary'];
             if (fetchedAt != null && data is Map) {
@@ -311,6 +315,8 @@ class NightEnvironmentService {
         '$_cachePrefix${session.id}_$locationId',
         jsonEncode({
           'fetchedAt': now.toIso8601String(),
+          'startEpoch': (session.actualSleepStartedAt ?? session.startedAt).toUtc().millisecondsSinceEpoch ~/ 1000,
+          'endEpoch': (session.actualSleepEndedAt ?? session.endedAt!).toUtc().millisecondsSinceEpoch ~/ 1000,
           'summary': summary.toMap(),
         }),
       );
