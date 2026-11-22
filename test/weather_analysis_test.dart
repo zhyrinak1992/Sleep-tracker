@@ -139,4 +139,14 @@ void main() {
     expect(summary.daylightDurationSeconds, 86400);
   });
 
+  test('solar cache accepts older entries without daylight duration', () {
+    final event = SolarEvent.fromJson({
+      'date': '2026-11-22',
+      'sunriseUtc': '2026-11-22T06:30:00Z',
+      'sunsetUtc': '2026-11-22T15:10:00Z',
+    });
+    expect(event.daylightDurationSeconds, isNull);
+    expect(event.toJson()['daylightDurationSeconds'], isNull);
+  });
+
 }
