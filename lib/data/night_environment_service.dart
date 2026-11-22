@@ -286,12 +286,12 @@ class NightEnvironmentService {
         locationName: location.displayName,
         sampleCount: indices.length,
         utcOffsetSeconds: offset,
-        temperatureMin: temp.isEmpty ? null : temp.reduce(math.min),
+        temperatureMin: temp.isEmpty ? null : temp.reduce((a, b) => a < b ? a : b),
         temperatureAverage: temp.isEmpty ? null : temp.reduce((a, b) => a + b) / temp.length,
-        temperatureMax: temp.isEmpty ? null : temp.reduce(math.max),
+        temperatureMax: temp.isEmpty ? null : temp.reduce((a, b) => a > b ? a : b),
         humidityAverage: humid.isEmpty ? null : humid.reduce((a, b) => a + b) / humid.length,
         precipitationMm: rain.isEmpty ? null : rain.fold<double>(0, (a, b) => a + b),
-        windMaxKmh: winds.isEmpty ? null : winds.reduce(math.max),
+        windMaxKmh: winds.isEmpty ? null : winds.reduce((a, b) => a > b ? a : b),
         weatherCode: _mode(weatherCodes),
         sunriseEpoch: _nearest(sunrises, end, true),
         sunsetEpoch: _nearest(sunsets, start, false),
@@ -312,13 +312,13 @@ class NightEnvironmentService {
       ? value.whereType<num>().map((item) => item.toInt()).toList()
       : const [];
 
-  static List<double> _numList(dynamic value) => value is List
-      ? value.whereType<num>().map((item) => item.toDouble()).where((item) => item.isFinite).toList()
+  static List<double?> _numList(dynamic value) => value is List
+      ? value.map((item) => item is num && item.toDouble().isFinite ? item.toDouble() : null).toList()
       : const [];
 
-  static List<double> _selected(List<double> values, List<int> indices) => [
+  static List<double> _selected(List<double?> values, List<int> indices) => [
     for (final index in indices)
-      if (index < values.length) values[index],
+      if (index < values.length && values[index] != null) values[index]!,
   ];
 
   static int? _mode(List<int> values) {
