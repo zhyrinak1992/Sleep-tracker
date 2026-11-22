@@ -2,17 +2,19 @@ import 'dart:convert';
 
 import '../../models/sleep_session.dart';
 
-enum TagSleepMetric { sleepDuration, morningRating }
+enum TagSleepMetric { sleepDuration, morningRating, awakeningCount }
 
 extension TagSleepMetricLabel on TagSleepMetric {
   String get label => switch (this) {
     TagSleepMetric.sleepDuration => 'Продолжительность сна',
     TagSleepMetric.morningRating => 'Утренняя оценка',
+    TagSleepMetric.awakeningCount => 'Зарегистрированные эпизоды бодрствования',
   };
 
   String get unit => switch (this) {
     TagSleepMetric.sleepDuration => 'мин',
     TagSleepMetric.morningRating => 'из 5',
+    TagSleepMetric.awakeningCount => 'эпизодов',
   };
 }
 
@@ -56,6 +58,7 @@ class TagSleepComparison {
     required DateTime start,
     required DateTime endExclusive,
     required TagSleepMetric metric,
+    Map<String, int> awakeningCountsBySession = const {},
   }) {
     if (tagKeys.isEmpty || tagKeys.any((key) => key.trim().isEmpty) || !endExclusive.isAfter(start)) {
       throw ArgumentError('Некорректные параметры сравнения.');
@@ -72,6 +75,7 @@ class TagSleepComparison {
       final value = switch (metric) {
         TagSleepMetric.sleepDuration => _actualSleepMinutes(session),
         TagSleepMetric.morningRating => session.morningRating?.toDouble(),
+        TagSleepMetric.awakeningCount => awakeningCountsBySession[session.id]?.toDouble(),
       };
       if (value == null || !value.isFinite) continue;
 

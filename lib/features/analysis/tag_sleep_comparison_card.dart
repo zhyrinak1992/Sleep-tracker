@@ -8,6 +8,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import 'tag_sleep_comparison.dart';
 import 'tag_combination_suggestions.dart';
+import '../diary/sleep_session_metrics.dart';
 
 class TagSleepComparisonCard extends StatefulWidget {
   const TagSleepComparisonCard({
@@ -64,6 +65,22 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
     final tags = await widget.database.getTagsForSessions(
       widget.sessions.map((session) => session.id).toList(),
     );
+    final stagesBySession = await widget.database.getStagesForSessions(
+      widget.sessions.map((session) => session.id).toList(),
+    );
+    final awakeningCounts = <String, int>{};
+    for (final session in widget.sessions) {
+      final stages = stagesBySession[session.id] ?? const <Map<String, Object?>>[];
+      final hasAwakeSamples = stages.any((row) {
+        final stage = (row['stage'] as String? ?? '').toLowerCase();
+        return stage.contains('бодрств') || stage == 'awake' || stage.contains('awake');
+      });
+      if (!hasAwakeSamples) continue;
+      awakeningCounts[session.id] = SleepSessionMetrics.calculate(
+        session: session,
+        stages: stages,
+      ).awakeningCount;
+    }
     final templates = await _store.load();
     final customTags = await CustomSleepTagStore(
       widget.database.getAppMetadata,
@@ -80,6 +97,7 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
     );
     return _TagComparisonData(
       tagsBySession: tags,
+      awakeningCountsBySession: awakeningCounts,
       templates: templates,
       customTags: customTags,
       suggestions: suggestions,
@@ -98,6 +116,9 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
       final minutes = absolute.round();
       return '$sign${minutes ~/ 60} ч ${minutes % 60} мин';
     }
+    if (metric == TagSleepMetric.awakeningCount) {
+      return '$sign${absolute.round()} эпизодов';
+    }
     return '$sign${absolute.toStringAsFixed(1)} балла';
   }
 
@@ -106,6 +127,9 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
     if (metric == TagSleepMetric.sleepDuration) {
       final minutes = value.round();
       return '${minutes ~/ 60} ч ${minutes % 60} мин';
+    }
+    if (metric == TagSleepMetric.awakeningCount) {
+      return '${value.round()} эпизодов';
     }
     return '${value.toStringAsFixed(1)} из 5';
   }
@@ -270,6 +294,7 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
         start: widget.start,
         endExclusive: widget.endExclusive,
         metric: _metric,
+        awakeningCountsBySession: data.awakeningCountsBySession,
       );
       final matchingTemplates = data.templates.where((item) => item.id == _activeTemplateId);
       final activeTemplate = matchingTemplates.isEmpty ? null : matchingTemplates.first;
@@ -461,11 +486,13 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
 class _TagComparisonData {
   const _TagComparisonData({
     required this.tagsBySession,
+    required this.awakeningCountsBySession,
     required this.templates,
     required this.customTags,
     required this.suggestions,
   });
   final Map<String, Set<String>> tagsBySession;
+  final Map<String, int> awakeningCountsBySession;
   final List<TagComparisonTemplate> templates;
   final List<SleepTag> customTags;
   final List<TagCombinationSuggestion> suggestions;
