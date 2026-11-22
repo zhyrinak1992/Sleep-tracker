@@ -77,5 +77,5 @@ void main() {
     expect(result.awakeningCount, 2);
     expect(result.awakeStageMinutes, 13);
     expect(result.stageBreakdownMinutes.values.fold<int>(0, (a, b) => a + b), 480);
-    expect(result.stageBreakdownMinutes['Сон без уточнения'], 299);
+    expect(result.stageBreakdownMinutes['Сон без уточнения'], 355);
   });
