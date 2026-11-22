@@ -225,7 +225,13 @@ class WeatherService {
       'timezone': 'UTC',
       'timeformat': 'iso8601',
     });
-    final response = await http.get(uri).timeout(const Duration(seconds: 30));
+    http.Response response;
+    try {
+      response = await http.get(uri).timeout(const Duration(seconds: 30));
+    } catch (_) {
+      if (cachedPoints.isNotEmpty) return cachedPoints;
+      rethrow;
+    }
     if (response.statusCode != 200) {
       if (cachedPoints.isNotEmpty) return cachedPoints;
       throw Exception('Архив погоды ответил кодом ${response.statusCode}.');
