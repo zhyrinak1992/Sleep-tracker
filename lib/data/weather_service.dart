@@ -240,6 +240,19 @@ class WeatherService {
         .toList();
   }
 
+  Future<DateTime?> loadCacheUpdatedAt({
+    required SleepDatabase database,
+    required WeatherLocation location,
+  }) async {
+    final raw = await database.getAppMetadata('$_cachePrefix${location.id}');
+    if (raw == null || raw.isEmpty) return null;
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map) throw const FormatException('Кэш погоды повреждён.');
+    final value = decoded['updatedAt'];
+    if (value is! String) return null;
+    return DateTime.tryParse(value)?.toLocal();
+  }
+
   Future<WeatherSolarDay?> loadSolarDay({
     required SleepDatabase database,
     required WeatherLocation location,
