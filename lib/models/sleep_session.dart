@@ -8,6 +8,7 @@ class SleepSession {
     this.morningRating,
     this.createdAt,
     this.updatedAt,
+    this.deletedAt,
     this.buttonStartedAt,
     this.buttonEndedAt,
     this.actualSleepStartedAt,
@@ -23,6 +24,7 @@ class SleepSession {
   final int? morningRating;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final DateTime? deletedAt;
   final DateTime? buttonStartedAt;
   final DateTime? buttonEndedAt;
   final DateTime? actualSleepStartedAt;
@@ -41,6 +43,7 @@ class SleepSession {
     'morning_rating': morningRating,
     'created_at': (createdAt ?? DateTime.now()).toUtc().toIso8601String(),
     'updated_at': (updatedAt ?? DateTime.now()).toUtc().toIso8601String(),
+    'deleted_at': deletedAt?.toUtc().toIso8601String(),
     'button_started_at': buttonStartedAt?.toUtc().toIso8601String(),
     'button_ended_at': buttonEndedAt?.toUtc().toIso8601String(),
     'actual_sleep_started_at': actualSleepStartedAt?.toUtc().toIso8601String(),
@@ -63,6 +66,9 @@ class SleepSession {
     updatedAt: map['updated_at'] == null
         ? null
         : DateTime.parse(map['updated_at']! as String).toLocal(),
+    deletedAt: map['deleted_at'] == null
+        ? null
+        : DateTime.parse(map['deleted_at']! as String).toLocal(),
     buttonStartedAt: map['button_started_at'] == null ? null : DateTime.parse(map['button_started_at']! as String).toLocal(),
     buttonEndedAt: map['button_ended_at'] == null ? null : DateTime.parse(map['button_ended_at']! as String).toLocal(),
     actualSleepStartedAt: map['actual_sleep_started_at'] == null ? null : DateTime.parse(map['actual_sleep_started_at']! as String).toLocal(),
