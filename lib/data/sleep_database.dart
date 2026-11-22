@@ -134,18 +134,22 @@ class SleepDatabase {
   /// Экспортирует все существующие таблицы приложения в переносимую структуру.
   Future<Map<String, Object?>> exportSnapshot() async {
     final db = await database;
-    return {
-      'schemaVersion': 8,
-      'sleep_sessions': await db.query('sleep_sessions', orderBy: 'started_at ASC'),
-      'sleep_session_tags': await db.query('sleep_session_tags', orderBy: 'session_id ASC, tag_key ASC'),
-      'sleep_notes': await db.query('sleep_notes', orderBy: 'created_at ASC'),
-      'app_metadata': await db.query('app_metadata', orderBy: 'key ASC'),
-      'sleep_stages': await db.query('sleep_stages', orderBy: 'started_at ASC'),
-      'sleep_metrics': await db.query('sleep_metrics', orderBy: 'measured_at ASC'),
-      'audio_events': await db.query('audio_events', orderBy: 'captured_at ASC'),
-      'morning_reports': await db.query('morning_reports', orderBy: 'report_date ASC'),
-      'climate_samples': await db.query('climate_samples', orderBy: 'measured_at ASC'),
-    };
+    // Читаем все таблицы в одной транзакции: параллельные изменения приложения
+    // не смогут сформировать резервную копию из разных временных состояний БД.
+    return db.transaction((txn) async {
+      return {
+        'schemaVersion': 8,
+        'sleep_sessions': await txn.query('sleep_sessions', orderBy: 'started_at ASC'),
+        'sleep_session_tags': await txn.query('sleep_session_tags', orderBy: 'session_id ASC, tag_key ASC'),
+        'sleep_notes': await txn.query('sleep_notes', orderBy: 'created_at ASC'),
+        'app_metadata': await txn.query('app_metadata', orderBy: 'key ASC'),
+        'sleep_stages': await txn.query('sleep_stages', orderBy: 'started_at ASC'),
+        'sleep_metrics': await txn.query('sleep_metrics', orderBy: 'measured_at ASC'),
+        'audio_events': await txn.query('audio_events', orderBy: 'captured_at ASC'),
+        'morning_reports': await txn.query('morning_reports', orderBy: 'report_date ASC'),
+        'climate_samples': await txn.query('climate_samples', orderBy: 'measured_at ASC'),
+      };
+    });
   }
 
   /// Полное восстановление с проверкой структуры и атомарной заменой данных.
