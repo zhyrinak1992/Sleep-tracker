@@ -155,7 +155,23 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     );
 
     return Scaffold(
-      body: SafeArea(child: IndexedStack(index: _index, children: pages)),
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF10132F),
+              AppTheme.background,
+              Color(0xFF11152F),
+            ],
+            stops: [0, 0.55, 1],
+          ),
+        ),
+        child: SafeArea(
+          child: IndexedStack(index: _index, children: pages),
+        ),
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (value) => setState(() => _index = value),
