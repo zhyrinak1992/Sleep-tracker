@@ -96,7 +96,7 @@ class HourlyWeatherPoint {
       return result.isFinite ? result : null;
     }
     return HourlyWeatherPoint(
-      time: DateTime.parse(time).toUtc(),
+      time: _parseUtc(time),
       temperatureC: number('temperatureC'),
       humidityPercent: number('humidityPercent'),
       precipitationMm: number('precipitationMm'),
@@ -253,7 +253,7 @@ class WeatherService {
       final time = times[i];
       if (time is! String) continue;
       fetched.add(HourlyWeatherPoint(
-        time: DateTime.parse(time).toUtc(),
+        time: _parseUtc(time),
         temperatureC: at(temperatures, i),
         humidityPercent: at(humidity, i),
         precipitationMm: at(precipitation, i),
@@ -280,6 +280,21 @@ class WeatherService {
       'updatedAt': DateTime.now().toUtc().toIso8601String(),
     }));
     return merged;
+  }
+
+  static DateTime _parseUtc(String value) {
+    final hasOffset = RegExp(r'(Z|[+-]\\d{2}:\\d{2})
+      '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+}
+).hasMatch(value);
+    if (hasOffset) return DateTime.parse(value).toUtc();
+    final parsed = DateTime.parse(value);
+    // The archive request explicitly asks for timezone=UTC. Open-Meteo may
+    // serialize UTC hours without a trailing Z, so treat such values as UTC.
+    return DateTime.utc(
+      parsed.year, parsed.month, parsed.day,
+      parsed.hour, parsed.minute, parsed.second, parsed.millisecond,
+    );
   }
 
   static String _date(DateTime value) =>
