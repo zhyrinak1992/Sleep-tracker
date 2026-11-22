@@ -359,19 +359,32 @@ class _ClimateSummary extends StatelessWidget {
   const _ClimateSummary({required this.database});
   final SleepDatabase database;
 
+  Future<List<Map<String, Object?>>> _loadSamples() async {
+    final selectedDevice = await database.getAppMetadata('yandex_selected_device_id');
+    if (selectedDevice == null || selectedDevice.isEmpty) return const [];
+    return database.getClimateSamples(
+      deviceId: selectedDevice,
+      from: DateTime.now().subtract(const Duration(days: 30)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => FutureBuilder<List<Map<String, Object?>>>(
-    future: database.getClimateSamples(from: DateTime.now().subtract(const Duration(days: 30))),
+    future: _loadSamples(),
     builder: (context, snapshot) {
       if (snapshot.connectionState == ConnectionState.waiting) return const SectionCard(child: LinearProgressIndicator());
       if (snapshot.hasError) return SectionCard(child: Text('Не удалось загрузить климатические измерения: ${snapshot.error}'));
       final samples = snapshot.data ?? const <Map<String, Object?>>[];
-      final temperature = ClimateMetricSummary.fromSamples(samples, metricType: 'temperature');
-      final humidity = ClimateMetricSummary.fromSamples(samples, metricType: 'humidity');
+      final temperature = ClimateMetricSummary.fromSamples(
+        samples, metricType: 'temperature', expectedInterval: const Duration(minutes: 15),
+      );
+      final humidity = ClimateMetricSummary.fromSamples(
+        samples, metricType: 'humidity', expectedInterval: const Duration(minutes: 15),
+      );
       return SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('Микроклимат спальни', style: TextStyle(fontWeight: FontWeight.w600)),
         const SizedBox(height: 5),
-        const Text('Фактические измерения датчика за последние 30 дней', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
+        const Text('Показания выбранного датчика за последние 30 дней', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
         const SizedBox(height: 12),
         _ClimateMetricLine(title: 'Температура', summary: temperature),
         const Divider(height: 18, color: AppTheme.surfaceLight),
@@ -401,6 +414,8 @@ class _ClimateMetricLine extends StatelessWidget {
       const SizedBox(height: 5),
       Text('Мин. ${value.minimum.toStringAsFixed(1)}${value.unit} · сред. ${value.average.toStringAsFixed(1)}${value.unit} · макс. ${value.maximum.toStringAsFixed(1)}${value.unit}', style: const TextStyle(fontSize: 12)),
       Text('Последнее: ${value.lastValue.toStringAsFixed(1)}${value.unit} · $last · точек: ${value.count}', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+      if (value.coveragePercent != null)
+        Text('Покрытие 15-минутного интервала: ${value.coveragePercent!.toStringAsFixed(0)}%', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
     ]);
   }
 }
