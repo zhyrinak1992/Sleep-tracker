@@ -66,8 +66,8 @@ class StorageService {
       appBytes += await _directoryBytes(Directory(path));
     }
 
-    final freeBytes = await _safeDiskValue(DiskUsage.freeSpace);
-    final totalDiskBytes = await _safeDiskValue(DiskUsage.totalSpace);
+    final freeBytes = await _safeDiskValue(() => DiskUsage.freeSpace());
+    final totalDiskBytes = await _safeDiskValue(() => DiskUsage.totalSpace());
     final otherBytes = (appBytes - databaseBytes - audioBytes - reportBytes - backupBytes).clamp(0, appBytes);
 
     // These values are computed separately to make sure a path-provider
@@ -120,7 +120,9 @@ class StorageService {
     if (!await cache.exists()) return 0;
     var removedBytes = 0;
     await for (final entity in cache.list(followLinks: false)) {
-      removedBytes += await _entityBytes(entity);
+      removedBytes += entity is Directory
+          ? await _directoryBytes(entity)
+          : await _entityBytes(entity);
       try {
         await entity.delete(recursive: true);
       } on FileSystemException {
