@@ -346,9 +346,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Text('Резервное копирование', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
           const SizedBox(height: 8),
           const Text(
-            'Создайте файл со всей сохранённой историей сна, оценками, тегами и заметками. '
+            'Создайте файл со всей сохранённой историей сна, оценками, тегами, заметками и сохранёнными аудиофрагментами. '
             'Файл можно сохранить в «Файлы» или перенести на другой iPhone.',
             style: TextStyle(color: AppTheme.muted, height: 1.5),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Важно: резервная копия сейчас создаётся в незашифрованном JSON-файле. В нём могут быть личные сведения о сне и аудиофрагменты. Сохраняйте файл в защищённое место и не отправляйте его посторонним. Защита Face ID внутри приложения не шифрует экспортированный файл.',
+            style: TextStyle(color: AppTheme.warning, fontSize: 12, height: 1.45),
           ),
           const SizedBox(height: 14),
           SizedBox(width: double.infinity, child: FilledButton.icon(
