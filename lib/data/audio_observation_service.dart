@@ -52,12 +52,12 @@ class AudioObservationService {
         encoder: AudioEncoder.pcm16bits, sampleRate: _sampleRate,
         numChannels: 1, echoCancel: false, noiseSuppress: false,
       ));
-      _subscription = stream.listen(_consume, onError: (Object error) {
-        _observing = false;
-        observing.value = false;
-        _paused = false;
-        paused.value = false;
-      });
+      _subscription = stream.listen(
+        _consume,
+        onError: (Object error, StackTrace stackTrace) {
+          unawaited(_handleStreamError(error, stackTrace));
+        },
+      );
     } catch (_) {
       _observing = false;
       observing.value = false;
@@ -65,6 +65,23 @@ class AudioObservationService {
       paused.value = false;
       rethrow;
     }
+  }
+
+  Future<void> _handleStreamError(Object error, StackTrace stackTrace) async {
+    debugPrint('Audio observation stream failed: $error\\n$stackTrace');
+    _observing = false;
+    observing.value = false;
+    _paused = false;
+    paused.value = false;
+    await _subscription?.cancel();
+    _subscription = null;
+    try {
+      await _recorder.stop();
+    } catch (stopError) {
+      debugPrint('Audio recorder stop after stream failure failed: $stopError');
+    }
+    await _saveCurrentEvent();
+    _preRoll.clear();
   }
 
   void _consume(Uint8List chunk) {
@@ -115,27 +132,56 @@ class AudioObservationService {
     _lastLoudAt = null;
     final pcm = builder.takeBytes();
     if (pcm.length < (_sampleRate * 2)) return; // Ignore clips shorter than 1 second.
-    final dir = await getApplicationDocumentsDirectory();
-    final audioDir = Directory(p.join(dir.path, 'audio_events'));
-    await audioDir.create(recursive: true);
-    final eventId = const Uuid().v4();
-    final path = p.join(audioDir.path, 'event_$eventId.wav');
-    final wav = _wavFile(pcm, _sampleRate, 1, 16);
-    await File(path).writeAsBytes(wav, flush: true);
-    final session = await SleepDatabase.instance.getOpenSession();
-    final capturedAt = started;
-    await SleepDatabase.instance.saveAudioEvent(
-      id: eventId, sessionId: session?.id, filePath: path,
-      category: 'unknown', capturedAt: capturedAt,
-      durationMs: (pcm.length / 2 / _sampleRate * 1000).round(),
-    );
-    final classification = await SoundClassificationService.instance.classifyFile(path);
-    if (classification.category != 'unknown') {
-      await SleepDatabase.instance.updateAudioClassification(eventId, classification.category, classification.confidence);
+
+    String? path;
+    var eventStored = false;
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final audioDir = Directory(p.join(dir.path, 'audio_events'));
+      await audioDir.create(recursive: true);
+      final eventId = const Uuid().v4();
+      path = p.join(audioDir.path, 'event_$eventId.wav');
+      final wav = _wavFile(pcm, _sampleRate, 1, 16);
+      await File(path).writeAsBytes(wav, flush: true);
+      final session = await SleepDatabase.instance.getOpenSession();
+      await SleepDatabase.instance.saveAudioEvent(
+        id: eventId, sessionId: session?.id, filePath: path,
+        category: 'unknown', capturedAt: started,
+        durationMs: (pcm.length / 2 / _sampleRate * 1000).round(),
+      );
+      eventStored = true;
+
+      // Classification and expiry notification are best-effort. If either
+      // fails, preserve the already indexed clip for later review/backup.
+      try {
+        final classification = await SoundClassificationService.instance.classifyFile(path);
+        if (classification.category != 'unknown') {
+          await SleepDatabase.instance.updateAudioClassification(
+            eventId, classification.category, classification.confidence);
+        }
+      } catch (error, stackTrace) {
+        debugPrint('Audio classification failed for $eventId: $error\\n$stackTrace');
+      }
+      detectedEvents++;
+      try {
+        final allEvents = await SleepDatabase.instance.getAudioEvents();
+        await NotificationService.instance.scheduleAudioExpiry(
+          allEvents.map((row) => DateTime.parse(row['expires_at']! as String)));
+      } catch (error, stackTrace) {
+        debugPrint('Audio expiry notification scheduling failed: $error\\n$stackTrace');
+      }
+    } catch (error, stackTrace) {
+      debugPrint('Saving audio event failed: $error\\n$stackTrace');
+      // Avoid leaving an unindexed audio file if the database insert failed.
+      if (!eventStored && path != null) {
+        try {
+          final file = File(path);
+          if (await file.exists()) await file.delete();
+        } catch (cleanupError) {
+          debugPrint('Orphan audio cleanup failed: $cleanupError');
+        }
+      }
     }
-    detectedEvents++;
-    final allEvents = await SleepDatabase.instance.getAudioEvents();
-    await NotificationService.instance.scheduleAudioExpiry(allEvents.map((row) => DateTime.parse(row['expires_at']! as String)));
   }
 
   Uint8List _wavFile(Uint8List pcm, int sampleRate, int channels, int bitsPerSample) {
