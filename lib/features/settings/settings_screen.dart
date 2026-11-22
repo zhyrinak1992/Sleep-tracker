@@ -12,6 +12,7 @@ import '../../data/pdf_report_service.dart';
 import '../../data/sleep_database.dart';
 import '../../data/notification_service.dart';
 import '../../data/yandex_smart_home_service.dart';
+import 'environment_location_card.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/screen_header.dart';
@@ -444,6 +445,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         icon: Icons.tune_rounded,
       ),
       const SizedBox(height: 0),
+      const EnvironmentLocationCard(),
+      const SizedBox(height: 12),
       SectionCard(child: ValueListenableBuilder<bool>(
         valueListenable: AppLockService.instance.enabled,
         builder: (context, enabled, _) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
