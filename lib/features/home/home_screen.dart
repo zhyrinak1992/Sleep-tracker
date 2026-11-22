@@ -362,7 +362,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Image.asset('assets/images/dreamy_night_scene.webp', fit: BoxFit.cover),
+                    CustomPaint(painter: _DreamyNightPainter()),
                     const DecoratedBox(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
@@ -574,4 +574,79 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
+
+class _DreamyNightPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    canvas.drawRect(rect, Paint()..shader = const LinearGradient(
+      begin: Alignment.topCenter, end: Alignment.bottomCenter,
+      colors: [Color(0xFF101331), Color(0xFF28204B), Color(0xFF090F2A)],
+    ).createShader(rect));
+
+    final moon = Offset(size.width * .27, size.height * .30);
+    canvas.drawCircle(moon, size.width * .205, Paint()
+      ..shader = const RadialGradient(colors: [Color(0xFFFFF0C8), Color(0xFFFFC6A8), Color(0xFFD69AEF)])
+          .createShader(Rect.fromCircle(center: moon, radius: size.width * .205))
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16));
+    canvas.drawCircle(moon, size.width * .18, Paint()
+      ..shader = const RadialGradient(colors: [Color(0xFFFFE7B8), Color(0xFFF7BDAF), Color(0xFFDDA6E8)])
+          .createShader(Rect.fromCircle(center: moon, radius: size.width * .18)));
+    canvas.drawCircle(Offset(moon.dx + size.width * .085, moon.dy - size.width * .035), size.width * .17,
+      Paint()..color = const Color(0xFF171638));
+
+    final stars = <Offset>[
+      Offset(.12 * size.width, .13 * size.height), Offset(.56 * size.width, .12 * size.height),
+      Offset(.73 * size.width, .20 * size.height), Offset(.88 * size.width, .10 * size.height),
+      Offset(.56 * size.width, .37 * size.height), Offset(.13 * size.width, .42 * size.height),
+      Offset(.82 * size.width, .43 * size.height),
+    ];
+    for (var i = 0; i < stars.length; i++) {
+      final star = stars[i];
+      final radius = i.isEven ? 2.3 : 1.4;
+      canvas.drawCircle(star, radius + 4, Paint()..color = const Color(0x66F8D8FF)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5));
+      canvas.drawCircle(star, radius, Paint()..color = const Color(0xFFFFE9D1));
+    }
+
+    void cloud(double x, double y, double scale) {
+      final center = Offset(size.width * x, size.height * y);
+      final paint = Paint()..shader = const LinearGradient(
+        begin: Alignment.topCenter, end: Alignment.bottomCenter,
+        colors: [Color(0xFFE7B9E9), Color(0xFF8E78B9), Color(0xFF38345F)],
+      ).createShader(Rect.fromLTWH(center.dx - 100 * scale, center.dy - 55 * scale, 200 * scale, 100 * scale));
+      canvas.drawCircle(center, 42 * scale, paint);
+      canvas.drawCircle(center.translate(-34 * scale, 15 * scale), 34 * scale, paint);
+      canvas.drawCircle(center.translate(35 * scale, 17 * scale), 38 * scale, paint);
+      canvas.drawOval(Rect.fromCenter(center: center.translate(0, 30 * scale),
+        width: 145 * scale, height: 48 * scale), paint);
+    }
+    cloud(.10, .66, 1.0);
+    cloud(.87, .65, 1.12);
+    cloud(.53, .78, 1.2);
+
+    final bed = RRect.fromRectAndRadius(
+      Rect.fromLTWH(size.width * .48, size.height * .58, size.width * .43, size.height * .23),
+      const Radius.circular(22),
+    );
+    canvas.drawRRect(bed, Paint()..color = const Color(0xFF292447));
+    canvas.drawRRect(RRect.fromRectAndRadius(
+      Rect.fromLTWH(size.width * .50, size.height * .61, size.width * .39, size.height * .17),
+      const Radius.circular(18),
+    ), Paint()..shader = const LinearGradient(
+      colors: [Color(0xFFFFD9D0), Color(0xFFB99BD8), Color(0xFF554B85)],
+    ).createShader(rect));
+    canvas.drawRRect(RRect.fromRectAndRadius(
+      Rect.fromLTWH(size.width * .54, size.height * .59, size.width * .14, size.height * .065),
+      const Radius.circular(12),
+    ), Paint()..color = const Color(0xFFFFE0D5));
+    canvas.drawRRect(RRect.fromRectAndRadius(
+      Rect.fromLTWH(size.width * .70, size.height * .59, size.width * .14, size.height * .065),
+      const Radius.circular(12),
+    ), Paint()..color = const Color(0xFFE0C8F2));
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
