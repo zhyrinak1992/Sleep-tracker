@@ -42,9 +42,22 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       if (_open == null) {
         await NotificationService.instance.cancelNightReminders();
-        await widget.database.startSession();
-        try { await AudioObservationService.instance.startObservation(); } catch (audioError) {
-          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ночная сессия начата, но аудионаблюдение не запустилось: $audioError. Его можно включить в настройках.')));
+        final session = await widget.database.startSession();
+        try {
+          // Audio must be active for a manual night session. If iOS denies
+          // microphone access or stream startup fails, do not leave a false
+          // "recording" session in the diary.
+          await AudioObservationService.instance.startObservation();
+        } catch (audioError) {
+          await widget.database.finishSession(session.id);
+          await _refresh();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('Не удалось включить аудионаблюдение. Ночная запись не начата. Проверь разрешение на микрофон. $audioError'),
+              duration: const Duration(seconds: 6),
+            ));
+          }
+          return;
         }
       } else {
         await AudioObservationService.instance.stopObservation();
@@ -56,8 +69,24 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось сохранить сессию: $error')),
+        SnackBar(content: Text('Не удалось изменить ночную сессию: $error')),
       );
+    }
+  }
+
+  Future<void> _toggleAudioPause(bool isPaused) async {
+    try {
+      if (isPaused) {
+        await AudioObservationService.instance.resumeObservation();
+      } else {
+        await AudioObservationService.instance.pauseObservation();
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Не удалось изменить состояние аудио: $error')),
+        );
+      }
     }
   }
 
@@ -166,6 +195,81 @@ class _HomeScreenState extends State<HomeScreen> {
               style: const TextStyle(color: AppTheme.muted),
             ),
           ),
+          if (_open != null) ...[
+            const SizedBox(height: 18),
+            ValueListenableBuilder<bool>(
+              valueListenable: AudioObservationService.instance.observing,
+              builder: (context, observing, _) => ValueListenableBuilder<bool>(
+                valueListenable: AudioObservationService.instance.paused,
+                builder: (context, paused, _) => Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFF163B52), Color(0xFF0D2036)],
+                    ),
+                    border: Border.all(color: AppTheme.teal.withValues(alpha: .35)),
+                    boxShadow: [BoxShadow(
+                      color: AppTheme.teal.withValues(alpha: .08),
+                      blurRadius: 24,
+                      spreadRadius: 1,
+                    )],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Container(
+                          width: 42, height: 42,
+                          decoration: BoxDecoration(
+                            color: AppTheme.teal.withValues(alpha: .12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            observing && !paused ? Icons.graphic_eq_rounded : Icons.mic_off_outlined,
+                            color: AppTheme.teal,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('НОЧНОЕ НАБЛЮДЕНИЕ',
+                              style: TextStyle(fontSize: 11, letterSpacing: 1.5,
+                                color: AppTheme.muted, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 3),
+                            Text(
+                              !observing ? 'Аудио не активно' : paused ? 'Аудио на паузе' : 'Аудионаблюдение активно',
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                            ),
+                          ],
+                        )),
+                        if (observing && !paused)
+                          const Icon(Icons.circle, size: 10, color: AppTheme.teal),
+                      ]),
+                      const SizedBox(height: 14),
+                      Text(
+                        observing
+                          ? (paused ? 'Микрофон временно приостановлен.' : 'Сохраняются отдельные звуковые события. Тихие промежутки не записываются.')
+                          : 'Проверь разрешение на микрофон. Ночная сессия остаётся активной.',
+                        style: const TextStyle(color: AppTheme.muted, height: 1.4, fontSize: 12),
+                      ),
+                      if (observing) ...[
+                        const SizedBox(height: 14),
+                        SizedBox(width: double.infinity, child: OutlinedButton.icon(
+                          onPressed: () => _toggleAudioPause(paused),
+                          icon: Icon(paused ? Icons.play_arrow_rounded : Icons.pause_rounded),
+                          label: Text(paused ? 'Возобновить аудио' : 'Приостановить аудио'),
+                        )),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 28),
           const Text('Последняя запись', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
