@@ -174,7 +174,11 @@ void main() {
       await store.save([template]);
       final loaded = await store.load();
 
-      expect(loaded, [template]);
+      expect(loaded, hasLength(1));
+      expect(loaded.single.id, template.id);
+      expect(loaded.single.name, template.name);
+      expect(loaded.single.tagKey, template.tagKey);
+      expect(loaded.single.metric, template.metric);
       expect(metadata.keys, [TagComparisonTemplateStore.metadataKey]);
     });
 
