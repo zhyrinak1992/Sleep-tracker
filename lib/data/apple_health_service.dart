@@ -148,7 +148,13 @@ class AppleHealthService {
         endedAt: endedAt,
         sourceName: sourceName.isEmpty ? 'Apple Health' : sourceName,
       );
-      if (inserted) imported++;
+      if (!inserted) {
+        // The night already exists (possibly imported during an earlier sync).
+        // Do not attach child rows to a new synthetic ID: the matching
+        // session may have a different stable ID after a changed sample order.
+        continue;
+      }
+      imported++;
       for (final point in sorted) {
         final stage = _stageName(point.type);
         if (stage != null) {
