@@ -234,6 +234,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               const Text('Сравнение рассчитывается отдельно для каждого показателя. Нет данных — нет процента изменения. Длительность учитывается только для завершённых сессий, оценка — только там, где она действительно сохранена.', style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.45)),
             ])),
             const SizedBox(height: 14),
+            _RegularityCard(summary: SleepAnalytics.regularity(current.sessions)),
+            const SizedBox(height: 14),
             _ClimateSummary(database: widget.database),
             const SizedBox(height: 12),
             const Text('Фазы сна, пульс, дыхание и звуковые события появятся в аналитике после подключения соответствующих источников. Сейчас они не учитываются и не заменяются условными значениями.', style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.45)),
@@ -418,4 +420,45 @@ class _ClimateMetricLine extends StatelessWidget {
         Text('Покрытие 15-минутного интервала: ${value.coveragePercent!.toStringAsFixed(0)}%', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
     ]);
   }
+}
+
+
+class _RegularityCard extends StatelessWidget {
+  const _RegularityCard({required this.summary});
+  final SleepRegularitySummary summary;
+
+  String _variation(double? minutes) {
+    if (minutes == null) return 'Недостаточно данных';
+    final rounded = minutes.round();
+    if (rounded == 0) return 'Почти одинаковое время';
+    return '±$rounded мин';
+  }
+
+  @override
+  Widget build(BuildContext context) => SectionCard(child: Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text('Регулярность режима сна', style: TextStyle(fontWeight: FontWeight.w600)),
+      const SizedBox(height: 5),
+      Text('Завершённых ночей в выбранном периоде: ${summary.sampleCount}',
+        style: const TextStyle(color: AppTheme.muted, fontSize: 12)),
+      const SizedBox(height: 12),
+      _ComparisonRow(
+        label: 'Время засыпания',
+        current: _variation(summary.bedtimeDeviationMinutes),
+        previous: 'среднее отклонение',
+      ),
+      const Divider(height: 18, color: AppTheme.surfaceLight),
+      _ComparisonRow(
+        label: 'Время пробуждения',
+        current: _variation(summary.wakeTimeDeviationMinutes),
+        previous: 'среднее отклонение',
+      ),
+      const SizedBox(height: 8),
+      const Text(
+        'Показывается среднее абсолютное отклонение от типичного времени. Расчёт учитывает переход через полночь и только завершённые ночи с реальным интервалом сна. Это описательная статистика, а не медицинская оценка.',
+        style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
+      ),
+    ],
+  ));
 }
