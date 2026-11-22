@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import 'sleep_analytics.dart';
 import 'weekday_comparison_screen.dart';
+import 'moon_phase_screen.dart';
 
 class AnalysisScreen extends StatefulWidget {
   const AnalysisScreen({super.key, required this.database});
@@ -64,6 +65,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             )),
             icon: const Icon(Icons.date_range_outlined),
             label: const Text('Сравнить сон по дням недели'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => MoonPhaseScreen(database: widget.database),
+            )),
+            icon: const Icon(Icons.nightlight_round),
+            label: const Text('Сопоставить сон с фазами Луны'),
           ),
           const SizedBox(height: 18),
           SegmentedButton<AnalysisPeriod>(
