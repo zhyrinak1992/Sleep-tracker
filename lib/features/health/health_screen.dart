@@ -21,12 +21,34 @@ class _HealthScreenState extends State<HealthScreen> {
   DateTimeRange? _comparisonRange;
   DateTime _selectedDay = DateTime.now();
   late Future<_HealthDayEntry> _dayEntryFuture;
+  late Future<Map<DateTime, _HealthDayEntry>> _dayEntriesFuture;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
     _dayEntryFuture = _loadDayEntry(_selectedDay);
+    _dayEntriesFuture = _loadAllHealthDayEntries();
+  }
+
+  Future<Map<DateTime, _HealthDayEntry>> _loadAllHealthDayEntries() async {
+    final rows = await widget.database.getAppMetadataByPrefix('health_day_');
+    final result = <DateTime, _HealthDayEntry>{};
+    for (final entry in rows.entries) {
+      final dateText = entry.key.substring('health_day_'.length);
+      final day = DateTime.tryParse(dateText);
+      if (day == null) continue;
+      try {
+        final decoded = jsonDecode(entry.value);
+        if (decoded is! Map) continue;
+        final note = decoded['note'] is String ? decoded['note'] as String : '';
+        final tags = decoded['tags'] is List ? (decoded['tags'] as List).whereType<String>().toSet().toList() : <String>[];
+        if (note.isNotEmpty || tags.isNotEmpty) result[DateTime(day.year, day.month, day.day)] = _HealthDayEntry(note: note, tags: tags);
+      } catch (_) {
+        continue;
+      }
+    }
+    return result;
   }
 
   String _dayMetadataKey(DateTime day) => 'health_day_${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
@@ -100,27 +122,31 @@ class _HealthScreenState extends State<HealthScreen> {
     tagController.dispose();
     if (result == null || !mounted) return;
     await widget.database.setAppMetadata(_dayMetadataKey(_selectedDay), jsonEncode(result.toJson()));
-    if (mounted) setState(() => _dayEntryFuture = Future.value(result));
+    if (mounted) setState(() {
+      _dayEntryFuture = Future.value(result);
+      _dayEntriesFuture = _loadAllHealthDayEntries();
+    });
   }
 
   Future<_HealthSnapshot> _load() async {
     final sessions = await widget.database.getSessions(limit: 5000);
+    final sessionsById = {for (final session in sessions) session.id: session};
+    final rows = await widget.database.getAllMetrics();
     final samples = <String, List<_MetricSample>>{};
-    for (final session in sessions) {
-      final rows = await widget.database.getMetrics(session.id);
-      for (final row in rows) {
-        final type = row['metric_type'] as String? ?? 'unknown';
-        final value = row['value'];
-        final measuredAt = DateTime.tryParse(row['measured_at'] as String? ?? '');
-        if (value is! num || measuredAt == null || !value.isFinite) continue;
-        samples.putIfAbsent(type, () => []).add(_MetricSample(
-          value: value.toDouble(),
-          unit: row['unit'] as String? ?? '',
-          measuredAt: measuredAt,
-          source: row['source'] as String? ?? 'Источник не указан',
-          sessionId: session.id,
-        ));
-      }
+    for (final row in rows) {
+      final sessionId = row['session_id'] as String?;
+      if (sessionId == null || !sessionsById.containsKey(sessionId)) continue;
+      final type = row['metric_type'] as String? ?? 'unknown';
+      final value = row['value'];
+      final measuredAt = DateTime.tryParse(row['measured_at'] as String? ?? '');
+      if (value is! num || measuredAt == null || !value.isFinite) continue;
+      samples.putIfAbsent(type, () => []).add(_MetricSample(
+        value: value.toDouble(),
+        unit: row['unit'] as String? ?? '',
+        measuredAt: measuredAt,
+        source: row['source'] as String? ?? 'Источник не указан',
+        sessionId: sessionId,
+      ));
     }
     for (final values in samples.values) {
       values.sort((a, b) => a.measuredAt.compareTo(b.measuredAt));
@@ -210,6 +236,8 @@ class _HealthScreenState extends State<HealthScreen> {
             onEdit: _editHealthDay,
           ),
           const SizedBox(height: 12),
+          _HealthTagStatsCard(entriesFuture: _dayEntriesFuture, sessions: data?.sessions ?? const []),
+          const SizedBox(height: 12),
           if (snapshot.connectionState == ConnectionState.waiting)
             const Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator()))
           else if (snapshot.hasError)
@@ -259,7 +287,7 @@ class _HealthScreenState extends State<HealthScreen> {
             else ...[
               _CoverageCard(samples: visible),
               const SizedBox(height: 12),
-              _ComparisonCard(current: visible, previous: previous, previousStart: previousStart, previousEnd: previousEnd),
+              _ComparisonCard(current: visible, previous: previous, currentStart: selectedStart, currentEnd: selectedEnd, previousStart: previousStart, previousEnd: previousEnd),
               const SizedBox(height: 12),
               for (final entry in visible.entries)
                 Padding(
@@ -284,6 +312,147 @@ class _HealthDayEntry {
   final List<String> tags;
   Map<String, Object?> toJson() => {'note': note, 'tags': tags};
 }
+
+class _HealthTagStatsCard extends StatefulWidget {
+  const _HealthTagStatsCard({required this.entriesFuture, required this.sessions});
+  final Future<Map<DateTime, _HealthDayEntry>> entriesFuture;
+  final List<SleepSession> sessions;
+
+  @override
+  State<_HealthTagStatsCard> createState() => _HealthTagStatsCardState();
+}
+
+class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
+  String? _selectedTag;
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Map<DateTime, _HealthDayEntry>>(
+    future: widget.entriesFuture,
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) return const SectionCard(child: LinearProgressIndicator());
+      final entries = snapshot.data ?? const <DateTime, _HealthDayEntry>{};
+      final usage = <String, List<DateTime>>{};
+      for (final entry in entries.entries) {
+        for (final tag in entry.value.tags) {
+          usage.putIfAbsent(tag, () => []).add(entry.key);
+        }
+      }
+      final tags = usage.keys.toList()..sort((a, b) => usage[b]!.length.compareTo(usage[a]!.length));
+      if (tags.isEmpty) {
+        return const SectionCard(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Статистика отметок', style: TextStyle(fontWeight: FontWeight.w700)),
+            SizedBox(height: 6),
+            Text('Добавляйте отметки в календаре — здесь появятся частота, динамика за 12 месяцев и список дат.', style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4)),
+          ],
+        ));
+      }
+      final selected = tags.contains(_selectedTag) ? _selectedTag! : tags.first;
+      final dates = [...usage[selected]!]..sort((a, b) => b.compareTo(a));
+      DateTime dayOnly(DateTime date) => DateTime(date.year, date.month, date.day);
+      final taggedDays = dates.map(dayOnly).toSet();
+      final completedSessions = widget.sessions.where((session) => session.endedAt != null && session.duration != null && session.duration!.inMinutes > 0).toList();
+      final taggedSessions = completedSessions.where((session) => taggedDays.contains(dayOnly(session.endedAt!))).toList();
+      final otherSessions = completedSessions.where((session) => !taggedDays.contains(dayOnly(session.endedAt!))).toList();
+      double? averageDuration(List<SleepSession> values) => values.isEmpty ? null : values.fold<int>(0, (sum, item) => sum + item.duration!.inMinutes) / values.length / 60;
+      double? averageRating(List<SleepSession> values) {
+        final rated = values.where((session) => session.morningRating != null).toList();
+        return rated.isEmpty ? null : rated.fold<int>(0, (sum, item) => sum + item.morningRating!) / rated.length;
+      }
+      final now = DateTime.now();
+      final monthStart = DateTime(now.year, now.month);
+      final previousMonthStart = DateTime(now.year, now.month - 1);
+      final currentMonthCount = dates.where((d) => !d.isBefore(monthStart)).length;
+      final previousMonthCount = dates.where((d) => !d.isBefore(previousMonthStart) && d.isBefore(monthStart)).length;
+      final twelveMonthStart = DateTime(now.year, now.month - 11);
+      final recentDates = dates.where((d) => !d.isBefore(twelveMonthStart)).toList();
+      final recordedDays = entries.keys.where((d) => !d.isBefore(twelveMonthStart)).length;
+      final percentage = recordedDays == 0 ? 0.0 : recentDates.length / recordedDays * 100;
+      final monthlyCounts = List<int>.generate(12, (index) {
+        final start = DateTime(now.year, now.month - 11 + index);
+        final end = DateTime(start.year, start.month + 1);
+        return recentDates.where((d) => !d.isBefore(start) && d.isBefore(end)).length;
+      });
+      return SectionCard(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Статистика отметок', style: TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            value: selected,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Выбранная отметка', isDense: true),
+            items: [for (final tag in tags) DropdownMenuItem(value: tag, child: Text(tag))],
+            onChanged: (value) => setState(() => _selectedTag = value),
+          ),
+          const SizedBox(height: 12),
+          Text('${dates.length} дней с отметкой «$selected»', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 3),
+          Text('${_number(percentage)}% дней с записями за последние 12 месяцев', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: _Stat(label: 'Этот месяц', value: '$currentMonthCount')),
+            Expanded(child: _Stat(label: 'Прошлый месяц', value: '$previousMonthCount')),
+            Expanded(child: _Stat(label: 'Разница', value: (currentMonthCount - previousMonthCount > 0 ? '+' : '') + '${currentMonthCount - previousMonthCount}')),
+          ]),
+          const SizedBox(height: 14),
+          const Text('Частота за 12 месяцев', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          SizedBox(height: 70, width: double.infinity, child: CustomPaint(painter: _MonthlyTagBarsPainter(monthlyCounts))),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Text(_monthLabel(DateTime(now.year, now.month - 11)), style: const TextStyle(color: AppTheme.muted, fontSize: 10)),
+            Text(_monthLabel(now), style: const TextStyle(color: AppTheme.muted, fontSize: 10)),
+          ]),
+          const Divider(height: 20),
+          const Text('Связь с ночными записями', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+          const SizedBox(height: 6),
+          if (taggedSessions.isEmpty)
+            const Text('Пока нет завершённых ночей, дата окончания которых совпадает с днями этой отметки.', style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.35))
+          else ...[
+            Text('С отметкой: ${taggedSessions.length} ночей · длительность записи ${averageDuration(taggedSessions) == null ? '—' : _number(averageDuration(taggedSessions)!)} ч · оценка ${averageRating(taggedSessions) == null ? '—' : _number(averageRating(taggedSessions)!)} / 5', style: const TextStyle(fontSize: 11, height: 1.4)),
+            Text('Без отметки: ${otherSessions.length} ночей · длительность записи ${averageDuration(otherSessions) == null ? '—' : _number(averageDuration(otherSessions)!)} ч · оценка ${averageRating(otherSessions) == null ? '—' : _number(averageRating(otherSessions)!)} / 5', style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4)),
+            const Text('Сопоставление описательное, не доказывает влияние отметки на сон. День сопоставляется с ночью по дате её окончания.', style: TextStyle(color: AppTheme.muted, fontSize: 10, height: 1.35)),
+          ],
+          const Divider(height: 20),
+          Text('Даты использования · ${dates.length}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+          const SizedBox(height: 6),
+          SizedBox(height: 130, child: ListView.builder(
+            itemCount: dates.length,
+            itemBuilder: (context, index) => ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.event_available_outlined, size: 18),
+              title: Text(_date(dates[index]), style: const TextStyle(fontSize: 12)),
+            ),
+          )),
+        ],
+      ));
+    },
+  );
+}
+
+class _MonthlyTagBarsPainter extends CustomPainter {
+  _MonthlyTagBarsPainter(this.counts);
+  final List<int> counts;
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (counts.isEmpty) return;
+    final maxValue = counts.reduce((a, b) => a > b ? a : b);
+    final barWidth = size.width / (counts.length * 1.7);
+    final gap = (size.width - barWidth * counts.length) / (counts.length - 1);
+    final paint = Paint()..color = const Color(0xFFB9A7FF);
+    for (var i = 0; i < counts.length; i++) {
+      final height = maxValue == 0 ? 2.0 : (counts[i] / maxValue) * (size.height - 4);
+      final left = i * (barWidth + gap);
+      canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(left, size.height - height, barWidth, height), const Radius.circular(3)), paint);
+    }
+  }
+  @override
+  bool shouldRepaint(covariant _MonthlyTagBarsPainter oldDelegate) => oldDelegate.counts != counts;
+}
+
+String _monthLabel(DateTime date) => '${date.month.toString().padLeft(2, '0')}.${date.year}';
 
 class _HealthDayCalendarCard extends StatelessWidget {
   const _HealthDayCalendarCard({required this.selectedDay, required this.entryFuture, required this.onSelect, required this.onEdit});
@@ -330,9 +499,11 @@ class _HealthDayCalendarCard extends StatelessWidget {
 }
 
 class _ComparisonCard extends StatelessWidget {
-  const _ComparisonCard({required this.current, required this.previous, required this.previousStart, required this.previousEnd});
+  const _ComparisonCard({required this.current, required this.previous, required this.currentStart, required this.currentEnd, required this.previousStart, required this.previousEnd});
   final Map<String, List<_MetricSample>> current;
   final Map<String, List<_MetricSample>> previous;
+  final DateTime currentStart;
+  final DateTime currentEnd;
   final DateTime previousStart;
   final DateTime previousEnd;
 
@@ -340,14 +511,15 @@ class _ComparisonCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final common = current.keys.where((key) => previous.containsKey(key)).toList();
     if (common.isEmpty) {
-      return const SectionCard(child: Text('Для сравнения пока недостаточно измерений в предыдущем равном по длительности периоде.', style: TextStyle(color: AppTheme.muted)));
+      return const SectionCard(child: Text('Для выбранных периодов пока недостаточно общих физиологических показателей для сравнения.', style: TextStyle(color: AppTheme.muted)));
     }
     return SectionCard(child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('Сравнение периодов', style: TextStyle(fontWeight: FontWeight.w700)),
         const SizedBox(height: 4),
-        Text('${_date(previousStart)} — ${_date(previousEnd)}', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+        Text('Выбранный: ${_date(currentStart)} — ${_date(currentEnd)}', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+        Text('Сравнение: ${_date(previousStart)} — ${_date(previousEnd)}', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
         const SizedBox(height: 10),
         for (final key in common) ...[
           _ComparisonRow(type: key, current: current[key]!, previous: previous[key]!),
@@ -380,7 +552,7 @@ class _ComparisonRow extends StatelessWidget {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(type, style: const TextStyle(fontWeight: FontWeight.w600)),
       const SizedBox(height: 4),
-      Text('Сейчас: ${_number(currentAverage)} $unit · ранее: ${_number(previousAverage)} $unit', style: const TextStyle(fontSize: 12)),
+      Text('Выбранный период: ${_number(currentAverage)} $unit · период сравнения: ${_number(previousAverage)} $unit', style: const TextStyle(fontSize: 12)),
       Text('Изменение: $deltaText$percentText', style: const TextStyle(color: AppTheme.muted, fontSize: 12)),
       Text('${current.length} / ${previous.length} измерений', style: const TextStyle(color: AppTheme.muted, fontSize: 10)),
     ]);
