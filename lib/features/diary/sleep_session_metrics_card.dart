@@ -62,7 +62,15 @@ class SleepSessionMetricsCard extends StatelessWidget {
           ),
           _row('Время засыпания', _duration(metrics.sleepLatencyMinutes)),
           _row('Первое зарегистрированное пробуждение', _time(metrics.firstAwakeningAt)),
+          _row('Количество эпизодов бодрствования', metrics.awakeningCount == 0 ? 'Нет зарегистрированных' : '${metrics.awakeningCount}'),
+          _row('Общее бодрствование', _duration(metrics.awakeStageMinutes)),
           _row('Окончательное пробуждение', _time(metrics.finalWakeAt)),
+          if (metrics.stageBreakdownMinutes.isNotEmpty) ...[
+            const Divider(height: 18, color: AppTheme.surfaceLight),
+            const Text('Распределение фаз сна', style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 9),
+            _StageDistribution(minutes: metrics.stageBreakdownMinutes),
+          ],
           const Divider(height: 18, color: AppTheme.surfaceLight),
           if (metrics.sleepEfficiencyPercent != null) ...[
             _row('Эффективность сна',
@@ -85,4 +93,38 @@ class SleepSessionMetricsCard extends StatelessWidget {
       ));
     },
   );
+}
+
+class _StageDistribution extends StatelessWidget {
+  const _StageDistribution({required this.minutes});
+  final Map<String, int> minutes;
+  static const colors = <String, Color>{
+    'Бодрствование': Colors.deepOrange, 'REM': Colors.deepPurple,
+    'Глубокий': Colors.indigo, 'Основной': Colors.blue,
+    'Лёгкий': Colors.lightBlue, 'Сон без уточнения': Colors.blueGrey,
+  };
+  String _duration(int value) {
+    final h = value ~/ 60, m = value % 60;
+    return h == 0 ? '$m мин' : (m == 0 ? '$h ч' : '$h ч $m мин');
+  }
+  @override
+  Widget build(BuildContext context) {
+    final entries = minutes.entries.where((e) => e.value > 0).toList()..sort((a,b) => b.value.compareTo(a.value));
+    if (entries.isEmpty) return const SizedBox.shrink();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      ClipRRect(borderRadius: BorderRadius.circular(8), child: SizedBox(height: 12, child: Row(children: [
+        for (final entry in entries) Expanded(flex: entry.value, child: ColoredBox(color: colors[entry.key] ?? Colors.grey)),
+      ]))),
+      const SizedBox(height: 9),
+      Wrap(spacing: 12, runSpacing: 7, children: [
+        for (final entry in entries) Row(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 8, height: 8, decoration: BoxDecoration(color: colors[entry.key] ?? Colors.grey, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(width: 5),
+          Text('${entry.key}: ${_duration(entry.value)}', style: const TextStyle(fontSize: 11, color: AppTheme.muted)),
+        ]),
+      ]),
+      const SizedBox(height: 4),
+      const Text('Перекрывающиеся интервалы учтены один раз; приоритет отдан более конкретной фазе.', style: TextStyle(fontSize: 10, color: AppTheme.muted, height: 1.35)),
+    ]);
+  }
 }
