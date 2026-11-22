@@ -186,8 +186,10 @@ class WeatherService {
     required DateTime start,
     required DateTime end,
   }) async {
-    final startDate = _date(start);
-    final endDate = _date(end);
+    final startUtc = start.toUtc();
+    final endUtc = end.toUtc();
+    final startDate = _date(startUtc);
+    final endDate = _date(endUtc);
     final cacheKey = '$_cachePrefix${location.id}';
     final cachedRaw = await database.getAppMetadata(cacheKey);
     Map<String, dynamic>? cached;
@@ -205,8 +207,11 @@ class WeatherService {
       cachedPoints = rawPoints.whereType<Map>().map(HourlyWeatherPoint.fromJson).toList();
       final cachedStart = cached['startDate'];
       final cachedEnd = cached['endDate'];
-      if (cachedStart is String && cachedEnd is String &&
-          cachedStart.compareTo(startDate) <= 0 && cachedEnd.compareTo(endDate) >= 0) {
+      final dataEndRaw = cached['dataEnd'];
+      final dataEnd = dataEndRaw is String ? DateTime.tryParse(dataEndRaw) : null;
+      if (cachedStart is String && cachedEnd is String && dataEnd != null &&
+          cachedStart.compareTo(startDate) <= 0 && cachedEnd.compareTo(endDate) >= 0 &&
+          !dataEnd.isBefore(endUtc.subtract(const Duration(hours: 2)))) {
         return cachedPoints;
       }
     }
@@ -261,7 +266,10 @@ class WeatherService {
         pressureHpa: at(pressure, i),
       ));
     }
-    if (fetched.isEmpty && cachedPoints.isNotEmpty) return cachedPoints;
+    if (fetched.isEmpty) {
+      if (cachedPoints.isNotEmpty) return cachedPoints;
+      return const [];
+    }
     final merged = <String, HourlyWeatherPoint>{
       for (final point in cachedPoints) point.time.toUtc().toIso8601String(): point,
       for (final point in fetched) point.time.toUtc().toIso8601String(): point,
@@ -276,6 +284,7 @@ class WeatherService {
       'locationId': location.id,
       'startDate': mergedStart,
       'endDate': mergedEnd,
+      'dataEnd': merged.isEmpty ? null : merged.last.time.toUtc().toIso8601String(),
       'points': merged.map((point) => point.toJson()).toList(),
       'updatedAt': DateTime.now().toUtc().toIso8601String(),
     }));
