@@ -2,6 +2,16 @@ name: iOS unsigned IPA (AltStore)
 
 on:
   # Build a fresh iOS artifact when app code or dependencies change.
+  pull_request:
+    branches: [main]
+    paths:
+      - 'lib/**'
+      - 'assets/**'
+      - 'test/**'
+      - 'docs/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.github/workflows/ios-unsigned-build.yml'
   push:
     branches: [main]
     paths:
