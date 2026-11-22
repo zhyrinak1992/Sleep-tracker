@@ -7,6 +7,7 @@ import '../../widgets/section_card.dart';
 import '../../widgets/screen_header.dart';
 import 'sleep_session_detail_screen.dart';
 import 'sleep_session_comparison_screen.dart';
+import 'reference_night_comparison_screen.dart';
 import 'sleep_session_editor_screen.dart';
 import 'sleep_trash_screen.dart';
 
@@ -228,6 +229,14 @@ class _DiaryScreenState extends State<DiaryScreen> {
               icon: const Icon(Icons.compare_arrows), label: const Text('Сравнить'),
             )),
           ]),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => ReferenceNightComparisonScreen(database: widget.database),
+            )),
+            icon: const Icon(Icons.stars_rounded),
+            label: const Text('Сравнить с эталонной ночью'),
+          ),
           const SizedBox(height: 10),
           OutlinedButton.icon(
             onPressed: () async {
