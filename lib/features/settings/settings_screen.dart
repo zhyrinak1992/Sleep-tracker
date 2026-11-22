@@ -10,6 +10,7 @@ import '../../data/apple_health_file_import_service.dart';
 import '../../data/audio_observation_service.dart';
 import '../../data/pdf_report_service.dart';
 import '../../data/sleep_database.dart';
+import 'storage_management_panel.dart';
 import '../../data/notification_service.dart';
 import '../../data/yandex_smart_home_service.dart';
 import '../../theme/app_theme.dart';
@@ -497,6 +498,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       )),
+      const SizedBox(height: 12),
+      const StorageManagementPanel(),
       const SizedBox(height: 12),
       SectionCard(child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
