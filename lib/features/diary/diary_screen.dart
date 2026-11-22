@@ -44,6 +44,14 @@ class _DiaryScreenState extends State<DiaryScreen> {
     return AppTheme.teal;
   }
 
+  String _sourceLabel(SleepSession session) {
+    final source = session.source.trim();
+    final label = source.isEmpty || source == 'manual' || source == 'manual_entry'
+        ? 'Вручную'
+        : source;
+    return session.userEdited ? '$label · изменено вручную' : label;
+  }
+
   String _duration(Duration? d) {
     if (d == null) return 'Идёт сейчас';
     if (d.isNegative) return 'Некорректный интервал';
@@ -181,6 +189,13 @@ class _DiaryScreenState extends State<DiaryScreen> {
               Text('Начало ${DateFormat('HH:mm').format(session.startedAt)}'
                 '${session.endedAt == null ? '' : ' · Конец ${DateFormat('HH:mm').format(session.endedAt!)}'}',
                 style: const TextStyle(color: AppTheme.muted, fontSize: 12)),
+              const SizedBox(height: 5),
+              Row(children: [
+                const Icon(Icons.storage_outlined, size: 13, color: AppTheme.muted),
+                const SizedBox(width: 5),
+                Expanded(child: Text('Источник: ${_sourceLabel(session)}',
+                  style: const TextStyle(color: AppTheme.muted, fontSize: 11))),
+              ]),
               if (session.morningRating != null) ...[
                 const SizedBox(height: 8),
                 Row(children: [Icon(Icons.circle, size: 8, color: _ratingColor(session.morningRating)),
