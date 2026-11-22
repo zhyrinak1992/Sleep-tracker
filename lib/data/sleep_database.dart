@@ -196,8 +196,15 @@ class SleepDatabase {
     final db = await database;
     await db.transaction((txn) async {
       if (!merge) {
+        // Удаляем все дочерние разделы явно до родительских записей.
+        // audio_events использует ON DELETE SET NULL, поэтому одного удаления
+        // sleep_sessions недостаточно: старые события иначе останутся в базе.
         await txn.delete('sleep_notes');
         await txn.delete('sleep_session_tags');
+        await txn.delete('audio_events');
+        await txn.delete('morning_reports');
+        await txn.delete('sleep_stages');
+        await txn.delete('sleep_metrics');
         await txn.delete('climate_samples');
         await txn.delete('sleep_sessions');
         await txn.delete('app_metadata');
