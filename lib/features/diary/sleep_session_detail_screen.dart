@@ -5,6 +5,7 @@ import '../../data/sleep_database.dart';
 import '../analysis/climate_analytics.dart';
 import 'screen_time_card.dart';
 import 'weather_night_detail_card.dart';
+import 'sleep_session_metrics_card.dart';
 import '../../models/sleep_session.dart';
 import '../../models/sleep_note.dart';
 import '../../theme/app_theme.dart';
@@ -306,6 +307,8 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                     SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       const Text('Фазы сна', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
+                      SleepSessionMetricsCard(session: session, stagesFuture: _stagesFuture),
+                      const SizedBox(height: 12),
                       FutureBuilder<List<Map<String, Object?>>>(future: _stagesFuture, builder: (context, state) {
                         final rows = state.data ?? const <Map<String, Object?>>[];
                         if (state.connectionState == ConnectionState.waiting) return const LinearProgressIndicator();
