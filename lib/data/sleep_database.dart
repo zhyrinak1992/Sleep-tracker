@@ -368,6 +368,22 @@ class SleepDatabase {
     });
   }
 
+  /// Совместимый API для старого импортёра Apple Health из XML/ZIP.
+  Future<bool> insertHealthSession({
+    required String id,
+    required DateTime startedAt,
+    required DateTime endedAt,
+    required String sourceName,
+  }) async {
+    final result = await upsertHealthSession(
+      id: id,
+      startedAt: startedAt,
+      endedAt: endedAt,
+      sourceName: sourceName,
+    );
+    return result.$2;
+  }
+
   Future<void> _createV4Tables(DatabaseExecutor db) async {
     await db.execute('CREATE TABLE IF NOT EXISTS sleep_stages (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, stage TEXT NOT NULL, started_at TEXT NOT NULL, ended_at TEXT NOT NULL, source TEXT NOT NULL, FOREIGN KEY (session_id) REFERENCES sleep_sessions(id) ON DELETE CASCADE)');
     await db.execute('CREATE TABLE IF NOT EXISTS sleep_metrics (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, metric_type TEXT NOT NULL, value REAL NOT NULL, unit TEXT NOT NULL, measured_at TEXT NOT NULL, source TEXT NOT NULL, FOREIGN KEY (session_id) REFERENCES sleep_sessions(id) ON DELETE CASCADE)');
