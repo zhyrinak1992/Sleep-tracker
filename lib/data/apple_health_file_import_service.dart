@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:xml/xml.dart';
+import 'package:xml/xml_events.dart';
 
 import 'sleep_database.dart';
 
@@ -122,16 +124,93 @@ class AppleHealthFileImportService {
   Future<AppleHealthFilePreview?> chooseAndPreview() async {
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['zip'],
-      withData: true,
+      allowedExtensions: ['zip', 'xml'],
+      withData: false,
+      withReadStream: true,
       allowMultiple: false,
     );
     if (picked == null || picked.files.isEmpty) return null;
-    final bytes = picked.files.single.bytes;
-    if (bytes == null) {
-      throw const FormatException('Не удалось прочитать ZIP-файл. Попробуйте сохранить его в «Файлы» и выбрать снова.');
+
+    final file = picked.files.single;
+    final extension = (file.extension ??
+            (file.name.contains('.') ? file.name.split('.').last : ''))
+        .toLowerCase();
+
+    final stream = file.readStream ??
+        (file.path == null ? null : File(file.path!).openRead());
+
+    if (extension == 'xml') {
+      if (stream != null) return parseXmlStream(stream);
+      if (file.bytes != null) {
+        return parseXmlStream(Stream<List<int>>.value(file.bytes!));
+      }
+      throw const FormatException(
+        'Не удалось открыть XML-файл. Сохраните его локально в «Файлы» и выберите повторно.',
+      );
     }
-    return parseExport(bytes);
+
+    if (extension == 'zip') {
+      Uint8List? bytes = file.bytes;
+      if (bytes == null && stream != null) {
+        final builder = BytesBuilder(copy: false);
+        await for (final chunk in stream) {
+          builder.add(chunk);
+        }
+        bytes = builder.takeBytes();
+      }
+      if (bytes == null) {
+        throw const FormatException(
+          'Не удалось прочитать ZIP-архив. Сохраните его локально в «Файлы» и выберите снова.',
+        );
+      }
+      return parseExport(bytes);
+    }
+
+    throw const FormatException(
+      'Поддерживаются ZIP-архив Apple Health и основной файл export.xml.',
+    );
+  }
+
+  /// Parses an extracted Apple Health export.xml incrementally. This avoids
+  /// loading a very large XML document and its complete DOM tree into RAM.
+  Future<AppleHealthFilePreview> parseXmlStream(Stream<List<int>> bytes) async {
+    final records = <_HealthRecord>[];
+
+    await bytes
+        .transform(utf8.decoder)
+        .toXmlEvents()
+        .normalizeEvents()
+        .selectSubtreeEvents((event) => event.name == 'Record')
+        .toXmlNodes()
+        .expand((nodes) => nodes)
+        .forEach((node) {
+      if (node is! XmlElement) return;
+
+      final type = node.getAttribute('type') ?? '';
+      final start = DateTime.tryParse(node.getAttribute('startDate') ?? '');
+      final end = DateTime.tryParse(node.getAttribute('endDate') ?? '');
+      if (start == null || end == null || !end.isAfter(start)) return;
+
+      final value = node.getAttribute('value') ?? '';
+      final source = node.getAttribute('sourceName') ?? '';
+      final unit = node.getAttribute('unit') ?? '';
+      final sleep = _sleepStage(value);
+      final metric = _metric(type);
+
+      if (type == 'HKCategoryTypeIdentifierSleepAnalysis' && sleep != null) {
+        records.add(_HealthRecord(type, value, start, end, source, unit, null, sleep));
+      } else if (metric != null) {
+        final parsed = double.tryParse(value);
+        if (parsed != null && parsed.isFinite) {
+          final number = type == 'HKQuantityTypeIdentifierOxygenSaturation' && parsed <= 1
+              ? parsed * 100
+              : parsed;
+          records.add(_HealthRecord(type, value, start, end, source, unit, number, metric.$1));
+        }
+      }
+    });
+
+    return _createPreview(records);
   }
 
   AppleHealthFilePreview parseExport(Uint8List bytes) {
@@ -144,7 +223,9 @@ class AppleHealthFileImportService {
       }
     }
     if (exportFile == null) {
-      throw const FormatException('В ZIP-архиве не найден export.xml. Выберите архив «Экспорт всех данных о здоровье» из Apple Health.');
+      throw const FormatException(
+        'В ZIP-архиве не найден export.xml. Выберите архив «Экспорт всех данных о здоровье» из Apple Health.',
+      );
     }
     final content = exportFile.content;
     if (content is! List<int>) {
@@ -153,33 +234,49 @@ class AppleHealthFileImportService {
     final document = XmlDocument.parse(utf8.decode(content));
     final records = <_HealthRecord>[];
     for (final element in document.findAllElements('Record')) {
-      final type = element.getAttribute('type') ?? '';
-      final start = DateTime.tryParse(element.getAttribute('startDate') ?? '');
-      final end = DateTime.tryParse(element.getAttribute('endDate') ?? '');
-      if (start == null || end == null || !end.isAfter(start)) continue;
-      final value = element.getAttribute('value') ?? '';
-      final source = element.getAttribute('sourceName') ?? '';
-      final unit = element.getAttribute('unit') ?? '';
-      final sleep = _sleepStage(value);
-      final metric = _metric(type);
-      if (type == 'HKCategoryTypeIdentifierSleepAnalysis' && sleep != null) {
-        records.add(_HealthRecord(type, value, start, end, source, unit, null, sleep));
-      } else if (metric != null) {
-        final parsed = double.tryParse(value);
-        if (parsed != null && parsed.isFinite) {
-          final number = type == 'HKQuantityTypeIdentifierOxygenSaturation' && parsed <= 1
-              ? parsed * 100
-              : parsed;
-          records.add(_HealthRecord(type, value, start, end, source, unit, number, metric.$1));
-        }
+      final record = _recordFromElement(element);
+      if (record != null) records.add(record);
+    }
+    return _createPreview(records);
+  }
+
+  _HealthRecord? _recordFromElement(XmlElement element) {
+    final type = element.getAttribute('type') ?? '';
+    final start = DateTime.tryParse(element.getAttribute('startDate') ?? '');
+    final end = DateTime.tryParse(element.getAttribute('endDate') ?? '');
+    if (start == null || end == null || !end.isAfter(start)) return null;
+
+    final value = element.getAttribute('value') ?? '';
+    final source = element.getAttribute('sourceName') ?? '';
+    final unit = element.getAttribute('unit') ?? '';
+    final sleep = _sleepStage(value);
+    final metric = _metric(type);
+
+    if (type == 'HKCategoryTypeIdentifierSleepAnalysis' && sleep != null) {
+      return _HealthRecord(type, value, start, end, source, unit, null, sleep);
+    }
+    if (metric != null) {
+      final parsed = double.tryParse(value);
+      if (parsed != null && parsed.isFinite) {
+        final number = type == 'HKQuantityTypeIdentifierOxygenSaturation' && parsed <= 1
+            ? parsed * 100
+            : parsed;
+        return _HealthRecord(type, value, start, end, source, unit, number, metric.$1);
       }
     }
+    return null;
+  }
 
-    final sleepRecords = records.where((r) => r.stage != null).toList()
+  AppleHealthFilePreview _createPreview(List<_HealthRecord> records) {
+    final sleepRecords = records.where((r) => r.stage != null &&
+        r.type == 'HKCategoryTypeIdentifierSleepAnalysis').toList()
       ..sort((a, b) => a.from.compareTo(b.from));
     final metricRecords = records.where((r) => r.metricValue != null).toList();
+
     if (sleepRecords.isEmpty) {
-      throw const FormatException('В архиве не найдены интервалы сна с распознаваемыми фазами.');
+      throw const FormatException(
+        'В выбранном XML не найдены интервалы сна. Выберите основной файл «экспорт» / export.xml, а не export_cda.',
+      );
     }
 
     final groups = <List<_HealthRecord>>[];
@@ -204,7 +301,7 @@ class AppleHealthFileImportService {
       final source = group.map((r) => r.source).where((s) => s.isNotEmpty).toSet().join(', ');
       final id = 'apple_file_night_${_stableHash(group.map((r) => '${r.type}|${r.value}|${r.from.toUtc().toIso8601String()}|${r.to.toUtc().toIso8601String()}|${r.source}').join(';'))}';
       final stages = group.map((r) => _ImportedStage(
-        'apple_file_stage_${_stableHash('${r.type}|${r.value}|${r.from.toUtc().toIso8601String()}|${r.to.toUtc().toIso8601String()}|${r.source}')}',
+        'apple_file_stage_${_stableHash('${r.type}|${r.value}|${r.from.toUtc().toIso8601String()}|${r.to.toUtc().toIso8601String()}|${r.source}')}', 
         r.stage!, r.from, r.to,
       )).toList();
 
@@ -213,7 +310,7 @@ class AppleHealthFileImportService {
         if (metric.from.isBefore(to.add(const Duration(hours: 1))) &&
             metric.to.isAfter(from.subtract(const Duration(hours: 1)))) {
           linkedMetrics.add(_ImportedMetric(
-            'apple_file_metric_${_stableHash('${metric.type}|${metric.value}|${metric.from.toUtc().toIso8601String()}|${metric.to.toUtc().toIso8601String()}|${metric.source}')}',
+            'apple_file_metric_${_stableHash('${metric.type}|${metric.value}|${metric.from.toUtc().toIso8601String()}|${metric.to.toUtc().toIso8601String()}|${metric.source}')}', 
             metric.stage!,
             metric.metricValue!,
             metric.unit,
