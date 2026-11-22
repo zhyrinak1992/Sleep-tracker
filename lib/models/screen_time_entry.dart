@@ -23,6 +23,25 @@ class ScreenTimeEntry {
 
   String encode() => jsonEncode(toMap());
 
+  static DateTime resolveLastUseTime(
+    DateTime sleepStart, {
+    required int hour,
+    required int minute,
+  }) {
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      throw const FormatException('Некорректное время последнего использования.');
+    }
+    var value = DateTime(sleepStart.year, sleepStart.month, sleepStart.day, hour, minute);
+    if (value.isAfter(sleepStart)) {
+      value = value.subtract(const Duration(days: 1));
+    }
+    final elapsed = sleepStart.difference(value);
+    if (elapsed.isNegative || elapsed > const Duration(hours: 24)) {
+      throw const FormatException('Время должно находиться в пределах 24 часов до начала сна.');
+    }
+    return value;
+  }
+
   factory ScreenTimeEntry.decode(String source) {
     final value = jsonDecode(source);
     if (value is! Map) throw const FormatException('Некорректная запись экранного времени.');
