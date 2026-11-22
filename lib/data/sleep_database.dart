@@ -19,7 +19,7 @@ class SleepDatabase {
     final dbPath = p.join(directory.path, 'sleep_tracker.sqlite');
     _db = await openDatabase(
       dbPath,
-      version: 5,
+      version: 6,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: (db, version) async {
         await db.execute('''
@@ -73,6 +73,7 @@ class SleepDatabase {
         await db.execute('CREATE INDEX idx_sleep_notes_updated ON sleep_notes(updated_at)');
         await _createV4Tables(db);
         await _createV5Columns(db);
+        await _createV6Tables(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // Добавочная миграция: существующие ночи и их ID не изменяются.
@@ -119,6 +120,7 @@ class SleepDatabase {
         }
         if (oldVersion < 4) await _createV4Tables(db);
         if (oldVersion < 5) await _createV5Columns(db);
+        if (oldVersion < 6) await _createV6Tables(db);
       },
     );
     return _db!;
@@ -129,7 +131,7 @@ class SleepDatabase {
   Future<Map<String, Object?>> exportSnapshot() async {
     final db = await database;
     return {
-      'schemaVersion': 5,
+      'schemaVersion': 6,
       'sleep_sessions': await db.query('sleep_sessions', orderBy: 'started_at ASC'),
       'sleep_session_tags': await db.query('sleep_session_tags', orderBy: 'session_id ASC, tag_key ASC'),
       'sleep_notes': await db.query('sleep_notes', orderBy: 'created_at ASC'),
@@ -138,19 +140,21 @@ class SleepDatabase {
       'sleep_metrics': await db.query('sleep_metrics', orderBy: 'measured_at ASC'),
       'audio_events': await db.query('audio_events', orderBy: 'captured_at ASC'),
       'morning_reports': await db.query('morning_reports', orderBy: 'report_date ASC'),
+      'climate_samples': await db.query('climate_samples', orderBy: 'measured_at ASC'),
     };
   }
 
   /// Полное восстановление с проверкой структуры и атомарной заменой данных.
   /// При любой ошибке SQLite откатывает транзакцию и оставляет исходную базу.
   Future<void> restoreSnapshot(Map<String, dynamic> snapshot, {bool merge = false}) async {
-    if (snapshot['schemaVersion'] != 3 && snapshot['schemaVersion'] != 4 && snapshot['schemaVersion'] != 5) {
+    if (snapshot['schemaVersion'] != 3 && snapshot['schemaVersion'] != 4 && snapshot['schemaVersion'] != 5 && snapshot['schemaVersion'] != 6) {
       throw const FormatException('Версия структуры резервной копии не поддерживается.');
     }
-    const tables = ['sleep_sessions', 'sleep_session_tags', 'sleep_notes', 'app_metadata', 'sleep_stages', 'sleep_metrics', 'audio_events', 'morning_reports'];
+    const tables = ['sleep_sessions', 'sleep_session_tags', 'sleep_notes', 'app_metadata', 'sleep_stages', 'sleep_metrics', 'audio_events', 'morning_reports', 'climate_samples'];
     final rowsByTable = <String, List<Map<String, Object?>>>{};
     for (final table in tables) {
       final value = snapshot[table];
+      if (value == null && snapshot['schemaVersion'] < 6 && table == 'climate_samples') { rowsByTable[table] = []; continue; }
       if (value == null && snapshot['schemaVersion'] == 3 && tables.indexOf(table) >= 4) { rowsByTable[table] = []; continue; }
       if (value is! List) { throw FormatException('В резервной копии отсутствует раздел $table.'); }
       rowsByTable[table] = value.map((row) {
@@ -219,7 +223,7 @@ class SleepDatabase {
             where: 'key = ?', whereArgs: [row['key']], limit: 1);
         if (exists.isEmpty) await txn.insert('app_metadata', row);
       }
-      for (final table in ['sleep_stages', 'sleep_metrics', 'audio_events']) {
+      for (final table in ['sleep_stages', 'sleep_metrics', 'audio_events', 'climate_samples']) {
         for (final row in rowsByTable[table]!) {
           final exists = await txn.query(table, columns: ['id'], where: 'id = ?', whereArgs: [row['id']], limit: 1);
           if (exists.isEmpty) await txn.insert(table, row);
@@ -278,6 +282,72 @@ class SleepDatabase {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_metrics_session ON sleep_metrics(session_id, measured_at)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_audio_expiry ON audio_events(expires_at)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_reports_date ON morning_reports(report_date)');
+  }
+
+  Future<void> _createV6Tables(DatabaseExecutor db) async {
+    await db.execute('''CREATE TABLE IF NOT EXISTS climate_samples (
+      id TEXT PRIMARY KEY,
+      session_id TEXT,
+      device_id TEXT NOT NULL,
+      device_name TEXT,
+      room_name TEXT,
+      metric_type TEXT NOT NULL,
+      value REAL NOT NULL,
+      unit TEXT NOT NULL,
+      source TEXT NOT NULL,
+      measured_at TEXT NOT NULL,
+      received_at TEXT NOT NULL,
+      quality TEXT NOT NULL DEFAULT 'actual',
+      FOREIGN KEY (session_id) REFERENCES sleep_sessions(id) ON DELETE SET NULL
+    )''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_climate_samples_time ON climate_samples(measured_at)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_climate_samples_session ON climate_samples(session_id, metric_type, measured_at)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_climate_samples_device ON climate_samples(device_id, metric_type, measured_at)');
+  }
+
+  /// Записывает только фактически полученное измерение; одинаковые ID не дублируются.
+  Future<void> saveClimateSample({
+    required String id,
+    String? sessionId,
+    required String deviceId,
+    String? deviceName,
+    String? roomName,
+    required String metricType,
+    required double value,
+    required String unit,
+    required String source,
+    required DateTime measuredAt,
+    String quality = 'actual',
+  }) async {
+    if (!value.isFinite) throw ArgumentError('Значение климатического датчика должно быть конечным числом.');
+    if (metricType != 'temperature' && metricType != 'humidity') {
+      throw ArgumentError.value(metricType, 'metricType', 'Поддерживаются только температура и влажность.');
+    }
+    if (metricType == 'temperature' && unit != '°C') throw ArgumentError('Температура должна быть сохранена в °C.');
+    if (metricType == 'humidity' && unit != '%') throw ArgumentError('Влажность должна быть сохранена в процентах.');
+    final db = await database;
+    await db.insert('climate_samples', {
+      'id': id, 'session_id': sessionId, 'device_id': deviceId,
+      'device_name': deviceName, 'room_name': roomName,
+      'metric_type': metricType, 'value': value, 'unit': unit,
+      'source': source, 'measured_at': measuredAt.toUtc().toIso8601String(),
+      'received_at': DateTime.now().toUtc().toIso8601String(), 'quality': quality,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  Future<List<Map<String, Object?>>> getClimateSamples({
+    String? sessionId, String? deviceId, DateTime? from, DateTime? to,
+  }) async {
+    final clauses = <String>[];
+    final args = <Object?>[];
+    if (sessionId != null) { clauses.add('session_id = ?'); args.add(sessionId); }
+    if (deviceId != null) { clauses.add('device_id = ?'); args.add(deviceId); }
+    if (from != null) { clauses.add('measured_at >= ?'); args.add(from.toUtc().toIso8601String()); }
+    if (to != null) { clauses.add('measured_at <= ?'); args.add(to.toUtc().toIso8601String()); }
+    return (await database).query('climate_samples',
+      where: clauses.isEmpty ? null : clauses.join(' AND '),
+      whereArgs: clauses.isEmpty ? null : args,
+      orderBy: 'measured_at ASC');
   }
 
   Future<void> _createV5Columns(DatabaseExecutor db) async {
