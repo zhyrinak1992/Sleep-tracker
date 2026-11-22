@@ -759,6 +759,19 @@ class SleepDatabase {
     await (await database).insert('app_metadata', {'key': key, 'value': value}, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
+  /// Returns namespaced metadata entries without exposing unrelated app settings.
+  Future<Map<String, String>> getAppMetadataByPrefix(String prefix) async {
+    if (prefix.isEmpty) throw ArgumentError.value(prefix, 'prefix', 'Prefix cannot be empty.');
+    final rows = await (await database).query(
+      'app_metadata',
+      columns: ['key', 'value'],
+      where: 'substr(key, 1, ?) = ?',
+      whereArgs: [prefix.length, prefix],
+      orderBy: 'key ASC',
+    );
+    return {for (final row in rows) row['key']! as String: row['value']! as String};
+  }
+
   Future<Map<String, int>> getTagUsageCounts() async {
     final db = await database;
     final rows = await db.rawQuery('SELECT tag_key, COUNT(*) AS total FROM sleep_session_tags GROUP BY tag_key ORDER BY total DESC, tag_key ASC');
