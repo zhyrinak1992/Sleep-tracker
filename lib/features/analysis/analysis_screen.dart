@@ -9,6 +9,7 @@ import 'sleep_analytics.dart';
 import 'weekday_comparison_screen.dart';
 import 'moon_phase_screen.dart';
 import 'climate_analytics.dart';
+import 'sleep_period_comparison_screen.dart';
 
 class AnalysisScreen extends StatefulWidget {
   const AnalysisScreen({super.key, required this.database});
@@ -162,6 +163,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             )),
             icon: const Icon(Icons.nightlight_round),
             label: const Text('Сопоставить сон с фазами Луны'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => SleepPeriodComparisonScreen(database: widget.database),
+            )),
+            icon: const Icon(Icons.compare_arrows_rounded),
+            label: const Text('Сравнить любые два периода'),
           ),
           const SizedBox(height: 18),
           SegmentedButton<AnalysisPeriod>(
