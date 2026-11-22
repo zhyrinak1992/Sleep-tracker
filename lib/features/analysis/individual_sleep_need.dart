@@ -392,7 +392,7 @@ class IndividualSleepNeedAnalysis {
     return bins;
   }
 
-  static double _minuteOfDay(DateTime value) => value.hour * 60 + value.minute;
+  static double _minuteOfDay(DateTime value) => (value.hour * 60 + value.minute).toDouble();
 
   static double _circularMean(List<double> values) {
     if (values.isEmpty) return 0;
