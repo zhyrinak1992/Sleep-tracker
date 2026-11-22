@@ -276,7 +276,7 @@ class WeatherService {
       final time = times[i];
       if (time is! String) continue;
       fetched.add(HourlyWeatherPoint(
-        time: _parseUtc(time),
+        time: _parseWeatherUtc(time),
         temperatureC: at(temperatures, i),
         humidityPercent: at(humidity, i),
         precipitationMm: at(precipitation, i),
