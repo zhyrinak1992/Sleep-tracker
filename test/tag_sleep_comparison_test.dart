@@ -187,6 +187,40 @@ void main() {
     });
   });
 
+    test('compares only nights with registered awake-stage intervals', () {
+      final sessions = <SleepSession>[
+        for (var i = 0; i < 4; i++)
+          _session(id: 'tag-awake-$i', start: start.add(Duration(days: i))),
+        for (var i = 0; i < 4; i++)
+          _session(id: 'plain-awake-$i', start: start.add(Duration(days: i + 5))),
+        _session(id: 'missing-awake', start: start.add(const Duration(days: 10))),
+      ];
+      final tags = <String, Set<String>>{
+        for (var i = 0; i < 4; i++) 'tag-awake-$i': {'stress'},
+      };
+      final counts = <String, int>{
+        for (var i = 0; i < 4; i++) 'tag-awake-$i': i + 3,
+        for (var i = 0; i < 4; i++) 'plain-awake-$i': i + 1,
+      };
+
+      final result = TagSleepComparison.calculate(
+        sessions: sessions,
+        tagsBySession: tags,
+        tagKeys: {'stress'},
+        start: start,
+        endExclusive: end,
+        metric: TagSleepMetric.awakeningCount,
+        awakeningCountsBySession: counts,
+      );
+
+      expect(result.isSufficient, isTrue);
+      expect(result.withTag.nights, 4);
+      expect(result.withoutTag.nights, 4);
+      expect(result.withTag.average, 4.5);
+      expect(result.withoutTag.average, 2.5);
+      expect(result.difference, 2);
+    });
+
   group('TagComparisonTemplateStore', () {
     test('saves and reloads comparison settings', () async {
       final metadata = <String, String>{};
