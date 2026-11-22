@@ -443,17 +443,9 @@ class _RegularityCard extends StatelessWidget {
       Text('Завершённых ночей в выбранном периоде: ${summary.sampleCount}',
         style: const TextStyle(color: AppTheme.muted, fontSize: 12)),
       const SizedBox(height: 12),
-      _ComparisonRow(
-        label: 'Время засыпания',
-        current: _variation(summary.bedtimeDeviationMinutes),
-        previous: 'среднее отклонение',
-      ),
+      _RegularityValueRow(label: 'Время засыпания', value: _variation(summary.bedtimeDeviationMinutes)),
       const Divider(height: 18, color: AppTheme.surfaceLight),
-      _ComparisonRow(
-        label: 'Время пробуждения',
-        current: _variation(summary.wakeTimeDeviationMinutes),
-        previous: 'среднее отклонение',
-      ),
+      _RegularityValueRow(label: 'Время пробуждения', value: _variation(summary.wakeTimeDeviationMinutes)),
       const SizedBox(height: 8),
       const Text(
         'Показывается среднее абсолютное отклонение от типичного времени. Расчёт учитывает переход через полночь и только завершённые ночи с реальным интервалом сна. Это описательная статистика, а не медицинская оценка.',
@@ -461,4 +453,18 @@ class _RegularityCard extends StatelessWidget {
       ),
     ],
   ));
+}
+
+
+class _RegularityValueRow extends StatelessWidget {
+  const _RegularityValueRow({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Row(children: [
+    Expanded(child: Text(label, style: const TextStyle(color: AppTheme.muted))),
+    const SizedBox(width: 12),
+    Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+  ]);
 }
