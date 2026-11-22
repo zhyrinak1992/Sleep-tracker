@@ -101,9 +101,9 @@ class WeatherHistoryService {
       throw StateError('Сначала выбери город для исторической погоды.');
     }
     final completed = sessions.where((session) {
-      final start = session.actualSleepStartedAt ?? session.startedAt;
-      final end = session.actualSleepEndedAt ?? session.endedAt;
-      return end != null && end.isAfter(start);
+      final start = session.actualSleepStartedAt;
+      final end = session.actualSleepEndedAt;
+      return start != null && end != null && end.isAfter(start);
     }).toList();
     if (completed.isEmpty) {
       return const WeatherSyncResult(nightsUpdated: 0, nightsWithData: 0, hourlySamples: 0);
@@ -115,10 +115,10 @@ class WeatherHistoryService {
     }
     final zone = _locationTimeZone(location.timezone);
     final localStarts = completed.map((session) => tz.TZDateTime.from(
-      (session.actualSleepStartedAt ?? session.startedAt).toUtc(), zone,
+      session.actualSleepStartedAt!.toUtc(), zone,
     )).toList();
     final localEnds = completed.map((session) => tz.TZDateTime.from(
-      (session.actualSleepEndedAt ?? session.endedAt!).toUtc(), zone,
+      session.actualSleepEndedAt!.toUtc(), zone,
     )).toList();
     final first = localStarts.reduce((a, b) => a.isBefore(b) ? a : b);
     final last = localEnds.reduce((a, b) => a.isAfter(b) ? a : b);
