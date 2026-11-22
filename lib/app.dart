@@ -9,6 +9,7 @@ import 'features/analysis/analysis_screen.dart';
 import 'features/notes/notes_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'theme/app_theme.dart';
+import 'features/security/app_lock_gate.dart';
 
 class SleepTrackerApp extends StatelessWidget {
   const SleepTrackerApp({super.key});
@@ -42,7 +43,7 @@ class SleepTrackerApp extends StatelessWidget {
       ],
       supportedLocales: const [Locale('ru', 'RU'), Locale('en', 'US')],
       locale: const Locale('ru', 'RU'),
-      home: const AppShell(),
+      home: const AppLockGate(child: AppShell()),
     );
   }
 }
