@@ -235,7 +235,7 @@ class _HealthScreenState extends State<HealthScreen> {
             onEdit: _editHealthDay,
           ),
           const SizedBox(height: 12),
-          _HealthTagStatsCard(entriesFuture: _dayEntriesFuture),
+          _HealthTagStatsCard(entriesFuture: _dayEntriesFuture, sessions: data?.sessions ?? const []),
           const SizedBox(height: 12),
           if (snapshot.connectionState == ConnectionState.waiting)
             const Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator()))
@@ -313,8 +313,9 @@ class _HealthDayEntry {
 }
 
 class _HealthTagStatsCard extends StatefulWidget {
-  const _HealthTagStatsCard({required this.entriesFuture});
+  const _HealthTagStatsCard({required this.entriesFuture, required this.sessions});
   final Future<Map<DateTime, _HealthDayEntry>> entriesFuture;
+  final List<SleepSession> sessions;
 
   @override
   State<_HealthTagStatsCard> createState() => _HealthTagStatsCardState();
@@ -348,6 +349,16 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
       }
       final selected = tags.contains(_selectedTag) ? _selectedTag! : tags.first;
       final dates = [...usage[selected]!]..sort((a, b) => b.compareTo(a));
+      DateTime dayOnly(DateTime date) => DateTime(date.year, date.month, date.day);
+      final taggedDays = dates.map(dayOnly).toSet();
+      final completedSessions = widget.sessions.where((session) => session.endedAt != null && session.duration != null && session.duration!.inMinutes > 0).toList();
+      final taggedSessions = completedSessions.where((session) => taggedDays.contains(dayOnly(session.endedAt!))).toList();
+      final otherSessions = completedSessions.where((session) => !taggedDays.contains(dayOnly(session.endedAt!))).toList();
+      double? averageDuration(List<SleepSession> values) => values.isEmpty ? null : values.fold<int>(0, (sum, item) => sum + item.duration!.inMinutes) / values.length / 60;
+      double? averageRating(List<SleepSession> values) {
+        final rated = values.where((session) => session.morningRating != null).toList();
+        return rated.isEmpty ? null : rated.fold<int>(0, (sum, item) => sum + item.morningRating!) / rated.length;
+      }
       final now = DateTime.now();
       final monthStart = DateTime(now.year, now.month);
       final previousMonthStart = DateTime(now.year, now.month - 1);
@@ -392,6 +403,16 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
             Text(_monthLabel(DateTime(now.year, now.month - 11)), style: const TextStyle(color: AppTheme.muted, fontSize: 10)),
             Text(_monthLabel(now), style: const TextStyle(color: AppTheme.muted, fontSize: 10)),
           ]),
+          const Divider(height: 20),
+          const Text('Связь с ночными записями', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+          const SizedBox(height: 6),
+          if (taggedSessions.isEmpty)
+            const Text('Пока нет завершённых ночей, дата окончания которых совпадает с днями этой отметки.', style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.35))
+          else ...[
+            Text('С отметкой: ${taggedSessions.length} ночей · длительность записи ${averageDuration(taggedSessions) == null ? '—' : _number(averageDuration(taggedSessions)!)} ч · оценка ${averageRating(taggedSessions) == null ? '—' : _number(averageRating(taggedSessions)!)} / 5', style: const TextStyle(fontSize: 11, height: 1.4)),
+            Text('Без отметки: ${otherSessions.length} ночей · длительность записи ${averageDuration(otherSessions) == null ? '—' : _number(averageDuration(otherSessions)!)} ч · оценка ${averageRating(otherSessions) == null ? '—' : _number(averageRating(otherSessions)!)} / 5', style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4)),
+            const Text('Сопоставление описательное, не доказывает влияние отметки на сон. День сопоставляется с ночью по дате её окончания.', style: TextStyle(color: AppTheme.muted, fontSize: 10, height: 1.35)),
+          ],
           const Divider(height: 20),
           Text('Даты использования · ${dates.length}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
           const SizedBox(height: 6),
