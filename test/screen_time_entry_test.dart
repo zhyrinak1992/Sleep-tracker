@@ -25,4 +25,31 @@ void main() {
       throwsFormatException,
     );
   });
+
+
+  test('resolves last-use time across midnight into the preceding day', () {
+    final sleepStart = DateTime(2026, 11, 22, 0, 10);
+    final lastUse = ScreenTimeEntry.resolveLastUseTime(
+      sleepStart,
+      hour: 23,
+      minute: 50,
+    );
+    expect(lastUse, DateTime(2026, 11, 21, 23, 50));
+    expect(sleepStart.difference(lastUse).inMinutes, 20);
+  });
+
+  test('accepts an earlier same-day use and rejects invalid clock values', () {
+    final sleepStart = DateTime(2026, 11, 22, 23, 0);
+    final lastUse = ScreenTimeEntry.resolveLastUseTime(
+      sleepStart,
+      hour: 22,
+      minute: 30,
+    );
+    expect(sleepStart.difference(lastUse).inMinutes, 30);
+    expect(
+      () => ScreenTimeEntry.resolveLastUseTime(sleepStart, hour: 24, minute: 0),
+      throwsFormatException,
+    );
+  });
+
 }
