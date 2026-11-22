@@ -15,6 +15,7 @@ class HealthScreen extends StatefulWidget {
 
 class _HealthScreenState extends State<HealthScreen> {
   late Future<_HealthSnapshot> _future;
+  int _days = 30;
 
   @override
   void initState() {
@@ -57,6 +58,14 @@ class _HealthScreenState extends State<HealthScreen> {
     future: _future,
     builder: (context, snapshot) {
       final data = snapshot.data;
+      final cutoff = DateTime.now().subtract(Duration(days: _days));
+      final visible = <String, List<_MetricSample>>{};
+      if (data != null) {
+        for (final entry in data.samples.entries) {
+          final points = entry.value.where((sample) => !sample.measuredAt.isBefore(cutoff)).toList();
+          if (points.isNotEmpty) visible[entry.key] = points;
+        }
+      }
       return ListView(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
         children: [
@@ -92,13 +101,28 @@ class _HealthScreenState extends State<HealthScreen> {
               ],
             ))
           else ...[
-            _CoverageCard(data: data),
+            SegmentedButton<int>(
+              segments: const [
+                ButtonSegment(value: 7, label: Text('7 дней')),
+                ButtonSegment(value: 30, label: Text('30 дней')),
+                ButtonSegment(value: 90, label: Text('90 дней')),
+                ButtonSegment(value: 365, label: Text('Год')),
+              ],
+              selected: {_days},
+              onSelectionChanged: (value) => setState(() => _days = value.first),
+            ),
             const SizedBox(height: 12),
-            for (final entry in data.samples.entries)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _MetricCard(type: entry.key, samples: entry.value),
-              ),
+            if (visible.isEmpty)
+              const SectionCard(child: Text('За выбранный период измерений нет. Отсутствие записей не означает нулевые значения.', style: TextStyle(color: AppTheme.muted)))
+            else ...[
+              _CoverageCard(samples: visible),
+              const SizedBox(height: 12),
+              for (final entry in visible.entries)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _MetricCard(type: entry.key, samples: entry.value, sessions: {for (final session in data.sessions) session.id: session}),
+                ),
+            ],
             const Text(
               'Показатели отражают данные, переданные источником. Они не являются медицинским заключением. Наличие пропусков зависит от устройства, разрешений и фактических измерений.',
               style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.45),
@@ -126,20 +150,21 @@ class _MetricSample {
 }
 
 class _CoverageCard extends StatelessWidget {
-  const _CoverageCard({required this.data});
-  final _HealthSnapshot data;
+  const _CoverageCard({required this.samples});
+  final Map<String, List<_MetricSample>> samples;
 
   @override
   Widget build(BuildContext context) {
-    final total = data.samples.values.fold<int>(0, (sum, values) => sum + values.length);
-    final first = data.samples.values.expand((values) => values).map((s) => s.measuredAt).reduce((a, b) => a.isBefore(b) ? a : b);
-    final last = data.samples.values.expand((values) => values).map((s) => s.measuredAt).reduce((a, b) => a.isAfter(b) ? a : b);
+    final all = samples.values.expand((values) => values).toList();
+    final total = all.length;
+    final first = all.map((s) => s.measuredAt).reduce((a, b) => a.isBefore(b) ? a : b);
+    final last = all.map((s) => s.measuredAt).reduce((a, b) => a.isAfter(b) ? a : b);
     return SectionCard(child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('Доступные данные', style: TextStyle(fontWeight: FontWeight.w700)),
         const SizedBox(height: 10),
-        Text('$total измерений · ${data.samples.length} типа показателей'),
+        Text('$total измерений · ${samples.length} типа показателей'),
         const SizedBox(height: 4),
         Text('${_date(first)} — ${_date(last)}', style: const TextStyle(color: AppTheme.muted, fontSize: 12)),
       ],
@@ -148,9 +173,10 @@ class _CoverageCard extends StatelessWidget {
 }
 
 class _MetricCard extends StatelessWidget {
-  const _MetricCard({required this.type, required this.samples});
+  const _MetricCard({required this.type, required this.samples, required this.sessions});
   final String type;
   final List<_MetricSample> samples;
+  final Map<String, SleepSession> sessions;
 
   String get title => switch (type) {
     'Пульс' => 'Пульс',
@@ -194,8 +220,47 @@ class _MetricCard extends StatelessWidget {
         const SizedBox(height: 8),
         Text('Последнее: ${_date(latest.measuredAt)} · ${latest.source}',
           style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+        Align(alignment: Alignment.centerRight, child: TextButton.icon(
+          onPressed: () => _showHistory(context),
+          icon: const Icon(Icons.history_rounded, size: 17),
+          label: const Text('История измерений'),
+        )),
       ],
     ));
+  }
+
+  void _showHistory(BuildContext context) {
+    final rows = [...samples]..sort((a, b) => b.measuredAt.compareTo(a.measuredAt));
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('История: ' + title),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 420,
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: rows.length,
+            separatorBuilder: (_, __) => const Divider(height: 12),
+            itemBuilder: (context, index) {
+              final sample = rows[index];
+              final session = sessions[sample.sessionId];
+              final nightLabel = session == null ? 'Ночная запись не найдена' : 'Ночь от ' + _date(session.startedAt);
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_number(sample.value) + ' ' + sample.unit, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text(_date(sample.measuredAt) + ' · ' + nightLabel, style: const TextStyle(fontSize: 12, color: AppTheme.muted)),
+                  Text(sample.source, style: const TextStyle(fontSize: 11, color: AppTheme.muted)),
+                ],
+              );
+            },
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Закрыть'))],
+      ),
+    );
   }
 }
 
