@@ -502,7 +502,7 @@ class SleepDatabase {
   }
 
   /// Записывает только фактически полученное измерение; одинаковые ID не дублируются.
-  Future<void> saveClimateSample({
+  Future<bool> saveClimateSample({
     required String id,
     String? sessionId,
     required String deviceId,
@@ -523,13 +523,14 @@ class SleepDatabase {
     if (metricType == 'humidity' && unit != '%') throw ArgumentError('Влажность должна быть сохранена в процентах.');
     if (metricType == 'humidity' && (value < 0 || value > 100)) throw ArgumentError('Влажность должна быть в диапазоне от 0 до 100%.');
     final db = await database;
-    await db.insert('climate_samples', {
+    final inserted = await db.insert('climate_samples', {
       'id': id, 'session_id': sessionId, 'device_id': deviceId,
       'device_name': deviceName, 'room_name': roomName,
       'metric_type': metricType, 'value': value, 'unit': unit,
       'source': source, 'measured_at': measuredAt.toUtc().toIso8601String(),
       'received_at': DateTime.now().toUtc().toIso8601String(), 'quality': quality,
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    return inserted > 0;
   }
 
   Future<List<Map<String, Object?>>> getClimateSamples({

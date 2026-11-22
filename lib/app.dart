@@ -63,6 +63,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   final List<Widget?> _pages = List<Widget?>.filled(5, null);
   Timer? _cleanupTimer;
   Timer? _climateTimer;
+  bool _climateRefreshInProgress = false;
 
   Widget _createPage(int index) {
     switch (index) {
@@ -86,8 +87,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _cleanupTimer = Timer.periodic(const Duration(minutes: 30), (_) => _cleanupAudio());
-    _climateTimer = Timer.periodic(const Duration(minutes: 15), (_) => _refreshClimate());
-    _refreshClimate();
+    _startClimatePolling();
     _ensureNightReminders();
   }
 
@@ -109,10 +109,21 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     }
   }
 
+  void _startClimatePolling() {
+    _climateTimer?.cancel();
+    _refreshClimate();
+    _climateTimer = Timer.periodic(const Duration(minutes: 15), (_) => _refreshClimate());
+  }
+
+  void _stopClimatePolling() {
+    _climateTimer?.cancel();
+    _climateTimer = null;
+  }
+
   @override
   void dispose() {
     _cleanupTimer?.cancel();
-    _climateTimer?.cancel();
+    _stopClimatePolling();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -130,19 +141,27 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   }
 
   Future<void> _refreshClimate() async {
+    if (_climateRefreshInProgress) return;
+    _climateRefreshInProgress = true;
     try {
       await YandexSmartHomeService.instance.refreshConfiguredDeviceIfNeeded();
     } catch (error, stackTrace) {
       debugPrint('Yandex climate sampling failed: $error\\n$stackTrace');
+    } finally {
+      _climateRefreshInProgress = false;
     }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      _startClimatePolling();
       _cleanupAudio();
-      _refreshClimate();
       _ensureNightReminders();
+    } else if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _stopClimatePolling();
     }
   }
 
