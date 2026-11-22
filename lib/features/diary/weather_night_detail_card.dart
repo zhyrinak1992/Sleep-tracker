@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../data/sleep_database.dart';
 import '../../data/weather_service.dart';
@@ -11,11 +12,13 @@ class _WeatherNightDetail {
   const _WeatherNightDetail({
     required this.location,
     required this.summary,
+    required this.updatedAt,
     this.solarDay,
   });
 
   final WeatherLocation location;
   final WeatherNightSummary summary;
+  final DateTime? updatedAt;
   final WeatherSolarDay? solarDay;
 }
 
@@ -66,7 +69,8 @@ class _WeatherNightDetailCardState extends State<WeatherNightDetailCard> {
       location: location,
       utcDate: end.toUtc(),
     );
-    return _WeatherNightDetail(location: location, summary: summary, solarDay: solar);
+    final updatedAt = await service.loadCacheUpdatedAt(database: widget.database, location: location);
+    return _WeatherNightDetail(location: location, summary: summary, solarDay: solar, updatedAt: updatedAt);
   }
 
   String _number(double? value, String unit) =>
@@ -145,7 +149,7 @@ class _WeatherNightDetailCardState extends State<WeatherNightDetailCard> {
             _row('Расчётная освещённость Луны',
               moon == null ? 'Нет данных' : '${(moon.illumination * 100).round()}%'),
             if (data != null)
-              Text('Источник: Open-Meteo Historical Weather API · выбранное место: ${data.location.label}',
+              Text('Источник: Open-Meteo Historical Weather API · ${data.updatedAt == null ? 'время обновления неизвестно' : 'обновлено ${DateFormat('d MMM yyyy, HH:mm', 'ru').format(data.updatedAt!)}'}',
                 style: const TextStyle(color: AppTheme.muted, fontSize: 10, height: 1.35)),
             const Text(
               'Погодные значения — архивная модель для координат выбранного города, а не измерение внутри спальни. Фаза и освещённость Луны рассчитываются локально и не измеряют яркость в помещении.',
