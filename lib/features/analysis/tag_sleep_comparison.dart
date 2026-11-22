@@ -41,6 +41,14 @@ class TagSleepComparisonResult {
 class TagSleepComparison {
   static const minimumNightsPerGroup = 4;
 
+  static double? _actualSleepMinutes(SleepSession session) {
+    final imported = session.source.startsWith('apple_health:');
+    final start = session.actualSleepStartedAt ?? (imported ? session.startedAt : null);
+    final end = session.actualSleepEndedAt ?? (imported ? session.endedAt : null);
+    if (start == null || end == null || !end.isAfter(start)) return null;
+    return end.difference(start).inMinutes.toDouble();
+  }
+
   static TagSleepComparisonResult calculate({
     required Iterable<SleepSession> sessions,
     required Map<String, Set<String>> tagsBySession,
@@ -62,7 +70,7 @@ class TagSleepComparison {
       if (session.endedAt == null || !session.endedAt!.isAfter(session.startedAt)) continue;
 
       final value = switch (metric) {
-        TagSleepMetric.sleepDuration => session.duration!.inMinutes.toDouble(),
+        TagSleepMetric.sleepDuration => _actualSleepMinutes(session),
         TagSleepMetric.morningRating => session.morningRating?.toDouble(),
       };
       if (value == null || !value.isFinite) continue;
