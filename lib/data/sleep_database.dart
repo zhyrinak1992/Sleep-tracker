@@ -19,7 +19,7 @@ class SleepDatabase {
     final dbPath = p.join(directory.path, 'sleep_tracker.sqlite');
     _db = await openDatabase(
       dbPath,
-      version: 4,
+      version: 5,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: (db, version) async {
         await db.execute('''
@@ -72,6 +72,7 @@ class SleepDatabase {
         await db.execute('CREATE INDEX idx_sleep_notes_session ON sleep_notes(session_id)');
         await db.execute('CREATE INDEX idx_sleep_notes_updated ON sleep_notes(updated_at)');
         await _createV4Tables(db);
+        await _createV5Columns(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // Добавочная миграция: существующие ночи и их ID не изменяются.
@@ -117,6 +118,7 @@ class SleepDatabase {
           }
         }
         if (oldVersion < 4) await _createV4Tables(db);
+        if (oldVersion < 5) await _createV5Columns(db);
       },
     );
     return _db!;
@@ -127,7 +129,7 @@ class SleepDatabase {
   Future<Map<String, Object?>> exportSnapshot() async {
     final db = await database;
     return {
-      'schemaVersion': 4,
+      'schemaVersion': 5,
       'sleep_sessions': await db.query('sleep_sessions', orderBy: 'started_at ASC'),
       'sleep_session_tags': await db.query('sleep_session_tags', orderBy: 'session_id ASC, tag_key ASC'),
       'sleep_notes': await db.query('sleep_notes', orderBy: 'created_at ASC'),
@@ -142,7 +144,7 @@ class SleepDatabase {
   /// Полное восстановление с проверкой структуры и атомарной заменой данных.
   /// При любой ошибке SQLite откатывает транзакцию и оставляет исходную базу.
   Future<void> restoreSnapshot(Map<String, dynamic> snapshot, {bool merge = false}) async {
-    if (snapshot['schemaVersion'] != 3 && snapshot['schemaVersion'] != 4) {
+    if (snapshot['schemaVersion'] != 3 && snapshot['schemaVersion'] != 4 && snapshot['schemaVersion'] != 5) {
       throw const FormatException('Версия структуры резервной копии не поддерживается.');
     }
     const tables = ['sleep_sessions', 'sleep_session_tags', 'sleep_notes', 'app_metadata', 'sleep_stages', 'sleep_metrics', 'audio_events', 'morning_reports'];
@@ -273,6 +275,47 @@ class SleepDatabase {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_metrics_session ON sleep_metrics(session_id, measured_at)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_audio_expiry ON audio_events(expires_at)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_reports_date ON morning_reports(report_date)');
+  }
+
+  Future<void> _createV5Columns(DatabaseExecutor db) async {
+    final columns = (await db.rawQuery('PRAGMA table_info(sleep_sessions)'))
+        .map((row) => row['name'] as String).toSet();
+    if (!columns.contains('button_started_at')) await db.execute('ALTER TABLE sleep_sessions ADD COLUMN button_started_at TEXT');
+    if (!columns.contains('button_ended_at')) await db.execute('ALTER TABLE sleep_sessions ADD COLUMN button_ended_at TEXT');
+    if (!columns.contains('actual_sleep_started_at')) await db.execute('ALTER TABLE sleep_sessions ADD COLUMN actual_sleep_started_at TEXT');
+    if (!columns.contains('actual_sleep_ended_at')) await db.execute('ALTER TABLE sleep_sessions ADD COLUMN actual_sleep_ended_at TEXT');
+    if (!columns.contains('user_edited')) await db.execute('ALTER TABLE sleep_sessions ADD COLUMN user_edited INTEGER NOT NULL DEFAULT 0');
+    await db.execute('UPDATE sleep_sessions SET button_started_at = started_at WHERE source = \'manual\' AND button_started_at IS NULL');
+    await db.execute('UPDATE sleep_sessions SET button_ended_at = ended_at WHERE source = \'manual\' AND ended_at IS NOT NULL AND button_ended_at IS NULL');
+    await db.execute('UPDATE sleep_sessions SET actual_sleep_started_at = started_at, actual_sleep_ended_at = ended_at WHERE source LIKE \'apple_health:%\' AND actual_sleep_started_at IS NULL');
+  }
+
+  Future<void> saveSessionRecord({String? id, required DateTime startedAt, required DateTime endedAt, String? note}) async {
+    if (!endedAt.isAfter(startedAt)) throw ArgumentError('Время пробуждения должно быть позже времени засыпания.');
+    final db = await database;
+    final now = DateTime.now().toUtc().toIso8601String();
+    if (id == null) {
+      final session = SleepSession(
+        id: _uuid.v4(), startedAt: startedAt, endedAt: endedAt,
+        source: 'manual_entry', note: note?.trim().isEmpty == true ? null : note?.trim(),
+        createdAt: DateTime.now(), updatedAt: DateTime.now(),
+        actualSleepStartedAt: startedAt, actualSleepEndedAt: endedAt, userEdited: true,
+      );
+      final values = session.toMap()..['button_started_at'] = now.toUtc().toIso8601String();
+    await db.insert('sleep_sessions', values);
+      return;
+    }
+    final rows = await db.query('sleep_sessions', columns: ['id'], where: 'id = ?', whereArgs: [id], limit: 1);
+    if (rows.isEmpty) throw StateError('Ночная запись не найдена.');
+    await db.update('sleep_sessions', {
+      'started_at': startedAt.toUtc().toIso8601String(),
+      'ended_at': endedAt.toUtc().toIso8601String(),
+      'actual_sleep_started_at': startedAt.toUtc().toIso8601String(),
+      'actual_sleep_ended_at': endedAt.toUtc().toIso8601String(),
+      'note': note?.trim().isEmpty == true ? null : note?.trim(),
+      'user_edited': 1,
+      'updated_at': now,
+    }, where: 'id = ?', whereArgs: [id]);
   }
 
   Future<void> addSleepStage({String? id, required String sessionId, required String stage, required DateTime startedAt, required DateTime endedAt, required String source}) async {
