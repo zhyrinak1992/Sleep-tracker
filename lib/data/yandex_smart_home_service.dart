@@ -51,7 +51,7 @@ class YandexSmartHomeService {
 
   static const _tokenKey = 'yandex_smart_home_access_token';
   static const _storage = FlutterSecureStorage(
-    iOptions: IOSOptions(accessibility: KeychainAccessibility.afterFirstUnlockThisDeviceOnly),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock_this_device),
   );
   static const _base = 'https://api.iot.yandex.net/v1.0';
   final http.Client _client = http.Client();
