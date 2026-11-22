@@ -341,6 +341,7 @@ class SleepDatabase {
 
   Future<void> permanentlyDeleteSession(String sessionId) async {
     final db = await database;
+    final audioPaths = <String>[];
     await db.transaction((txn) async {
       final rows = await txn.query('sleep_sessions', columns: ['id', 'deleted_at'],
         where: 'id = ?', whereArgs: [sessionId], limit: 1);
@@ -350,16 +351,14 @@ class SleepDatabase {
       }
       final audio = await txn.query('audio_events', columns: ['file_path'],
         where: 'session_id = ?', whereArgs: [sessionId]);
-      for (final row in audio) {
-        final path = row['file_path'];
-        if (path is String) {
-          try { await File(path).delete(); } catch (_) {}
-        }
-      }
+      audioPaths.addAll(audio.map((row) => row['file_path']).whereType<String>());
       await txn.delete('sleep_sessions', where: 'id = ?', whereArgs: [sessionId]);
     });
+    // Файлы удаляются только после успешного commit SQLite.
+    for (final path in audioPaths) {
+      try { await File(path).delete(); } catch (_) {}
+    }
   }
-
   Future<List<SleepSession>> getTrashedSessions() async {
     final rows = await (await database).query('sleep_sessions',
       where: 'deleted_at IS NOT NULL', orderBy: 'deleted_at DESC');
