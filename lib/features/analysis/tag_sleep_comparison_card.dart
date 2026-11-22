@@ -59,7 +59,11 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
       widget.sessions.map((session) => session.id).toList(),
     );
     final templates = await _store.load();
-    return _TagComparisonData(tagsBySession: tags, templates: templates);
+    final customTags = await CustomSleepTagStore(
+      widget.database.getAppMetadata,
+      widget.database.setAppMetadata,
+    ).load();
+    return _TagComparisonData(tagsBySession: tags, templates: templates, customTags: customTags);
   }
 
   Future<void> _reload() async {
@@ -222,7 +226,13 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
         return SectionCard(child: Text('Не удалось загрузить сравнение отметок: ${snapshot.error}'));
       }
       final data = snapshot.data!;
-      final availableTags = SleepTag.catalog;
+      final availableTags = [...SleepTag.catalog, ...data.customTags];
+      String tagLabel(String key) {
+        for (final tag in availableTags) {
+          if (tag.key == key) return tag.label;
+        }
+        return 'Отметка недоступна';
+      }
       final selectedKey = availableTags.any((tag) => tag.key == _tagKey)
           ? _tagKey!
           : availableTags.first.key;
@@ -256,7 +266,7 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
                 dense: true,
                 contentPadding: EdgeInsets.zero,
                 title: Text(template.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                subtitle: Text('${SleepTag.byKey(template.tagKey)?.label ?? 'Отметка недоступна'} · ${template.metric.label}'),
+                subtitle: Text('${tagLabel(template.tagKey)} · ${template.metric.label}'),
                 selected: template.id == _activeTemplateId,
                 onTap: () => setState(() {
                   _activeTemplateId = template.id;
@@ -361,7 +371,8 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
 }
 
 class _TagComparisonData {
-  const _TagComparisonData({required this.tagsBySession, required this.templates});
+  const _TagComparisonData({required this.tagsBySession, required this.templates, required this.customTags});
   final Map<String, Set<String>> tagsBySession;
   final List<TagComparisonTemplate> templates;
+  final List<SleepTag> customTags;
 }

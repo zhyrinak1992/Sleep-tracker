@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'note_tag_suggestions.dart';
 import 'package:intl/intl.dart';
 import '../../data/sleep_database.dart';
 import '../../models/sleep_note.dart';
@@ -25,6 +26,21 @@ class _NotesScreenState extends State<NotesScreen> {
   String _query = '';
   final Set<String> _selectedTags = <String>{};
   Future<Set<String>> _taggedSessionIds = Future.value(<String>{});
+  List<SleepTag> _customTags = const [];
+  List<NoteTagSuggestion> _tagSuggestions = const [];
+  bool _tagDataLoading = true;
+
+  CustomSleepTagStore get _customTagStore => CustomSleepTagStore(
+    widget.database.getAppMetadata,
+    widget.database.setAppMetadata,
+  );
+
+  DismissedNoteTagSuggestionStore get _dismissedSuggestionStore => DismissedNoteTagSuggestionStore(
+    widget.database.getAppMetadata,
+    widget.database.setAppMetadata,
+  );
+
+  List<SleepTag> get _allTags => [...SleepTag.catalog, ..._customTags];
 
   @override
   void initState() {
@@ -42,6 +58,51 @@ class _NotesScreenState extends State<NotesScreen> {
     _sessions = widget.database.getSessions(limit: 500);
     _notes = widget.database.getNotes(search: _query, month: _month);
     _taggedSessionIds = widget.database.getSessionIdsWithTags(_selectedTags.toList());
+    _refreshTagData();
+  }
+
+  Future<void> _refreshTagData() async {
+    try {
+      final customTags = await _customTagStore.load();
+      final allNotes = await widget.database.getNotes();
+      final dismissed = await _dismissedSuggestionStore.load();
+      final suggestions = NoteTagSuggestionAnalyzer.analyze(
+        notes: allNotes,
+        existingTags: [...SleepTag.catalog, ...customTags],
+        dismissedPhrases: dismissed,
+      );
+      if (!mounted) return;
+      setState(() {
+        _customTags = customTags;
+        _tagSuggestions = suggestions;
+        _tagDataLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _tagDataLoading = false;
+        _tagSuggestions = const [];
+      });
+    }
+  }
+
+  Future<void> _acceptTagSuggestion(NoteTagSuggestion suggestion) async {
+    try {
+      await _customTagStore.add(suggestion.phrase);
+      await _refreshTagData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Категория «${suggestion.phrase}» создана. Добавляй её к нужным ночам вручную.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Не удалось создать категорию: $error')));
+    }
+  }
+
+  Future<void> _dismissTagSuggestion(NoteTagSuggestion suggestion) async {
+    await _dismissedSuggestionStore.dismiss(suggestion.phrase);
+    await _refreshTagData();
   }
 
   Future<void> _addNote(SleepSession session) async {
@@ -118,6 +179,7 @@ class _NotesScreenState extends State<NotesScreen> {
     var rating = session.morningRating ?? 3;
     final initialTags = await widget.database.getTagsForSession(session.id);
     final selectedTags = initialTags.toSet();
+    final availableTags = _allTags;
     final saved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -127,7 +189,7 @@ class _NotesScreenState extends State<NotesScreen> {
             crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Text('Факторы и обстоятельства', style: TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
-            Wrap(spacing: 8, runSpacing: 2, children: SleepTag.catalog.map((tag) => FilterChip(
+            Wrap(spacing: 8, runSpacing: 2, children: availableTags.map((tag) => FilterChip(
               label: Text(tag.label), selected: selectedTags.contains(tag.key),
               onSelected: (selected) => setDialogState(() {
                 if (selected) { selectedTags.add(tag.key); } else { selectedTags.remove(tag.key); }
@@ -154,7 +216,7 @@ class _NotesScreenState extends State<NotesScreen> {
     );
     if (saved == true) {
       await widget.database.updateMorningRating(session.id, includeRating ? rating : null);
-      await widget.database.setTagsForSession(session.id, SleepTag.catalog
+      await widget.database.setTagsForSession(session.id, availableTags
         .where((tag) => selectedTags.contains(tag.key)).toList());
       if (mounted) setState(_reload);
     }
@@ -211,7 +273,7 @@ class _NotesScreenState extends State<NotesScreen> {
             const Text('Фильтр по отметкам', style: TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 6),
             Wrap(spacing: 7, runSpacing: 2, children: [
-              ...SleepTag.catalog.map((tag) => FilterChip(
+              ..._allTags.map((tag) => FilterChip(
                 label: Text(tag.label),
                 selected: _selectedTags.contains(tag.key),
                 onSelected: (selected) => setState(() {
@@ -227,6 +289,45 @@ class _NotesScreenState extends State<NotesScreen> {
                 ActionChip(label: const Text('Сбросить отметки'),
                   onPressed: () => setState(() { _selectedTags.clear(); _reload(); })),
             ]),
+            if (_tagDataLoading || _tagSuggestions.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              SectionCard(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Возможные новые категории', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 5),
+                  const Text(
+                    'Приложение ищет повторяющиеся слова и фразы в заметках разных ночей. Категория появится только после твоего подтверждения; существующие заметки не изменяются.',
+                    style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4),
+                  ),
+                  if (_tagDataLoading)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 12),
+                      child: LinearProgressIndicator(),
+                    )
+                  else ..._tagSuggestions.map((suggestion) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(suggestion.phrase),
+                    subtitle: Text('Встречается в заметках за ${suggestion.nightCount} разных ночей'),
+                    trailing: Wrap(
+                      spacing: 0,
+                      children: [
+                        IconButton(
+                          tooltip: 'Создать категорию',
+                          onPressed: () => _acceptTagSuggestion(suggestion),
+                          icon: const Icon(Icons.add_circle_outline, color: AppTheme.teal),
+                        ),
+                        IconButton(
+                          tooltip: 'Не предлагать снова',
+                          onPressed: () => _dismissTagSuggestion(suggestion),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                  )),
+                ],
+              )),
+            ],
             const SizedBox(height: 12),
             if (sessionSnapshot.connectionState == ConnectionState.waiting || noteSnapshot.connectionState == ConnectionState.waiting || tagSnapshot.connectionState == ConnectionState.waiting)
               const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))
