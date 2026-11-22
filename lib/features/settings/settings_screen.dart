@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'dart:io';
 
@@ -25,7 +26,6 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _busy = false;
   bool _healthConnected = false;
-  final TextEditingController _yandexTokenController = TextEditingController();
   YandexHomeSnapshot? _yandexHome;
   String? _selectedYandexDeviceId;
   bool _yandexConnected = false;
@@ -49,29 +49,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _connectYandex() async {
-    final token = _yandexTokenController.text.trim();
-    if (token.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Вставьте OAuth-токен Яндекса с разрешением iot:view.')));
-      return;
-    }
+    if (_busy) return;
     setState(() => _busy = true);
     try {
-      await YandexSmartHomeService.instance.saveAccessToken(token);
-      final home = await YandexSmartHomeService.instance.fetchHome();
+      final service = YandexSmartHomeService.instance;
+      final authorization = await service.requestDeviceAuthorization();
+      if (!mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Подтверждение в Яндексе'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Откройте страницу Яндекса, войдите в нужный аккаунт и разрешите Sleep Tracker доступ к данным умного дома.'),
+              const SizedBox(height: 16),
+              SelectableText(
+                authorization.userCode,
+                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: 3),
+              ),
+              const SizedBox(height: 8),
+              const Text('Код действует ограниченное время. После подтверждения вернитесь сюда.'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Отмена'),
+            ),
+            OutlinedButton(
+              onPressed: () => launchUrl(
+                Uri.parse(authorization.verificationUrl),
+                mode: LaunchMode.externalApplication,
+              ),
+              child: const Text('Открыть Яндекс'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Я подтвердил'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      await service.completeDeviceAuthorization(authorization);
+      final home = await service.fetchHome();
       final previous = await SleepDatabase.instance.getAppMetadata('yandex_selected_device_id');
       if (!mounted) return;
       setState(() {
-        _yandexHome = home; _yandexConnected = true;
+        _yandexHome = home;
+        _yandexConnected = true;
         _selectedYandexDeviceId = home.devices.any((d) => d.id == previous) ? previous : null;
       });
       await SleepDatabase.instance.setAppMetadata('yandex_connected', 'true');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Яндекс подключён. Датчиков с температурой или влажностью: ${home.devices.length}.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Яндекс подключён. Датчиков с температурой или влажностью: ${home.devices.length}.')),
+      );
     } catch (error) {
-      await YandexSmartHomeService.instance.disconnect();
       if (!mounted) return;
-      setState(() => _yandexConnected = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Не удалось подключить Яндекс: $error')));
-    } finally { if (mounted) setState(() => _busy = false); }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось подключить Яндекс: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _loadYandexHome() async {
@@ -111,12 +154,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await SleepDatabase.instance.setAppMetadata('yandex_connected', 'false');
     await SleepDatabase.instance.setAppMetadata('yandex_selected_device_id', '');
     if (!mounted) return;
-    setState(() { _yandexConnected = false; _yandexHome = null; _selectedYandexDeviceId = null; _yandexTokenController.clear(); });
+    setState(() { _yandexConnected = false; _yandexHome = null; _selectedYandexDeviceId = null; });
   }
 
   @override
   void dispose() {
-    _yandexTokenController.dispose();
     super.dispose();
   }
 
@@ -496,17 +538,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Icon(_yandexConnected ? Icons.check_circle : Icons.home_outlined, color: _yandexConnected ? AppTheme.teal : AppTheme.muted),
         ]),
         const SizedBox(height: 8),
-        const Text('Подключение только для чтения. Sleep Tracker получает доступные значения температуры и влажности, сохраняет реальные измерения локально и не управляет устройствами. Нужен OAuth-токен приложения Яндекса с разрешением iot:view. Не выдавайте приложению iot:control.',
+        const Text('Подключение через подтверждение в Яндексе. Sleep Tracker получает только доступные значения температуры и влажности, сохраняет измерения локально и не управляет устройствами. Запрашивается исключительно разрешение iot:view; iot:control не используется.',
           style: TextStyle(color: AppTheme.muted, height: 1.45)),
         const SizedBox(height: 12),
         if (!_yandexConnected) ...[
-          TextField(controller: _yandexTokenController, obscureText: true, autocorrect: false, enableSuggestions: false,
-            decoration: const InputDecoration(labelText: 'OAuth-токен Яндекса', hintText: 'Вставьте токен с доступом iot:view', border: OutlineInputBorder())),
-          const SizedBox(height: 10),
           SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: _busy ? null : _connectYandex,
-            icon: const Icon(Icons.link), label: const Text('Подключить и проверить доступ'))),
+            icon: const Icon(Icons.link), label: Text(_busy ? 'Ожидание подтверждения…' : 'Подключить аккаунт Яндекса'))),
           const SizedBox(height: 6),
-          const Text('Токен хранится в системном хранилище iOS Keychain и не записывается в резервную копию или GitHub.',
+          const Text('Токен доступа и токен обновления хранятся в iOS Keychain и не включаются в резервную копию.',
             style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4)),
         ] else ...[
           Row(children: [
