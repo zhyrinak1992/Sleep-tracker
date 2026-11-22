@@ -35,9 +35,13 @@ class SleepTrackerApp extends StatelessWidget {
       title: 'Трекер сна',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
-      localizationsDelegates: GlobalMaterialLocalizations.delegates,
-      supportedLocales: const [Locale('ru'), Locale('en')],
-      locale: const Locale('ru'),
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [Locale('ru', 'RU'), Locale('en', 'US')],
+      locale: const Locale('ru', 'RU'),
       home: const AppShell(),
     );
   }
