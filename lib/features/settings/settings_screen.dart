@@ -425,7 +425,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
           const Text(
             'Запомните пароль: приложение не хранит его и не сможет восстановить. Старые незашифрованные JSON-копии также можно импортировать, но при переносе рекомендуется создать новую зашифрованную копию.',
-            style: TextStyle(color: AppTheme.warning, fontSize: 12, height: 1.45),
+            style: TextStyle(color: AppTheme.teal, fontSize: 12, height: 1.45),
           ),
           const SizedBox(height: 14),
           SizedBox(width: double.infinity, child: FilledButton.icon(
