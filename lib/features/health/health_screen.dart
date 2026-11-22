@@ -130,22 +130,23 @@ class _HealthScreenState extends State<HealthScreen> {
 
   Future<_HealthSnapshot> _load() async {
     final sessions = await widget.database.getSessions(limit: 5000);
+    final sessionsById = {for (final session in sessions) session.id: session};
+    final rows = await widget.database.getAllMetrics();
     final samples = <String, List<_MetricSample>>{};
-    for (final session in sessions) {
-      final rows = await widget.database.getMetrics(session.id);
-      for (final row in rows) {
-        final type = row['metric_type'] as String? ?? 'unknown';
-        final value = row['value'];
-        final measuredAt = DateTime.tryParse(row['measured_at'] as String? ?? '');
-        if (value is! num || measuredAt == null || !value.isFinite) continue;
-        samples.putIfAbsent(type, () => []).add(_MetricSample(
-          value: value.toDouble(),
-          unit: row['unit'] as String? ?? '',
-          measuredAt: measuredAt,
-          source: row['source'] as String? ?? 'Источник не указан',
-          sessionId: session.id,
-        ));
-      }
+    for (final row in rows) {
+      final sessionId = row['session_id'] as String?;
+      if (sessionId == null || !sessionsById.containsKey(sessionId)) continue;
+      final type = row['metric_type'] as String? ?? 'unknown';
+      final value = row['value'];
+      final measuredAt = DateTime.tryParse(row['measured_at'] as String? ?? '');
+      if (value is! num || measuredAt == null || !value.isFinite) continue;
+      samples.putIfAbsent(type, () => []).add(_MetricSample(
+        value: value.toDouble(),
+        unit: row['unit'] as String? ?? '',
+        measuredAt: measuredAt,
+        source: row['source'] as String? ?? 'Источник не указан',
+        sessionId: sessionId,
+      ));
     }
     for (final values in samples.values) {
       values.sort((a, b) => a.measuredAt.compareTo(b.measuredAt));
