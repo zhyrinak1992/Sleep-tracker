@@ -67,6 +67,16 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
     await _data;
   }
 
+  String _formatDifference(double value, TagSleepMetric metric) {
+    final sign = value > 0 ? '+' : value < 0 ? '−' : '';
+    final absolute = value.abs();
+    if (metric == TagSleepMetric.sleepDuration) {
+      final minutes = absolute.round();
+      return '$sign${minutes ~/ 60} ч ${minutes % 60} мин';
+    }
+    return '$sign${absolute.toStringAsFixed(1)} балла';
+  }
+
   String _formatValue(double? value, TagSleepMetric metric) {
     if (value == null) return 'Недостаточно данных';
     if (metric == TagSleepMetric.sleepDuration) {
@@ -225,7 +235,8 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
         endExclusive: widget.endExclusive,
         metric: _metric,
       );
-      final activeTemplate = data.templates.where((item) => item.id == _activeTemplateId).firstOrNull;
+      final matchingTemplates = data.templates.where((item) => item.id == _activeTemplateId);
+      final activeTemplate = matchingTemplates.isEmpty ? null : matchingTemplates.first;
 
       return SectionCard(
         child: Column(
@@ -307,7 +318,7 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
               )
             else
               Text(
-                'Разница средних: ${result.difference! > 0 ? '+' : ''}${_formatValue(result.difference, result.metric)} в группе с отметкой. Выборки: ${result.withTag.nights} и ${result.withoutTag.nights} ночей.',
+                'Разница средних: ${_formatDifference(result.difference!, result.metric)} в группе с отметкой. Выборки: ${result.withTag.nights} и ${result.withoutTag.nights} ночей.',
                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, height: 1.4),
               ),
             const SizedBox(height: 5),
