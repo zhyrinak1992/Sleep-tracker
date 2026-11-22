@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../data/sleep_database.dart';
-import '../../models/sleep_session.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import '../diary/sleep_session_detail_screen.dart';

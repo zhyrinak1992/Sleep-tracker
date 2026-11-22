@@ -597,6 +597,31 @@ class SleepDatabase {
     await (await database).insert('sleep_metrics', {'id': id ?? _uuid.v4(), 'session_id': sessionId, 'metric_type': type, 'value': value, 'unit': unit, 'measured_at': measuredAt.toUtc().toIso8601String(), 'source': source}, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
   Future<List<Map<String, Object?>>> getStages(String sessionId) async => (await database).query('sleep_stages', where: 'session_id = ?', whereArgs: [sessionId], orderBy: 'started_at');
+
+  /// Loads stages for many sessions in bounded SQLite IN queries.
+  Future<Map<String, List<Map<String, Object?>>>> getStagesForSessions(
+    List<String> sessionIds,
+  ) async {
+    final ids = sessionIds.toSet().toList();
+    if (ids.isEmpty) return const {};
+    final db = await database;
+    final result = <String, List<Map<String, Object?>>>{};
+    for (var offset = 0; offset < ids.length; offset += 900) {
+      final chunk = ids.skip(offset).take(900).toList();
+      final placeholders = List.filled(chunk.length, '?').join(',');
+      final rows = await db.query(
+        'sleep_stages',
+        where: 'session_id IN ($placeholders)',
+        whereArgs: chunk,
+        orderBy: 'session_id, started_at',
+      );
+      for (final row in rows) {
+        final sessionId = row['session_id']! as String;
+        (result[sessionId] ??= <Map<String, Object?>>[]).add(row);
+      }
+    }
+    return result;
+  }
   Future<List<Map<String, Object?>>> getMetrics(String sessionId) async => (await database).query('sleep_metrics', where: 'session_id = ?', whereArgs: [sessionId], orderBy: 'measured_at');
   Future<List<Map<String, Object?>>> getAllMetrics() async => (await database).query('sleep_metrics', orderBy: 'measured_at');
   Future<List<Map<String, Object?>>> getAudioEvents({String? sessionId}) async { final db = await database; return db.query('audio_events', where: sessionId == null ? null : 'session_id = ?', whereArgs: sessionId == null ? null : [sessionId], orderBy: 'captured_at DESC'); }
@@ -637,6 +662,29 @@ class SleepDatabase {
     return expired.length;
   }
   Future<Map<String, Object?>?> getMorningReport(String sessionId) async { final rows = await (await database).query('morning_reports', where: 'session_id = ?', whereArgs: [sessionId], limit: 1); return rows.isEmpty ? null : rows.first; }
+
+  /// Loads morning reports keyed by session ID with bounded SQLite IN queries.
+  Future<Map<String, Map<String, Object?>>> getMorningReportsForSessions(
+    List<String> sessionIds,
+  ) async {
+    final ids = sessionIds.toSet().toList();
+    if (ids.isEmpty) return const {};
+    final db = await database;
+    final result = <String, Map<String, Object?>>{};
+    for (var offset = 0; offset < ids.length; offset += 900) {
+      final chunk = ids.skip(offset).take(900).toList();
+      final placeholders = List.filled(chunk.length, '?').join(',');
+      final rows = await db.query(
+        'morning_reports',
+        where: 'session_id IN ($placeholders)',
+        whereArgs: chunk,
+      );
+      for (final row in rows) {
+        result[row['session_id']! as String] = row;
+      }
+    }
+    return result;
+  }
   Future<void> saveMorningReport({required String sessionId, required int? wellbeing, required int? quality, required String answersJson}) async {
     await (await database).insert('morning_reports', {'id': _uuid.v4(), 'session_id': sessionId, 'report_date': DateTime.now().toIso8601String().substring(0, 10), 'wellbeing': wellbeing, 'sleep_quality': quality, 'answers_json': answersJson, 'created_at': DateTime.now().toUtc().toIso8601String()}, conflictAlgorithm: ConflictAlgorithm.replace);
   }
