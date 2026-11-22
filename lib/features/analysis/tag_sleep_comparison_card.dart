@@ -295,6 +295,7 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
         start: widget.start,
         endExclusive: widget.endExclusive,
         metric: _metric,
+        awakeningCountsBySession: data.awakeningCountsBySession,
       );
       final matchingTemplates = data.templates.where((item) => item.id == _activeTemplateId);
       final activeTemplate = matchingTemplates.isEmpty ? null : matchingTemplates.first;
