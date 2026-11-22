@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../data/sleep_database.dart';
@@ -57,57 +58,64 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
       : DateFormat('d MMMM yyyy, HH:mm', 'ru').format(value);
 
   Future<void> _editMorningReport(SleepSession session) async {
-    var hasRating = session.morningRating != null;
-    var rating = session.morningRating ?? 3;
-    final saved = await showDialog<bool>(
+    final existing = await widget.database.getMorningReport(session.id);
+    Map<String, dynamic> answers = {};
+    final raw = existing?['answers_json'];
+    if (raw is String && raw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map<String, dynamic>) answers = decoded;
+      } catch (_) {}
+    }
+    var quality = (existing?['sleep_quality'] as int?) ?? 3;
+    var wellbeing = (existing?['wellbeing'] as int?) ?? session.morningRating ?? 3;
+    var sleepiness = (answers['sleepiness'] as num?)?.toInt() ?? 3;
+    final comment = TextEditingController(text: answers['comment'] as String? ?? '');
+    final result = await showDialog<String>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('Утренний отчёт'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SwitchListTile.adaptive(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Оценить самочувствие'),
-                  value: hasRating,
-                  onChanged: (value) => setDialogState(() => hasRating = value),
-                ),
-                if (hasRating) ...[
-                  Text('Самочувствие: $rating из 5'),
-                  Slider(
-                    min: 1,
-                    max: 5,
-                    divisions: 4,
-                    value: rating.toDouble(),
-                    label: '$rating',
-                    onChanged: (value) => setDialogState(() => rating = value.round()),
-                  ),
-                  const Text('1 — очень плохо · 5 — отлично',
-                      style: TextStyle(color: AppTheme.muted, fontSize: 12)),
-                ],
-              ],
-            ),
-          ),
+          content: SingleChildScrollView(child: Column(
+            mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Насколько хорошо вы спали?'),
+              Text('$quality из 5'),
+              Slider(min: 1, max: 5, divisions: 4, value: quality.toDouble(), onChanged: (v) => setDialogState(() => quality = v.round())),
+              const SizedBox(height: 8),
+              const Text('Насколько вы чувствуете себя отдохнувшей?'),
+              Text('$wellbeing из 5'),
+              Slider(min: 1, max: 5, divisions: 4, value: wellbeing.toDouble(), onChanged: (v) => setDialogState(() => wellbeing = v.round())),
+              const SizedBox(height: 8),
+              const Text('Насколько сильно хочется спать сейчас?'),
+              Text('$sleepiness из 5'),
+              Slider(min: 1, max: 5, divisions: 4, value: sleepiness.toDouble(), onChanged: (v) => setDialogState(() => sleepiness = v.round())),
+              TextField(controller: comment, minLines: 1, maxLines: 3, decoration: const InputDecoration(labelText: 'Комментарий (необязательно)')),
+            ],
+          )),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Отмена')),
-            FilledButton(onPressed: () => Navigator.pop(dialogContext, true),
-                child: const Text('Сохранить')),
+            TextButton(onPressed: () => Navigator.pop(dialogContext, 'cancel'), child: const Text('Отмена')),
+            TextButton(onPressed: () => Navigator.pop(dialogContext, 'skip'), child: const Text('Пропустить оценку')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, 'save'), child: const Text('Сохранить')),
           ],
         ),
       ),
     );
-    if (saved == true) {
-      await widget.database.updateMorningRating(session.id, hasRating ? rating : null);
+    if (!mounted) { comment.dispose(); return; }
+    if (result == 'skip') {
+      await widget.database.saveMorningReport(sessionId: session.id, wellbeing: null, quality: null, answersJson: jsonEncode({'skipped': true}));
+      await widget.database.updateMorningRating(session.id, null);
+    } else if (result == 'save') {
+      await widget.database.saveMorningReport(
+        sessionId: session.id, wellbeing: wellbeing, quality: quality,
+        answersJson: jsonEncode({'wellbeing': wellbeing, 'sleepQuality': quality, 'sleepiness': sleepiness, 'comment': comment.text.trim(), 'skipped': false}),
+      );
+      await widget.database.updateMorningRating(session.id, wellbeing);
+    }
+    comment.dispose();
+    if (result == 'save' || result == 'skip') {
       await _reload();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Утренний отчёт сохранён')),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Утренний отчёт сохранён')));
     }
   }
 
@@ -195,9 +203,21 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                         FutureBuilder<Map<String, Object?>?>(future: _reportFuture, builder: (context, reportState) {
                           final report = reportState.data;
                           if (report == null && session.morningRating == null) return const Text('Оценки ещё не добавлены', style: TextStyle(color: AppTheme.muted));
+                          Map<String, dynamic> answers = {};
+                          final rawAnswers = report?['answers_json'];
+                          if (rawAnswers is String && rawAnswers.isNotEmpty) {
+                            try {
+                              final decoded = jsonDecode(rawAnswers);
+                              if (decoded is Map<String, dynamic>) answers = decoded;
+                            } catch (_) {}
+                          }
                           return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                             if (session.morningRating != null) Text('Самочувствие: ${session.morningRating} из 5', style: const TextStyle(fontWeight: FontWeight.w600)),
                             if (report?['sleep_quality'] != null) Text('Качество сна: ${report!['sleep_quality']} из 5', style: const TextStyle(fontWeight: FontWeight.w600)),
+                            if (answers['sleepiness'] != null) Text('Сонливость: ${answers['sleepiness']} из 5', style: const TextStyle(fontWeight: FontWeight.w600)),
+                            if ((answers['comment'] as String?)?.trim().isNotEmpty == true)
+                              Padding(padding: const EdgeInsets.only(top: 8), child: Text(answers['comment'] as String)),
+                            if (answers['skipped'] == true) const Text('Субъективная оценка пропущена', style: TextStyle(color: AppTheme.muted)),
                           ]);
                         }),
                         const SizedBox(height: 14),
