@@ -43,12 +43,12 @@ class _NightSessionScreenState extends State<NightSessionScreen> {
   }
 
   String _elapsed(Duration d) =>
-      '\${d.inHours.toString().padLeft(2, '0')}:\${d.inMinutes.remainder(60).toString().padLeft(2, '0')}:\${d.inSeconds.remainder(60).toString().padLeft(2, '0')}';
+      '${d.inHours.toString().padLeft(2, '0')}:${d.inMinutes.remainder(60).toString().padLeft(2, '0')}:${d.inSeconds.remainder(60).toString().padLeft(2, '0')}';
 
   String _audioDuration() {
     final m = _audioSeconds ~/ 60;
     final s = _audioSeconds % 60;
-    return m == 0 ? '$s с' : '$m мин \${s.toString().padLeft(2, '0')} с';
+    return m == 0 ? '$s с' : '$m мин ${s.toString().padLeft(2, '0')} с';
   }
 
   Future<void> _pause(bool paused) async {
