@@ -433,6 +433,7 @@ class _ClimateMetricLine extends StatelessWidget {
       Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
       const SizedBox(height: 5),
       Text('Мин. ${value.minimum.toStringAsFixed(1)}${value.unit} · сред. ${value.average.toStringAsFixed(1)}${value.unit} · макс. ${value.maximum.toStringAsFixed(1)}${value.unit}', style: const TextStyle(fontSize: 12)),
+      Text('Стандартное отклонение (σ): ${value.standardDeviation.toStringAsFixed(2)}${value.unit}', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
       Text('Последнее: ${value.lastValue.toStringAsFixed(1)}${value.unit} · $last · точек: ${value.count}', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
       if (value.coveragePercent != null)
         Text('Покрытие 15-минутного интервала: ${value.coveragePercent!.toStringAsFixed(0)}%', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
