@@ -135,7 +135,7 @@ class SleepDatabase {
   Future<Map<String, Object?>> exportSnapshot() async {
     final db = await database;
     return {
-      'schemaVersion': 7,
+      'schemaVersion': 8,
       'sleep_sessions': await db.query('sleep_sessions', orderBy: 'started_at ASC'),
       'sleep_session_tags': await db.query('sleep_session_tags', orderBy: 'session_id ASC, tag_key ASC'),
       'sleep_notes': await db.query('sleep_notes', orderBy: 'created_at ASC'),
@@ -151,7 +151,7 @@ class SleepDatabase {
   /// Полное восстановление с проверкой структуры и атомарной заменой данных.
   /// При любой ошибке SQLite откатывает транзакцию и оставляет исходную базу.
   Future<void> restoreSnapshot(Map<String, dynamic> snapshot, {bool merge = false}) async {
-    if (snapshot['schemaVersion'] != 3 && snapshot['schemaVersion'] != 4 && snapshot['schemaVersion'] != 5 && snapshot['schemaVersion'] != 6 && snapshot['schemaVersion'] != 7) {
+    if (snapshot['schemaVersion'] != 3 && snapshot['schemaVersion'] != 4 && snapshot['schemaVersion'] != 5 && snapshot['schemaVersion'] != 6 && snapshot['schemaVersion'] != 7 && snapshot['schemaVersion'] != 8) {
       throw const FormatException('Версия структуры резервной копии не поддерживается.');
     }
     const tables = ['sleep_sessions', 'sleep_session_tags', 'sleep_notes', 'app_metadata', 'sleep_stages', 'sleep_metrics', 'audio_events', 'morning_reports', 'climate_samples'];
