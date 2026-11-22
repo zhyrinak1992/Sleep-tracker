@@ -93,7 +93,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (deviceId == null) return;
     setState(() => _busy = true);
     try {
-      final count = await YandexSmartHomeService.instance.refreshSelectedDevice(deviceId: deviceId);
+      final activeSession = await SleepDatabase.instance.getOpenSession();
+      final count = await YandexSmartHomeService.instance.refreshSelectedDevice(deviceId: deviceId, sessionId: activeSession?.id);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(count == 0
         ? 'Новых измерений нет: датчик не передал обновлённые значения температуры или влажности.'
