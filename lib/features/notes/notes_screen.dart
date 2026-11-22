@@ -4,6 +4,7 @@ import '../../data/sleep_database.dart';
 import '../../models/sleep_note.dart';
 import '../../models/sleep_session.dart';
 import '../../models/sleep_tag.dart';
+import 'note_tag_filter.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/screen_header.dart';
@@ -180,9 +181,11 @@ class _NotesScreenState extends State<NotesScreen> {
             future: _taggedSessionIds,
             builder: (context, tagSnapshot) {
               final taggedSessionIds = tagSnapshot.data ?? const <String>{};
-              final visibleNotes = _selectedTags.isEmpty
-                  ? notes
-                  : notes.where((note) => taggedSessionIds.contains(note.sessionId)).toList();
+              final visibleNotes = filterNotesByTaggedSessions(
+                notes,
+                taggedSessionIds,
+                enabled: _selectedTags.isNotEmpty,
+              );
           return ListView(padding: const EdgeInsets.all(20), children: [
             const ScreenHeader(
               title: 'Заметки',
