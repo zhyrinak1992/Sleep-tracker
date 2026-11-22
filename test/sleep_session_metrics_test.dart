@@ -22,6 +22,11 @@ void main() {
     expect(result.sleepLatencyMinutes, 30);
     expect(result.sleepDurationMinutes, 440);
     expect(result.firstAwakeningAt, DateTime(2026, 11, 22, 1));
+    expect(result.awakeningCount, 1);
+    expect(result.awakeStageMinutes, 10);
+    expect(result.stageBreakdownMinutes['Глубокий'], 120);
+    expect(result.stageBreakdownMinutes['REM'], 320);
+    expect(result.stageBreakdownMinutes['Бодрствование'], 10);
     expect(result.finalWakeAt, DateTime(2026, 11, 22, 6, 30));
     expect(result.stageCoveragePercent, closeTo(450 / 510 * 100, 0.01));
     expect(result.sleepEfficiencyPercent, closeTo(440 / 510 * 100, 0.01));
@@ -51,4 +56,28 @@ void main() {
     expect(result.sleepDurationMinutes, 300);
     expect(result.timeInBedMinutes, 480);
   });
+
+  test('counts separate awakenings and avoids generic sleep double counting', () {
+    final start = DateTime(2026, 11, 21, 22);
+    final end = DateTime(2026, 11, 22, 6);
+    final session = SleepSession(id: 'night-awakenings', startedAt: start, endedAt: end);
+    Map<String, Object?> stage(String name, DateTime from, DateTime to) => {
+      'stage': name,
+      'started_at': from.toUtc().toIso8601String(),
+      'ended_at': to.toUtc().toIso8601String(),
+    };
+    final result = SleepSessionMetrics.calculate(session: session, stages: [
+      stage('Сон без уточнённой фазы', start, end),
+      stage('Лёгкий сон', start, DateTime(2026, 11, 21, 23)),
+      stage('Бодрствование', DateTime(2026, 11, 21, 23), DateTime(2026, 11, 21, 23, 5)),
+      stage('Бодрствование', DateTime(2026, 11, 22, 2), DateTime(2026, 11, 22, 2, 8)),
+      stage('REM-сон', DateTime(2026, 11, 22, 2, 8), DateTime(2026, 11, 22, 3)),
+    ]);
+    expect(result.awakeningCount, 2);
+    expect(result.awakeStageMinutes, 13);
+    expect(result.stageBreakdownMinutes.values.fold<int>(0, (a, b) => a + b), 480);
+    expect(result.stageBreakdownMinutes['Сон без уточнения'], 355);
+    expect(result.sleepDurationMinutes, 467);
+  });
+
 }

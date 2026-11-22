@@ -11,6 +11,8 @@ class SleepSessionMetrics {
     required this.sleepEfficiencyPercent,
     required this.stageCoveragePercent,
     required this.awakeStageMinutes,
+    required this.awakeningCount,
+    required this.stageBreakdownMinutes,
   });
 
   final int? timeInBedMinutes;
@@ -22,6 +24,8 @@ class SleepSessionMetrics {
   final double? sleepEfficiencyPercent;
   final double? stageCoveragePercent;
   final int awakeStageMinutes;
+  final int awakeningCount;
+  final Map<String, int> stageBreakdownMinutes;
 
   static SleepSessionMetrics calculate({
     required SleepSession session,
@@ -56,8 +60,13 @@ class SleepSessionMetrics {
       }
     }
 
-    final asleepMinutes = _mergedMinutes(asleep);
-    final awakeMinutes = _mergedMinutes(awake);
+    final mergedAwake = _mergeIntervals(awake);
+    final awakeMinutes = _durationMinutes(mergedAwake);
+    final stageBreakdown = _stageBreakdown(stages, bedStart, bedEnd);
+    // Subtract awake samples even when a broad asleep sample overlaps them.
+    final asleepMinutes = stageBreakdown.entries
+        .where((entry) => entry.key != 'Бодрствование')
+        .fold<int>(0, (sum, entry) => sum + entry.value);
     final coverageMinutes = _mergedMinutes([...asleep, ...awake]);
     final stageStart = asleep.isEmpty
         ? null
@@ -106,6 +115,8 @@ class SleepSessionMetrics {
       sleepEfficiencyPercent: efficiency,
       stageCoveragePercent: coverage,
       awakeStageMinutes: awakeMinutes,
+      awakeningCount: mergedAwake.length,
+      stageBreakdownMinutes: stageBreakdown,
     );
   }
 
@@ -119,23 +130,70 @@ class SleepSessionMetrics {
         stage.contains('light') || stage.contains('rem');
   }
 
-  static int _mergedMinutes(List<_SleepInterval> intervals) {
-    if (intervals.isEmpty) return 0;
+  static int _mergedMinutes(List<_SleepInterval> intervals) =>
+      _durationMinutes(_mergeIntervals(intervals));
+
+  static int _durationMinutes(List<_SleepInterval> intervals) =>
+      intervals.fold<int>(0, (sum, interval) =>
+          sum + interval.end.difference(interval.start).inMinutes);
+
+  static List<_SleepInterval> _mergeIntervals(List<_SleepInterval> intervals) {
+    if (intervals.isEmpty) return const [];
     final sorted = intervals.toList()..sort((a, b) => a.start.compareTo(b.start));
     var start = sorted.first.start;
     var end = sorted.first.end;
-    var total = 0;
+    final result = <_SleepInterval>[];
     for (final interval in sorted.skip(1)) {
       if (!interval.start.isAfter(end)) {
         if (interval.end.isAfter(end)) end = interval.end;
       } else {
-        total += end.difference(start).inMinutes;
+        result.add(_SleepInterval(start, end));
         start = interval.start;
         end = interval.end;
       }
     }
-    total += end.difference(start).inMinutes;
-    return total;
+    result.add(_SleepInterval(start, end));
+    return result;
+  }
+
+  /// Creates a non-overlapping phase distribution; generic asleep samples
+  /// do not double-count more specific stage intervals.
+  static Map<String, int> _stageBreakdown(List<Map<String, Object?>> stages, DateTime bedStart, DateTime? bedEnd) {
+    final intervals = <({String category, DateTime start, DateTime end})>[];
+    for (final row in stages) {
+      final category = _stageCategory((row['stage'] as String? ?? '').toLowerCase());
+      final startRaw = row['started_at'], endRaw = row['ended_at'];
+      if (category == null || startRaw is! String || endRaw is! String) continue;
+      var start = DateTime.tryParse(startRaw)?.toLocal();
+      var end = DateTime.tryParse(endRaw)?.toLocal();
+      if (start == null || end == null || !end.isAfter(start)) continue;
+      if (start.isBefore(bedStart)) start = bedStart;
+      if (bedEnd != null && end.isAfter(bedEnd)) end = bedEnd;
+      if (end.isAfter(start)) intervals.add((category: category, start: start, end: end));
+    }
+    if (intervals.isEmpty) return const {};
+    final boundaries = intervals.expand((x) => [x.start, x.end]).toSet().toList()..sort();
+    const priority = ['Бодрствование', 'REM', 'Глубокий', 'Основной', 'Лёгкий', 'Сон без уточнения'];
+    final totals = <String, int>{};
+    for (var i = 0; i < boundaries.length - 1; i++) {
+      final start = boundaries[i], end = boundaries[i + 1];
+      final active = intervals.where((x) => !x.start.isAfter(start) && !x.end.isBefore(end));
+      if (active.isEmpty) continue;
+      final categories = active.map((x) => x.category).toSet();
+      final selected = priority.firstWhere(categories.contains, orElse: () => categories.first);
+      totals[selected] = (totals[selected] ?? 0) + end.difference(start).inMinutes;
+    }
+    return Map.unmodifiable(totals);
+  }
+
+  static String? _stageCategory(String stage) {
+    if (_isAwake(stage)) return 'Бодрствование';
+    if (stage.contains('rem') || stage.contains('быстр')) return 'REM';
+    if (stage.contains('deep') || stage.contains('глубок')) return 'Глубокий';
+    if (stage.contains('core') || stage.contains('основн')) return 'Основной';
+    if (stage.contains('light') || stage.contains('лёгк') || stage.contains('легк')) return 'Лёгкий';
+    if (_isAsleep(stage)) return 'Сон без уточнения';
+    return null;
   }
 }
 
