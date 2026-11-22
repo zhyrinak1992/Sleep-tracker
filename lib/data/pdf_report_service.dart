@@ -9,20 +9,39 @@ import '../models/sleep_session.dart';
 import 'sleep_database.dart';
 
 class PdfReportService {
-  static Future<void> exportHistory({int days = 30}) async {
+  static Future<void> exportHistory({int days = 30, DateTime? from, DateTime? to}) async {
+    if ((from == null) != (to == null)) {
+      throw ArgumentError('Для произвольного периода укажите обе даты: начало и окончание.');
+    }
+    final now = DateTime.now();
+    final rangeStart = from == null
+        ? (days >= 3650 ? DateTime.fromMillisecondsSinceEpoch(0) : now.subtract(Duration(days: days)))
+        : DateTime(from.year, from.month, from.day);
+    final rangeEndExclusive = to == null
+        ? DateTime(now.year, now.month, now.day + 1)
+        : DateTime(to.year, to.month, to.day + 1);
+    if (!rangeEndExclusive.isAfter(rangeStart)) {
+      throw ArgumentError('Дата окончания отчёта должна быть не раньше даты начала.');
+    }
     final sessions = await SleepDatabase.instance.getSessions(limit: 10000);
-    final cutoff = days >= 3650 ? DateTime.fromMillisecondsSinceEpoch(0) : DateTime.now().subtract(Duration(days: days));
-    final selected = sessions.where((s) => !s.startedAt.isBefore(cutoff) && s.endedAt != null).toList();
+    final selected = sessions.where((s) =>
+      !s.startedAt.isBefore(rangeStart) && s.startedAt.isBefore(rangeEndExclusive) && s.endedAt != null
+    ).toList()..sort((a, b) => a.startedAt.compareTo(b.startedAt));
     final durations = selected.map((s) => s.duration!.inMinutes).toList();
     final reports = <Map<String, Object?>>[];
     for (final session in selected) { final report = await SleepDatabase.instance.getMorningReport(session.id); if (report != null) reports.add(report); }
     final wellbeing = reports.where((r) => r['wellbeing'] != null).map((r) => (r['wellbeing'] as num).toDouble()).toList();
     final quality = reports.where((r) => r['sleep_quality'] != null).map((r) => (r['sleep_quality'] as num).toDouble()).toList();
     final audio = await SleepDatabase.instance.getAudioEvents();
-    final audioInPeriod = audio.where((r) { final d = DateTime.tryParse(r['captured_at'] as String? ?? ''); return d != null && !d.isBefore(cutoff); }).toList();
+    final audioInPeriod = audio.where((r) {
+      final date = DateTime.tryParse(r['captured_at'] as String? ?? '');
+      return date != null && !date.isBefore(rangeStart) && date.isBefore(rangeEndExclusive);
+    }).toList();
     final audioCounts = <String, int>{};
     for (final event in audioInPeriod) { final category = event['category'] as String? ?? 'unknown'; audioCounts[category] = (audioCounts[category] ?? 0) + 1; }
-    final periodLabel = days >= 3650 ? 'за весь период' : 'за $days дней';
+    final periodLabel = from != null && to != null
+        ? 'с ${DateFormat('dd.MM.yyyy').format(rangeStart)} по ${DateFormat('dd.MM.yyyy').format(to)}'
+        : days >= 3650 ? 'за весь период' : 'за последние $days дней';
     final average = durations.isEmpty ? null : durations.reduce((a,b) => a+b) / durations.length;
     final regular = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Regular.ttf'));
     final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));

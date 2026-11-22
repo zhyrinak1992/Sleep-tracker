@@ -435,6 +435,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _exportCustomReport() async {
+    final today = DateUtils.dateOnly(DateTime.now());
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: today,
+      initialDateRange: DateTimeRange(
+        start: today.subtract(const Duration(days: 29)),
+        end: today,
+      ),
+      helpText: 'Выберите период отчёта',
+      saveText: 'Подготовить PDF',
+      cancelText: 'Отмена',
+      confirmText: 'Продолжить',
+    );
+    if (range == null || !mounted) return;
+    await _run(
+      () => PdfReportService.exportHistory(from: range.start, to: range.end),
+      'PDF-отчёт за выбранный период подготовлен.',
+    );
+  }
+
   @override
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.all(20),
@@ -601,9 +623,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const Text('Аудиофайлы хранятся не более 7 дней. При запуске приложения просроченные файлы и их записи удаляются; история сна и отчёты остаются.', style: TextStyle(color: AppTheme.muted, height: 1.45)),
         const SizedBox(height: 12),
         Wrap(spacing: 8, runSpacing: 8, children: [
-          OutlinedButton.icon(onPressed: _busy ? null : () => _run(() => PdfReportService.exportHistory(days: 7), 'Недельный PDF-отчёт подготовлен.'), icon: const Icon(Icons.picture_as_pdf_outlined), label: const Text('7 дней')),
-          OutlinedButton.icon(onPressed: _busy ? null : () => _run(() => PdfReportService.exportHistory(days: 30), 'Месячный PDF-отчёт подготовлен.'), icon: const Icon(Icons.picture_as_pdf_outlined), label: const Text('30 дней')),
-          OutlinedButton.icon(onPressed: _busy ? null : () => _run(() => PdfReportService.exportHistory(days: 3650), 'Отчёт за весь период подготовлен.'), icon: const Icon(Icons.picture_as_pdf_outlined), label: const Text('Весь период')),
+          OutlinedButton.icon(onPressed: _busy ? null : () => _run(() => PdfReportService.exportHistory(days: 7), 'Недельный PDF-отчёт подготовлен.'), icon: const Icon(Icons.picture_as_pdf_outlined), label: const Text('Неделя')),
+          OutlinedButton.icon(onPressed: _busy ? null : () => _run(() => PdfReportService.exportHistory(days: 30), 'Месячный PDF-отчёт подготовлен.'), icon: const Icon(Icons.picture_as_pdf_outlined), label: const Text('Месяц')),
+          OutlinedButton.icon(onPressed: _busy ? null : () => _run(() => PdfReportService.exportHistory(days: 90), 'PDF-отчёт за квартал подготовлен.'), icon: const Icon(Icons.picture_as_pdf_outlined), label: const Text('Квартал')),
+          OutlinedButton.icon(onPressed: _busy ? null : () => _run(() => PdfReportService.exportHistory(days: 180), 'PDF-отчёт за полгода подготовлен.'), icon: const Icon(Icons.picture_as_pdf_outlined), label: const Text('Полгода')),
+          OutlinedButton.icon(onPressed: _busy ? null : () => _run(() => PdfReportService.exportHistory(days: 365), 'Годовой PDF-отчёт подготовлен.'), icon: const Icon(Icons.picture_as_pdf_outlined), label: const Text('Год')),
+          OutlinedButton.icon(onPressed: _busy ? null : () => _run(() => PdfReportService.exportHistory(days: 3650), 'Отчёт за весь период подготовлен.'), icon: const Icon(Icons.picture_as_pdf_outlined), label: const Text('Вся история')),
+          OutlinedButton.icon(onPressed: _busy ? null : _exportCustomReport, icon: const Icon(Icons.date_range_outlined), label: const Text('Произвольный период')),
         ]),
         SizedBox(width: double.infinity, child: OutlinedButton.icon(
           onPressed: _busy ? null : () => _run(() async { await SleepDatabase.instance.deleteExpiredAudioEvents(DateTime.now()); final events = await SleepDatabase.instance.getAudioEvents(); await NotificationService.instance.scheduleAudioExpiry(events.map((row) => DateTime.parse(row['expires_at']! as String))); }, 'Проверка срока хранения завершена.'),
