@@ -97,7 +97,7 @@ class SleepRegularityAnalysis {
       return math.min(raw, 1440 - raw);
     }
 
-    double? median(List<int> values) {
+    double? median(List<num> values) {
       if (values.isEmpty) return null;
       final sorted = [...values]..sort();
       final middle = sorted.length ~/ 2;
