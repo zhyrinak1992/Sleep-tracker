@@ -26,13 +26,15 @@ class _ReferenceNightComparisonScreenState extends State<ReferenceNightCompariso
     await _sessionsFuture;
   }
   String _date(SleepSession s) => DateFormat('d MMM yyyy, HH:mm', 'ru').format(s.startedAt);
-  String _duration(int? m) => m == null ? 'Нет данных' : '\${m ~/ 60} ч \${m % 60} мин';
+  String _duration(int? m) => m == null ? 'Нет данных' : '${m ~/ 60} ч ${m % 60} мин';
   String _delta(int? value, int? reference, {String unit = 'мин'}) {
     if (value == null || reference == null) return 'Недостаточно сопоставимых данных';
     final d = value - reference;
     if (d == 0) return 'Без изменений';
     final n = d.abs();
-    final amount = unit == 'мин' ? '\${n ~/ 60 > 0 ? '\${n ~/ 60} ч ' : ''}\${n % 60} мин' : '$n $unit';
+    final hours = n ~/ 60;
+    final minutes = n % 60;
+    final amount = unit == 'мин' ? (hours > 0 ? '$hours ч $minutes мин' : '$minutes мин') : '$n $unit';
     return d > 0 ? 'На $amount больше эталона' : 'На $amount меньше эталона';
   }
   SleepSessionMetrics _metrics(SleepSession s, Map<String, List<Map<String, Object?>>> stages) =>
@@ -50,7 +52,7 @@ class _ReferenceNightComparisonScreenState extends State<ReferenceNightCompariso
     future: _sessionsFuture,
     builder: (context, snapshot) {
       if (snapshot.connectionState == ConnectionState.waiting) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-      if (snapshot.hasError) return Scaffold(appBar: AppBar(title: const Text('Эталонная ночь')), body: Center(child: Text('Не удалось загрузить дневник: \${snapshot.error}')));
+      if (snapshot.hasError) return Scaffold(appBar: AppBar(title: const Text('Эталонная ночь')), body: Center(child: Text('Не удалось загрузить дневник: ${snapshot.error}')));
       final sessions = (snapshot.data ?? const <SleepSession>[])
           .where((s) => !s.isOpen && s.duration != null && !s.duration!.isNegative).toList()
         ..sort((a, b) => b.startedAt.compareTo(a.startedAt));
@@ -80,7 +82,7 @@ class _ReferenceNightComparisonScreenState extends State<ReferenceNightCompariso
                 future: widget.database.getStagesForSessions(sessions.map((s) => s.id).toList()),
                 builder: (context, stageSnapshot) {
                   if (stageSnapshot.connectionState == ConnectionState.waiting) return const SectionCard(child: LinearProgressIndicator());
-                  if (stageSnapshot.hasError) return SectionCard(child: Text('Не удалось загрузить фазы сна: \${stageSnapshot.error}'));
+                  if (stageSnapshot.hasError) return SectionCard(child: Text('Не удалось загрузить фазы сна: ${stageSnapshot.error}'));
                   final stages = stageSnapshot.data ?? const <String, List<Map<String, Object?>>>{};
                   final baseline = _metrics(reference!, stages);
                   final others = sessions.where((s) => s.id != reference!.id).toList();
@@ -92,13 +94,13 @@ class _ReferenceNightComparisonScreenState extends State<ReferenceNightCompariso
                       const SizedBox(height: 8),
                       _metric('Длительность сна', _duration(baseline.sleepDurationMinutes)),
                       _metric('Время в постели', _duration(baseline.timeInBedMinutes)),
-                      _metric('Эффективность', baseline.sleepEfficiencyPercent == null ? 'Нет данных' : '\${baseline.sleepEfficiencyPercent!.toStringAsFixed(1)}%'),
-                      _metric('Пробуждения', '\${baseline.awakeningCount}'),
+                      _metric('Эффективность', baseline.sleepEfficiencyPercent == null ? 'Нет данных' : '${baseline.sleepEfficiencyPercent!.toStringAsFixed(1)}%'),
+                      _metric('Пробуждения', '${baseline.awakeningCount}'),
                       _metric('Бодрствование', _duration(baseline.awakeStageMinutes)),
-                      _metric('Самочувствие', reference!.morningRating == null ? 'Не оценено' : '\${reference.morningRating} из 5'),
+                      _metric('Самочувствие', reference!.morningRating == null ? 'Не оценено' : '${reference.morningRating} из 5'),
                     ])),
                     const SizedBox(height: 14),
-                    Text('Другие ночи · \${others.length}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
+                    Text('Другие ночи · ${others.length}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
                     const SizedBox(height: 8),
                     if (others.isEmpty) const SectionCard(child: Text('Выберите эталонную ночь, чтобы сравнить её с другими записями.'))
                     else for (final night in others) Builder(builder: (context) {
@@ -109,10 +111,11 @@ class _ReferenceNightComparisonScreenState extends State<ReferenceNightCompariso
                         _metric('Длительность сна', _duration(metric.sleepDurationMinutes)),
                         Text(_delta(metric.sleepDurationMinutes, baseline.sleepDurationMinutes), style: const TextStyle(color: AppTheme.teal, fontSize: 12)),
                         const Divider(height: 16),
-                        _metric('Эффективность', metric.sleepEfficiencyPercent == null ? 'Нет данных' : '\${metric.sleepEfficiencyPercent!.toStringAsFixed(1)}%'),
-                        _metric('Пробуждения', '\${metric.awakeningCount} · \${_delta(metric.awakeningCount, baseline.awakeningCount, unit: 'эп.')}'),
+                        _metric('Эффективность', metric.sleepEfficiencyPercent == null ? 'Нет данных' : '${metric.sleepEfficiencyPercent!.toStringAsFixed(1)}%'),
+                        final awakeningDelta = _delta(metric.awakeningCount, baseline.awakeningCount, unit: 'эп.');
+                        _metric('Пробуждения', '${metric.awakeningCount} · $awakeningDelta'),
                         _metric('Бодрствование', _duration(metric.awakeStageMinutes)),
-                        _metric('Самочувствие', night.morningRating == null ? 'Не оценено' : '\${night.morningRating} из 5'),
+                        _metric('Самочувствие', night.morningRating == null ? 'Не оценено' : '${night.morningRating} из 5'),
                         if (night.note?.trim().isNotEmpty == true) ...[const Divider(height: 16), Text(night.note!, style: const TextStyle(color: AppTheme.muted, fontSize: 12))],
                       ])));
                     }),
