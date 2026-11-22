@@ -173,11 +173,12 @@ class _NotesScreenState extends State<NotesScreen> {
         builder: (context, noteSnapshot) {
           final notes = noteSnapshot.data ?? const <SleepNote>[];
           return ListView(padding: const EdgeInsets.all(20), children: [
-            Text('Заметки', style: Theme.of(context).textTheme.headlineMedium),
-            const SizedBox(height: 6),
-            const Text('Несколько независимых заметок к каждой ночи',
-              style: TextStyle(color: AppTheme.muted)),
-            const SizedBox(height: 16),
+            const ScreenHeader(
+              title: 'Заметки',
+              subtitle: 'Несколько независимых заметок к каждой ночи',
+              icon: Icons.sticky_note_2_rounded,
+            ),
+            const SizedBox(height: 0),
             TextField(controller: _searchController,
               decoration: InputDecoration(prefixIcon: const Icon(Icons.search),
                 hintText: 'Поиск по тексту заметок', suffixIcon: IconButton(
