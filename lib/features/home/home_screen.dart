@@ -261,6 +261,9 @@ class _HomeScreenState extends State<HomeScreen> {
           await AudioObservationService.instance.startObservation();
         } catch (audioError) {
           await widget.database.finishSession(session.id);
+          // Starting the night cancels queued reminders. If microphone
+          // permission or recorder startup fails, restore the reminder queue.
+          await NotificationService.instance.scheduleNightReminders();
           await _refresh();
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
