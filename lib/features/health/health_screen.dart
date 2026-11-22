@@ -120,7 +120,7 @@ class _HealthScreenState extends State<HealthScreen> {
               for (final entry in visible.entries)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
-                  child: _MetricCard(type: entry.key, samples: entry.value),
+                  child: _MetricCard(type: entry.key, samples: entry.value, sessions: {for (final session in data.sessions) session.id: session}),
                 ),
             ],
             const Text(
@@ -173,9 +173,10 @@ class _CoverageCard extends StatelessWidget {
 }
 
 class _MetricCard extends StatelessWidget {
-  const _MetricCard({required this.type, required this.samples});
+  const _MetricCard({required this.type, required this.samples, required this.sessions});
   final String type;
   final List<_MetricSample> samples;
+  final Map<String, SleepSession> sessions;
 
   String get title => switch (type) {
     'Пульс' => 'Пульс',
@@ -219,8 +220,46 @@ class _MetricCard extends StatelessWidget {
         const SizedBox(height: 8),
         Text('Последнее: ${_date(latest.measuredAt)} · ${latest.source}',
           style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+        Align(alignment: Alignment.centerRight, child: TextButton.icon(
+          onPressed: () => _showHistory(context),
+          icon: const Icon(Icons.history_rounded, size: 17),
+          label: const Text('История измерений'),
+        )),
       ],
     ));
+  }
+
+  void _showHistory(BuildContext context) {
+    final rows = [...samples]..sort((a, b) => b.measuredAt.compareTo(a.measuredAt));
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('История: ' + title),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: rows.length,
+            separatorBuilder: (_, __) => const Divider(height: 12),
+            itemBuilder: (context, index) {
+              final sample = rows[index];
+              final session = sessions[sample.sessionId];
+              final nightLabel = session == null ? 'Ночная запись не найдена' : 'Ночь от ' + _date(session.startedAt);
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_number(sample.value) + ' ' + sample.unit, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text(_date(sample.measuredAt) + ' · ' + nightLabel, style: const TextStyle(fontSize: 12, color: AppTheme.muted)),
+                  Text(sample.source, style: const TextStyle(fontSize: 11, color: AppTheme.muted)),
+                ],
+              );
+            },
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Закрыть'))],
+      ),
+    );
   }
 }
 
