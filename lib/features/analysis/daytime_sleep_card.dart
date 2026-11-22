@@ -6,14 +6,17 @@ import 'package:uuid/uuid.dart';
 
 import '../../data/sleep_database.dart';
 import '../../models/daytime_sleep_entry.dart';
+import '../../models/sleep_session.dart';
+import 'daytime_sleep_analysis.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 
 /// Manual daytime-rest log. Stored in app_metadata so it is included in the
 /// existing transactional backup without requiring a destructive DB migration.
 class DaytimeSleepCard extends StatefulWidget {
-  const DaytimeSleepCard({super.key, required this.database});
+  const DaytimeSleepCard({super.key, required this.database, required this.sessions});
   final SleepDatabase database;
+  final List<SleepSession> sessions;
 
   @override
   State<DaytimeSleepCard> createState() => _DaytimeSleepCardState();
@@ -183,6 +186,13 @@ class _DaytimeSleepCardState extends State<DaytimeSleepCard> {
                     ),
                   );
                 }),
+                const Divider(height: 24, color: AppTheme.surfaceLight),
+                _NapNightComparison(
+                  comparison: DaytimeSleepAnalysis.compareWithFollowingNights(
+                    sessions: widget.sessions,
+                    naps: entries,
+                  ),
+                ),
               ],
             );
           },
@@ -245,13 +255,15 @@ class _DaytimeSleepEditorState extends State<_DaytimeSleepEditor> {
       context: context,
       initialTime: start ? _start : _end,
     );
-    if (selected != null) setState(() {
-      if (start) {
-        _start = selected;
-      } else {
-        _end = selected;
-      }
-    });
+    if (selected != null) {
+      setState(() {
+        if (start) {
+          _start = selected;
+        } else {
+          _end = selected;
+        }
+      });
+    }
   }
 
   void _save() {
@@ -312,4 +324,62 @@ class _DaytimeSleepEditorState extends State<_DaytimeSleepEditor> {
       FilledButton(onPressed: _save, child: const Text('Сохранить')),
     ],
   );
+}
+
+
+class _NapNightComparison extends StatelessWidget {
+  const _NapNightComparison({required this.comparison});
+  final DaytimeSleepComparison comparison;
+
+  String _format(double? minutes) {
+    if (minutes == null) return 'Недостаточно данных';
+    final value = minutes.round();
+    return '${value ~/ 60} ч ${value % 60} мин';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final difference = comparison.differenceMinutes;
+    final differenceText = difference == null
+        ? 'Для сравнения нужны ночи в обеих группах.'
+        : 'Разница средней продолжительности: ${difference > 0 ? '+' : ''}${difference.round()} мин.';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Дневной отдых и последующий ночной сон',
+          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+        const SizedBox(height: 8),
+        _NapComparisonRow(
+          label: 'После дневного сна (${comparison.nightsWithNap} ночей)',
+          value: _format(comparison.averageSleepWithNapMinutes),
+        ),
+        const SizedBox(height: 5),
+        _NapComparisonRow(
+          label: 'Без дневного сна (${comparison.nightsWithoutNap} ночей)',
+          value: _format(comparison.averageSleepWithoutNapMinutes),
+        ),
+        const SizedBox(height: 6),
+        Text(differenceText,
+          style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4)),
+        const SizedBox(height: 3),
+        const Text(
+          'Сопоставление описывает наблюдаемую разницу, а не доказывает, что дневной сон стал её причиной. Учитываются только завершённые ночи и вручную записанные дневные интервалы за предшествующие 24 часа.',
+          style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
+        ),
+      ],
+    );
+  }
+}
+
+class _NapComparisonRow extends StatelessWidget {
+  const _NapComparisonRow({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Row(children: [
+    Expanded(child: Text(label, style: const TextStyle(color: AppTheme.muted, fontSize: 12))),
+    const SizedBox(width: 8),
+    Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+  ]);
 }
