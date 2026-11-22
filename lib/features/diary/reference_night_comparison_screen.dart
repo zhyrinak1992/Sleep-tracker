@@ -112,8 +112,7 @@ class _ReferenceNightComparisonScreenState extends State<ReferenceNightCompariso
                         Text(_delta(metric.sleepDurationMinutes, baseline.sleepDurationMinutes), style: const TextStyle(color: AppTheme.teal, fontSize: 12)),
                         const Divider(height: 16),
                         _metric('Эффективность', metric.sleepEfficiencyPercent == null ? 'Нет данных' : '${metric.sleepEfficiencyPercent!.toStringAsFixed(1)}%'),
-                        final awakeningDelta = _delta(metric.awakeningCount, baseline.awakeningCount, unit: 'эп.');
-                        _metric('Пробуждения', '${metric.awakeningCount} · $awakeningDelta'),
+                        _metric('Пробуждения', '${metric.awakeningCount} · ${_delta(metric.awakeningCount, baseline.awakeningCount, unit: "эп.")}'),
                         _metric('Бодрствование', _duration(metric.awakeStageMinutes)),
                         _metric('Самочувствие', night.morningRating == null ? 'Не оценено' : '${night.morningRating} из 5'),
                         if (night.note?.trim().isNotEmpty == true) ...[const Divider(height: 16), Text(night.note!, style: const TextStyle(color: AppTheme.muted, fontSize: 12))],
