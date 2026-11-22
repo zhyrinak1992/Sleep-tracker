@@ -150,7 +150,7 @@ void main() {
       final result = TagSleepComparison.calculate(
         sessions: sessions,
         tagsBySession: tags,
-        tagKey: 'stress',
+        tagKeys: {'stress'},
         start: start,
         endExclusive: end,
         metric: TagSleepMetric.morningRating,
@@ -197,7 +197,7 @@ void main() {
       const template = TagComparisonTemplate(
         id: 'template-1',
         name: 'Кофе и сон',
-        tagKey: 'caffeine',
+        tagKeys: ['caffeine'],
         metric: TagSleepMetric.sleepDuration,
       );
 
