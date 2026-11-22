@@ -60,7 +60,9 @@ class NoteTagSuggestionAnalyzer {
         .toList()
       ..sort((a, b) {
         final byNights = b.nightCount.compareTo(a.nightCount);
-        return byNights != 0 ? byNights : a.phrase.length.compareTo(b.phrase.length);
+        if (byNights != 0) return byNights;
+        final byPhraseWords = b.phrase.split(' ').length.compareTo(a.phrase.split(' ').length);
+        return byPhraseWords != 0 ? byPhraseWords : b.phrase.length.compareTo(a.phrase.length);
       });
 
     // Keep one concise phrase when it is contained in a longer candidate
