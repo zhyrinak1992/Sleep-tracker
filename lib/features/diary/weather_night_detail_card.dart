@@ -2,11 +2,13 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../data/sleep_database.dart';
 import '../../data/weather_service.dart';
 import '../../models/sleep_session.dart';
+import '../analysis/moon_phase_analytics.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 
@@ -31,11 +33,16 @@ class WeatherNightDetailCard extends StatefulWidget {
 }
 
 class _WeatherNightDetailCardState extends State<WeatherNightDetailCard> {
+  static bool _timeZonesInitialized = false;
   late Future<_NightWeatherData?> _future;
 
   @override
   void initState() {
     super.initState();
+    if (!_timeZonesInitialized) {
+      tzdata.initializeTimeZones();
+      _timeZonesInitialized = true;
+    }
     _future = _load();
   }
 
@@ -43,16 +50,16 @@ class _WeatherNightDetailCardState extends State<WeatherNightDetailCard> {
   void didUpdateWidget(covariant WeatherNightDetailCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.session.id != widget.session.id ||
-        oldWidget.session.startedAt != widget.session.startedAt ||
-        oldWidget.session.endedAt != widget.session.endedAt) {
+        oldWidget.session.actualSleepStartedAt != widget.session.actualSleepStartedAt ||
+        oldWidget.session.actualSleepEndedAt != widget.session.actualSleepEndedAt) {
       _future = _load();
     }
   }
 
   Future<_NightWeatherData?> _load() async {
-    final start = widget.session.actualSleepStartedAt ?? widget.session.startedAt;
-    final end = widget.session.actualSleepEndedAt ?? widget.session.endedAt;
-    if (end == null || !end.isAfter(start)) return null;
+    final start = widget.session.actualSleepStartedAt;
+    final end = widget.session.actualSleepEndedAt;
+    if (start == null || end == null || !end.isAfter(start)) return null;
 
     final raw = await widget.database.getAppMetadata(WeatherService.locationStorageKey);
     if (raw == null || raw.isEmpty) return null;
@@ -100,6 +107,20 @@ class _WeatherNightDetailCardState extends State<WeatherNightDetailCard> {
     }
   }
 
+  String _daylight(double? seconds) {
+    if (seconds == null || !seconds.isFinite || seconds <= 0) return 'Нет данных';
+    final minutes = (seconds / 60).round();
+    return '${minutes ~/ 60} ч ${minutes % 60} мин';
+  }
+
+  MoonPhasePoint? _moonPhase() {
+    final start = widget.session.actualSleepStartedAt;
+    final end = widget.session.actualSleepEndedAt;
+    if (start == null || end == null || !end.isAfter(start)) return null;
+    final midpoint = start.add(Duration(microseconds: end.difference(start).inMicroseconds ~/ 2));
+    return MoonPhaseAnalytics.at(midpoint);
+  }
+
   Widget _row(String label, String value) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 4),
     child: Row(children: [
@@ -111,7 +132,12 @@ class _WeatherNightDetailCardState extends State<WeatherNightDetailCard> {
   );
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<_NightWeatherData?>(
+  Widget build(BuildContext context) {
+    final moon = _moonPhase();
+    final hasActualInterval = widget.session.actualSleepStartedAt != null &&
+        widget.session.actualSleepEndedAt != null &&
+        widget.session.actualSleepEndedAt!.isAfter(widget.session.actualSleepStartedAt!);
+    return FutureBuilder<_NightWeatherData?>(
     future: _future,
     builder: (context, state) {
       return SectionCard(child: Column(
@@ -125,9 +151,9 @@ class _WeatherNightDetailCardState extends State<WeatherNightDetailCard> {
           else if (state.hasError)
             Text('Не удалось загрузить архив погоды: ${state.error}',
               style: const TextStyle(color: AppTheme.accentPink, fontSize: 12))
-          else if ((widget.session.actualSleepEndedAt ?? widget.session.endedAt) == null)
-            const Text('Погодные данные появятся после завершения ночной сессии.',
-              style: TextStyle(color: AppTheme.muted, fontSize: 12))
+          else if (!hasActualInterval)
+            const Text('Погодные и астрономические показатели не рассчитываются: источник не предоставил фактические начало и окончание сна.',
+              style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4))
           else if (state.data == null)
             const Text('Выбери город в разделе «Анализ», чтобы получать историческую погоду. GPS не используется.',
               style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4))
@@ -150,6 +176,11 @@ class _WeatherNightDetailCardState extends State<WeatherNightDetailCard> {
               _solarTime(state.data!.summary.sunsetUtc, state.data!.location)),
             _row('Восход после пробуждения',
               _solarTime(state.data!.summary.sunriseUtc, state.data!.location)),
+            _row('Длительность светового дня', _daylight(state.data!.summary.daylightDurationSeconds)),
+            if (moon != null) ...[
+              _row('Фаза Луны в середине сна', moon.label),
+              _row('Расчётная освещённость Луны', MoonPhaseAnalytics.percent(moon.illumination)),
+            ],
             const SizedBox(height: 6),
             const Text(
               'Источник: Open-Meteo Historical Weather API. Это архивная модель для выбранного города, а не измерение внутри спальни. Недостающие часы не интерполируются.',
@@ -160,4 +191,5 @@ class _WeatherNightDetailCardState extends State<WeatherNightDetailCard> {
       ));
     },
   );
+  }
 }
