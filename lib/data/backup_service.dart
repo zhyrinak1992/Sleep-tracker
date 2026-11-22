@@ -15,20 +15,28 @@ class BackupService {
   static final BackupService instance = BackupService._();
 
   static const format = 'sleep_tracker_backup';
-  static const formatVersion = 2;
+  static const formatVersion = 3;
 
   Future<void> exportToFiles() async {
     final snapshot = await SleepDatabase.instance.exportSnapshot();
     final audioRows = (snapshot['audio_events'] as List).cast<Map<String, Object?>>();
+    var audioBytesTotal = 0;
     for (final row in audioRows) {
-      final source = File(row['file_path']! as String);
-      if (await source.exists()) row['audioDataB64'] = base64Encode(await source.readAsBytes());
+      final path = row['file_path'];
+      if (path is! String || path.isEmpty) throw StateError('У одного из аудиофрагментов отсутствует путь к файлу. Резервная копия не создана.');
+      final source = File(path);
+      if (!await source.exists()) throw StateError('Не найден аудиофайл одного из событий. Резервная копия не создана, чтобы не потерять данные.');
+      final bytes = await source.readAsBytes();
+      if (bytes.isEmpty) throw StateError('Обнаружен пустой аудиофайл. Резервная копия не создана.');
+      audioBytesTotal += bytes.length;
+      row['audioDataB64'] = base64Encode(bytes);
     }
     final document = <String, Object?>{
       'format': format,
       'formatVersion': formatVersion,
       'app': 'Sleep Tracker',
       'createdAt': DateTime.now().toUtc().toIso8601String(),
+      'summary': <String, Object?>{'sleepSessions': (snapshot['sleep_sessions'] as List).length, 'notes': (snapshot['sleep_notes'] as List).length, 'audioEvents': audioRows.length, 'audioBytes': audioBytesTotal, 'climateSamples': (snapshot['climate_samples'] as List).length},
       'data': snapshot,
     };
     final encoded = const JsonEncoder.withIndent('  ').convert(document);
@@ -59,7 +67,7 @@ class BackupService {
     final decoded = jsonDecode(utf8.decode(bytes));
     if (decoded is! Map<String, dynamic> ||
         decoded['format'] != format ||
-        (decoded['formatVersion'] != 1 && decoded['formatVersion'] != formatVersion) ||
+        (decoded['formatVersion'] != 1 && decoded['formatVersion'] != 2 && decoded['formatVersion'] != formatVersion) ||
         decoded['data'] is! Map<String, dynamic>) {
       throw const FormatException('Файл не является поддерживаемой резервной копией Sleep Tracker.');
     }
@@ -88,9 +96,12 @@ class BackupService {
         final row = audioRows[i];
         if (merge && existingAudioIds.contains(row['id'])) continue;
         final encoded = row.remove('audioDataB64');
-        // Old backups may contain metadata without the original audio bytes.
-        // Such entries are skipped rather than retaining an invalid path from another device.
-        if (encoded == null) continue;
+        // Format v3 promises a complete audio archive; reject damaged archives.
+        if (encoded == null) {
+          if (decoded['formatVersion'] == 3) throw const FormatException('В резервной копии отсутствует аудиофайл. Импорт отменён без изменения текущих данных.');
+          // Legacy archives may contain metadata without original audio bytes.
+          continue;
+        }
         if (encoded is! String) {
           throw const FormatException('Повреждён аудиофайл в резервной копии.');
         }
