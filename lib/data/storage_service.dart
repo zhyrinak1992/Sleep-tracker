@@ -43,8 +43,6 @@ class StorageService {
     final cache = await getApplicationCacheDirectory();
     final temporary = await getTemporaryDirectory();
 
-    final docsBytes = await _directoryBytes(documents);
-    final supportBytes = await _directoryBytes(support);
     final cacheBytes = await _directoryBytes(cache);
     final temporaryBytes = await _directoryBytes(temporary);
     final databaseBytes = await _databaseBytes(documents);
@@ -68,13 +66,7 @@ class StorageService {
 
     final freeBytes = await _safeDiskValue(() => DiskUsage.freeSpace());
     final totalDiskBytes = await _safeDiskValue(() => DiskUsage.totalSpace());
-    final otherBytes = (appBytes - databaseBytes - audioBytes - reportBytes - backupBytes - cacheBytes).clamp(0, appBytes);
-
-    // These values are computed separately to make sure a path-provider
-    // directory is not accidentally counted twice in the app total.
-    if (docsBytes + supportBytes + cacheBytes + temporaryBytes < 0) {
-      throw StateError('Некорректный размер хранилища.');
-    }
+    final otherBytes = (appBytes - databaseBytes - audioBytes - reportBytes - backupBytes - cacheBytes).clamp(0, appBytes).toInt();
 
     return StorageSnapshot(
       appBytes: appBytes,
