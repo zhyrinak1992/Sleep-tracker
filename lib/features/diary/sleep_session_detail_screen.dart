@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../data/sleep_database.dart';
+import '../analysis/climate_analytics.dart';
 import '../../models/sleep_session.dart';
 import '../../models/sleep_note.dart';
 import '../../theme/app_theme.dart';
@@ -22,6 +23,7 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
   late Future<List<SleepNote>> _notesFuture;
   late Future<List<Map<String, Object?>>> _stagesFuture;
   late Future<List<Map<String, Object?>>> _metricsFuture;
+  late Future<List<Map<String, Object?>>> _climateFuture;
   late Future<Map<String, Object?>?> _reportFuture;
 
   @override
@@ -31,6 +33,7 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
     _notesFuture = widget.database.getNotes(sessionId: widget.session.id);
     _stagesFuture = widget.database.getStages(widget.session.id);
     _metricsFuture = widget.database.getMetrics(widget.session.id);
+    _climateFuture = _loadClimate(widget.session);
     _reportFuture = widget.database.getMorningReport(widget.session.id);
   }
 
@@ -40,9 +43,20 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
       _notesFuture = widget.database.getNotes(sessionId: widget.session.id);
       _stagesFuture = widget.database.getStages(widget.session.id);
       _metricsFuture = widget.database.getMetrics(widget.session.id);
+      _climateFuture = _loadClimate(widget.session);
       _reportFuture = widget.database.getMorningReport(widget.session.id);
     });
     await _future;
+  }
+
+  Future<List<Map<String, Object?>>> _loadClimate(SleepSession session) {
+    final end = session.endedAt ?? DateTime.now();
+    if (!end.isAfter(session.startedAt)) return Future.value(const []);
+    return widget.database.getClimateSamples(
+      sessionId: session.id,
+      from: session.startedAt,
+      to: end,
+    );
   }
 
   String _duration(Duration? duration) {
@@ -311,10 +325,85 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                       const SizedBox(height: 8),
                       const Text('Показываются только измерения, реально полученные из Apple Health. Их отсутствие не заменяется оценками.', style: TextStyle(color: AppTheme.teal, fontSize: 12, height: 1.4)),
                     ])),
+                    const SizedBox(height: 12),
+                    SectionCard(child: FutureBuilder<List<Map<String, Object?>>>(
+                      future: _climateFuture,
+                      builder: (context, climateState) {
+                        if (climateState.connectionState == ConnectionState.waiting) {
+                          return const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text('Микроклимат спальни', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                            SizedBox(height: 10),
+                            LinearProgressIndicator(),
+                          ]);
+                        }
+                        if (climateState.hasError) {
+                          return const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text('Микроклимат спальни', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                            SizedBox(height: 8),
+                            Text('Не удалось загрузить измерения датчика.', style: TextStyle(color: AppTheme.muted)),
+                          ]);
+                        }
+                        final rows = climateState.data ?? const <Map<String, Object?>>[];
+                        final temperature = ClimateMetricSummary.fromSamples(
+                          rows, metricType: 'temperature',
+                          expectedInterval: const Duration(minutes: 15),
+                        );
+                        final humidity = ClimateMetricSummary.fromSamples(
+                          rows, metricType: 'humidity',
+                          expectedInterval: const Duration(minutes: 15),
+                        );
+                        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          const Text('Микроклимат спальни', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 4),
+                          const Text('Фактические показания выбранного датчика в интервале этой ночи.',
+                            style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4)),
+                          const SizedBox(height: 12),
+                          _NightClimateMetric(title: 'Температура', summary: temperature),
+                          const Divider(height: 18, color: AppTheme.surfaceLight),
+                          _NightClimateMetric(title: 'Влажность', summary: humidity),
+                          const SizedBox(height: 8),
+                          Text(
+                            rows.isEmpty
+                              ? 'За эту ночь измерения не поступали. Отсутствующие значения не восстанавливаются и не подставляются.'
+                              : 'Всего фактических измерений: ${rows.length}. Покрытие отражает только частоту полученных точек и не гарантирует непрерывный мониторинг.',
+                            style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
+                          ),
+                        ]);
+                      },
+                    )),
                   ],
                 ),
               ),
       );
     },
   );
+}
+
+
+class _NightClimateMetric extends StatelessWidget {
+  const _NightClimateMetric({required this.title, required this.summary});
+  final String title;
+  final ClimateMetricSummary? summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = summary;
+    if (value == null) {
+      return Row(children: [
+        Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w600))),
+        const Text('Нет данных', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
+      ]);
+    }
+    final first = DateFormat('HH:mm').format(value.firstMeasuredAt);
+    final last = DateFormat('HH:mm').format(value.lastMeasuredAt);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+      const SizedBox(height: 4),
+      Text('Мин. ${value.minimum.toStringAsFixed(1)} ${value.unit} · сред. ${value.average.toStringAsFixed(1)} ${value.unit} · макс. ${value.maximum.toStringAsFixed(1)} ${value.unit}'),
+      Text('${value.count} точек · ${first}–${last}', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+      if (value.coveragePercent != null)
+        Text('Расчётное покрытие интервала: ${value.coveragePercent!.toStringAsFixed(0)}%',
+          style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+    ]);
+  }
 }
