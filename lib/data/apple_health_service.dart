@@ -37,15 +37,44 @@ class AppleHealthService {
       await _health.configure();
       _configured = true;
     }
-    final sleepAuthorized = await _health.requestAuthorization(
-      _sleepTypes,
-      permissions: List.filled(_sleepTypes.length, HealthDataAccess.READ),
-    );
+    // Capture the HealthKit request state before asking. On iOS a true
+    // requestAuthorization result means the request was handled, not that
+    // read access was granted; HealthKit intentionally hides read grants.
+    final availability = _sleepTypes
+        .map((type) => '${type.name}=${_health.isDataTypeAvailable(type)}')
+        .join(', ');
+    String requestStatus;
+    try {
+      final status = await _health.getRequestStatusForAuthorization(
+        _sleepTypes,
+        permissions: List.filled(_sleepTypes.length, HealthDataAccess.READ),
+      );
+      requestStatus = status?.toString() ?? 'null (platform did not return a status)';
+    } catch (error) {
+      throw StateError(
+        'Диагностика HealthKit: не удалось определить статус запроса. '
+        'Доступность типов: $availability. Ошибка: $error',
+      );
+    }
+
+    bool sleepAuthorized;
+    try {
+      sleepAuthorized = await _health.requestAuthorization(
+        _sleepTypes,
+        permissions: List.filled(_sleepTypes.length, HealthDataAccess.READ),
+      );
+    } catch (error) {
+      throw StateError(
+        'Диагностика HealthKit: статус запроса — $requestStatus. '
+        'Доступность типов: $availability. Ошибка запроса: $error',
+      );
+    }
     if (!sleepAuthorized) {
       throw StateError(
-        'HealthKit не завершил запрос доступа к интервалам сна. '
-        'Проверьте, что приложение установлено с разрешением HealthKit, '
-        'а затем повторите запрос.',
+        'Диагностика HealthKit: requestAuthorization вернул false. '
+        'Статус до запроса: $requestStatus. '
+        'Доступность типов: $availability. '
+        'Это не позволяет определить, отказал ли пользователь в чтении данных.',
       );
     }
 
