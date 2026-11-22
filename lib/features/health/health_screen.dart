@@ -232,6 +232,7 @@ class _HealthScreenState extends State<HealthScreen> {
           _HealthDayCalendarCard(
             selectedDay: _selectedDay,
             entryFuture: _dayEntryFuture,
+            entriesFuture: _dayEntriesFuture,
             onSelect: _selectHealthDay,
             onEdit: _editHealthDay,
           ),
@@ -454,12 +455,44 @@ class _MonthlyTagBarsPainter extends CustomPainter {
 
 String _monthLabel(DateTime date) => '${date.month.toString().padLeft(2, '0')}.${date.year}';
 
-class _HealthDayCalendarCard extends StatelessWidget {
-  const _HealthDayCalendarCard({required this.selectedDay, required this.entryFuture, required this.onSelect, required this.onEdit});
+
+class _HealthDayCalendarCard extends StatefulWidget {
+  const _HealthDayCalendarCard({required this.selectedDay, required this.entryFuture, required this.entriesFuture, required this.onSelect, required this.onEdit});
   final DateTime selectedDay;
   final Future<_HealthDayEntry> entryFuture;
+  final Future<Map<DateTime, _HealthDayEntry>> entriesFuture;
   final ValueChanged<DateTime> onSelect;
   final VoidCallback onEdit;
+
+  @override
+  State<_HealthDayCalendarCard> createState() => _HealthDayCalendarCardState();
+}
+
+class _HealthDayCalendarCardState extends State<_HealthDayCalendarCard> {
+  late DateTime _visibleMonth;
+
+  @override
+  void initState() {
+    super.initState();
+    _visibleMonth = DateTime(widget.selectedDay.year, widget.selectedDay.month);
+  }
+
+  @override
+  void didUpdateWidget(covariant _HealthDayCalendarCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedDay.month != widget.selectedDay.month || oldWidget.selectedDay.year != widget.selectedDay.year) {
+      _visibleMonth = DateTime(widget.selectedDay.year, widget.selectedDay.month);
+    }
+  }
+
+  void _changeMonth(int offset) {
+    setState(() => _visibleMonth = DateTime(_visibleMonth.year, _visibleMonth.month + offset));
+  }
+
+  DateTime _dateForCell(int index) {
+    final firstWeekday = DateTime(_visibleMonth.year, _visibleMonth.month, 1).weekday - 1;
+    return DateTime(_visibleMonth.year, _visibleMonth.month, index - firstWeekday + 1);
+  }
 
   @override
   Widget build(BuildContext context) => SectionCard(child: Column(
@@ -467,35 +500,99 @@ class _HealthDayCalendarCard extends StatelessWidget {
     children: [
       const Text('Календарь здоровья', style: TextStyle(fontWeight: FontWeight.w700)),
       const SizedBox(height: 4),
-      const Text('Выберите день, чтобы добавить несколько отметок и личный комментарий.', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
-      CalendarDatePicker(
-        initialDate: selectedDay,
-        firstDate: DateTime(2000),
-        lastDate: DateTime(2100),
-        onDateChanged: onSelect,
+      const Text('Дни с отметками и комментариями выделены в календаре.', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
+      FutureBuilder<Map<DateTime, _HealthDayEntry>>(
+        future: widget.entriesFuture,
+        builder: (context, snapshot) {
+          final entries = snapshot.data ?? const <DateTime, _HealthDayEntry>{};
+          final firstWeekday = DateTime(_visibleMonth.year, _visibleMonth.month, 1).weekday - 1;
+          final daysInMonth = DateTime(_visibleMonth.year, _visibleMonth.month + 1, 0).day;
+          final cellCount = ((firstWeekday + daysInMonth + 6) ~/ 7) * 7;
+          const weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+          return Column(children: [
+            const SizedBox(height: 10),
+            Row(children: [
+              IconButton(tooltip: 'Предыдущий месяц', onPressed: () => _changeMonth(-1), icon: const Icon(Icons.chevron_left_rounded)),
+              Expanded(child: Center(child: Text(_monthTitle(_visibleMonth), style: const TextStyle(fontWeight: FontWeight.w700)))),
+              IconButton(tooltip: 'Следующий месяц', onPressed: () => _changeMonth(1), icon: const Icon(Icons.chevron_right_rounded)),
+            ]),
+            Row(children: [for (final day in weekdays) Expanded(child: Center(child: Text(day, style: const TextStyle(color: AppTheme.muted, fontSize: 10))))]),
+            const SizedBox(height: 6),
+            for (var row = 0; row < cellCount ~/ 7; row++)
+              Row(children: [
+                for (var column = 0; column < 7; column++)
+                  Expanded(child: _buildDayCell(firstWeekday + row * 7 + column, entries)),
+              ]),
+            if (snapshot.connectionState == ConnectionState.waiting)
+              const Padding(padding: EdgeInsets.only(top: 4), child: LinearProgressIndicator(minHeight: 2)),
+          ]);
+        },
       ),
-      const Divider(height: 12),
+      const Divider(height: 18),
       Row(children: [
-        Expanded(child: Text(_date(selectedDay), style: const TextStyle(fontWeight: FontWeight.w700))),
-        TextButton.icon(onPressed: onEdit, icon: const Icon(Icons.edit_note_rounded), label: const Text('Изменить')),
+        Expanded(child: Text(_date(widget.selectedDay), style: const TextStyle(fontWeight: FontWeight.w700))),
+        TextButton.icon(onPressed: widget.onEdit, icon: const Icon(Icons.edit_note_rounded), label: const Text('Изменить')),
       ]),
       FutureBuilder<_HealthDayEntry>(
-        future: entryFuture,
+        future: widget.entryFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) return const LinearProgressIndicator();
           final entry = snapshot.data ?? const _HealthDayEntry(note: '', tags: []);
           return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             if (entry.tags.isNotEmpty) Wrap(spacing: 6, runSpacing: 4, children: [for (final tag in entry.tags) Chip(label: Text(tag))]),
-            if (entry.note.isNotEmpty) Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(entry.note, style: const TextStyle(height: 1.4)),
-            ),
+            if (entry.note.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text(entry.note, style: const TextStyle(height: 1.4))),
             if (entry.tags.isEmpty && entry.note.isEmpty) const Text('Для этого дня пока нет отметок и комментариев.', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
           ]);
         },
       ),
     ],
   ));
+
+  Widget _buildDayCell(int index, Map<DateTime, _HealthDayEntry> entries) {
+    final day = _dateForCell(index);
+    final inMonth = day.month == _visibleMonth.month;
+    final key = DateTime(day.year, day.month, day.day);
+    final entry = entries[key];
+    final isSelected = key == DateTime(widget.selectedDay.year, widget.selectedDay.month, widget.selectedDay.day);
+    final isToday = key == DateTime.now().year == false;
+    final today = DateTime.now();
+    final selectedToday = key.year == today.year && key.month == today.month && key.day == today.day;
+    final hasTags = entry?.tags.isNotEmpty ?? false;
+    final hasNote = entry?.note.isNotEmpty ?? false;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          if (!inMonth) _changeMonth(day.month - _visibleMonth.month + (day.year - _visibleMonth.year) * 12);
+          widget.onSelect(day);
+        },
+        child: Container(
+          height: 42,
+          margin: const EdgeInsets.symmetric(horizontal: 1),
+          decoration: BoxDecoration(
+            color: isSelected ? AppTheme.accent.withValues(alpha: 0.22) : null,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: isSelected ? AppTheme.accent : selectedToday ? AppTheme.accent.withValues(alpha: 0.55) : Colors.transparent),
+          ),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text('${day.day}', style: TextStyle(fontSize: 12, color: inMonth ? null : AppTheme.muted.withValues(alpha: 0.45), fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500)),
+            const SizedBox(height: 3),
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              if (hasTags) Container(width: 4, height: 4, decoration: const BoxDecoration(color: Color(0xFFB9A7FF), shape: BoxShape.circle)),
+              if (hasTags && hasNote) const SizedBox(width: 3),
+              if (hasNote) Container(width: 4, height: 4, decoration: const BoxDecoration(color: Color(0xFF65C8D0), shape: BoxShape.circle)),
+            ]),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+String _monthTitle(DateTime date) {
+  const months = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+  return '${months[date.month - 1]} ${date.year}';
 }
 
 class _ComparisonCard extends StatelessWidget {
