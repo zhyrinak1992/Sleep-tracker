@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../data/sleep_database.dart';
 import '../../models/sleep_session.dart';
@@ -18,11 +19,88 @@ class _HealthScreenState extends State<HealthScreen> {
   int _days = 30;
   DateTimeRange? _customRange;
   DateTimeRange? _comparisonRange;
+  DateTime _selectedDay = DateTime.now();
+  late Future<_HealthDayEntry> _dayEntryFuture;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+    _dayEntryFuture = _loadDayEntry(_selectedDay);
+  }
+
+  String _dayMetadataKey(DateTime day) => 'health_day_${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
+
+  Future<_HealthDayEntry> _loadDayEntry(DateTime day) async {
+    final raw = await widget.database.getAppMetadata(_dayMetadataKey(day));
+    if (raw == null || raw.isEmpty) return const _HealthDayEntry(note: '', tags: []);
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return const _HealthDayEntry(note: '', tags: []);
+      final note = decoded['note'] is String ? decoded['note'] as String : '';
+      final tags = decoded['tags'] is List ? (decoded['tags'] as List).whereType<String>().toSet().toList() : <String>[];
+      return _HealthDayEntry(note: note, tags: tags);
+    } catch (_) {
+      return const _HealthDayEntry(note: '', tags: []);
+    }
+  }
+
+  Future<void> _selectHealthDay(DateTime day) async {
+    final selected = DateTime(day.year, day.month, day.day);
+    setState(() {
+      _selectedDay = selected;
+      _dayEntryFuture = _loadDayEntry(selected);
+    });
+  }
+
+  Future<void> _editHealthDay() async {
+    final existing = await _dayEntryFuture;
+    if (!mounted) return;
+    final noteController = TextEditingController(text: existing.note);
+    final tagController = TextEditingController();
+    final tags = existing.tags.toSet();
+    const presets = ['Стресс', 'Кофеин', 'Тренировка', 'Болезнь', 'Боль', 'Лекарства', 'Путешествие', 'Поздний ужин', 'Алкоголь', 'Дневной сон'];
+    final result = await showDialog<_HealthDayEntry>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Запись за ${_date(_selectedDay)}'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Отметки дня', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Wrap(spacing: 6, runSpacing: 4, children: [
+                  for (final tag in presets)
+                    FilterChip(label: Text(tag), selected: tags.contains(tag), onSelected: (selected) => setDialogState(() { if (selected) { tags.add(tag); } else { tags.remove(tag); } })),
+                  for (final tag in tags.where((tag) => !presets.contains(tag)).toList())
+                    InputChip(label: Text(tag), onDeleted: () => setDialogState(() => tags.remove(tag))),
+                ]),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(child: TextField(controller: tagController, textInputAction: TextInputAction.done, decoration: const InputDecoration(labelText: 'Своя отметка', hintText: 'Например, поздний подъём'))),
+                  IconButton(icon: const Icon(Icons.add_circle_outline), onPressed: () { final value = tagController.text.trim(); if (value.isNotEmpty) { setDialogState(() => tags.add(value)); tagController.clear(); } }),
+                ]),
+                const SizedBox(height: 12),
+                TextField(controller: noteController, minLines: 3, maxLines: 6, decoration: const InputDecoration(labelText: 'Комментарий к дню', hintText: 'Самочувствие, события, лекарства и другие заметки')),
+              ],
+            )),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Отмена')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, _HealthDayEntry(note: noteController.text.trim(), tags: tags.toList()..sort())), child: const Text('Сохранить')),
+          ],
+        ),
+      ),
+    );
+    noteController.dispose();
+    tagController.dispose();
+    if (result == null || !mounted) return;
+    await widget.database.setAppMetadata(_dayMetadataKey(_selectedDay), jsonEncode(result.toJson()));
+    if (mounted) setState(() => _dayEntryFuture = Future.value(result));
   }
 
   Future<_HealthSnapshot> _load() async {
@@ -124,6 +202,14 @@ class _HealthScreenState extends State<HealthScreen> {
               icon: const Icon(Icons.refresh_rounded),
             ),
           ]),
+          const SizedBox(height: 12),
+          _HealthDayCalendarCard(
+            selectedDay: _selectedDay,
+            entryFuture: _dayEntryFuture,
+            onSelect: _selectHealthDay,
+            onEdit: _editHealthDay,
+          ),
+          const SizedBox(height: 12),
           if (snapshot.connectionState == ConnectionState.waiting)
             const Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator()))
           else if (snapshot.hasError)
@@ -190,6 +276,57 @@ class _HealthScreenState extends State<HealthScreen> {
       );
     },
   );
+}
+
+class _HealthDayEntry {
+  const _HealthDayEntry({required this.note, required this.tags});
+  final String note;
+  final List<String> tags;
+  Map<String, Object?> toJson() => {'note': note, 'tags': tags};
+}
+
+class _HealthDayCalendarCard extends StatelessWidget {
+  const _HealthDayCalendarCard({required this.selectedDay, required this.entryFuture, required this.onSelect, required this.onEdit});
+  final DateTime selectedDay;
+  final Future<_HealthDayEntry> entryFuture;
+  final ValueChanged<DateTime> onSelect;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) => SectionCard(child: Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text('Календарь здоровья', style: TextStyle(fontWeight: FontWeight.w700)),
+      const SizedBox(height: 4),
+      const Text('Выберите день, чтобы добавить несколько отметок и личный комментарий.', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
+      CalendarDatePicker(
+        initialDate: selectedDay,
+        firstDate: DateTime(2000),
+        lastDate: DateTime(2100),
+        onDateChanged: onSelect,
+      ),
+      const Divider(height: 12),
+      Row(children: [
+        Expanded(child: Text(_date(selectedDay), style: const TextStyle(fontWeight: FontWeight.w700))),
+        TextButton.icon(onPressed: onEdit, icon: const Icon(Icons.edit_note_rounded), label: const Text('Изменить')),
+      ]),
+      FutureBuilder<_HealthDayEntry>(
+        future: entryFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) return const LinearProgressIndicator();
+          final entry = snapshot.data ?? const _HealthDayEntry(note: '', tags: []);
+          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (entry.tags.isNotEmpty) Wrap(spacing: 6, runSpacing: 4, children: [for (final tag in entry.tags) Chip(label: Text(tag))]),
+            if (entry.note.isNotEmpty) Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(entry.note, style: const TextStyle(height: 1.4)),
+            ),
+            if (entry.tags.isEmpty && entry.note.isEmpty) const Text('Для этого дня пока нет отметок и комментариев.', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
+          ]);
+        },
+      ),
+    ],
+  ));
 }
 
 class _ComparisonCard extends StatelessWidget {
