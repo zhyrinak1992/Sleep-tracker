@@ -1,4 +1,4 @@
-import '../models/sleep_session.dart';
+import '../../models/sleep_session.dart';
 
 class SleepSessionMetrics {
   const SleepSessionMetrics({
