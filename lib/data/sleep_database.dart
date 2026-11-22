@@ -598,6 +598,7 @@ class SleepDatabase {
   }
   Future<List<Map<String, Object?>>> getStages(String sessionId) async => (await database).query('sleep_stages', where: 'session_id = ?', whereArgs: [sessionId], orderBy: 'started_at');
   Future<List<Map<String, Object?>>> getMetrics(String sessionId) async => (await database).query('sleep_metrics', where: 'session_id = ?', whereArgs: [sessionId], orderBy: 'measured_at');
+  Future<List<Map<String, Object?>>> getAllMetrics() async => (await database).query('sleep_metrics', orderBy: 'measured_at');
   Future<List<Map<String, Object?>>> getAudioEvents({String? sessionId}) async { final db = await database; return db.query('audio_events', where: sessionId == null ? null : 'session_id = ?', whereArgs: sessionId == null ? null : [sessionId], orderBy: 'captured_at DESC'); }
   Future<void> saveAudioEvent({required String id, required String? sessionId, required String filePath, required String category, required DateTime capturedAt, required int durationMs}) async {
     await (await database).insert('audio_events', {'id': id, 'session_id': sessionId, 'file_path': filePath, 'category': category, 'confidence': null, 'captured_at': capturedAt.toUtc().toIso8601String(), 'expires_at': capturedAt.toUtc().add(const Duration(days: 7)).toIso8601String(), 'duration_ms': durationMs, 'user_corrected': 0});
