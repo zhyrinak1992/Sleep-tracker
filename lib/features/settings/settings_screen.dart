@@ -267,10 +267,83 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _createBackup() => _run(
-    BackupService.instance.exportToFiles,
-    'Подготовлена резервная копия. Выберите «Сохранить в Файлы».',
-  );
+  Future<String?> _requestBackupPassword({required bool confirm}) async {
+    final passwordController = TextEditingController();
+    final confirmController = TextEditingController();
+    String? errorText;
+    try {
+      return await showDialog<String>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            title: Text(confirm ? 'Задать пароль копии' : 'Пароль резервной копии'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Пароль не сохраняется в приложении. Он понадобится при восстановлении на этом или другом iPhone. Используйте не менее 10 символов.'),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: passwordController,
+                  obscureText: true,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: const InputDecoration(labelText: 'Пароль', border: OutlineInputBorder()),
+                ),
+                if (confirm) ...[
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: confirmController,
+                    obscureText: true,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    decoration: const InputDecoration(labelText: 'Повторите пароль', border: OutlineInputBorder()),
+                  ),
+                ],
+                if (errorText != null) ...[
+                  const SizedBox(height: 8),
+                  Text(errorText!, style: const TextStyle(color: Colors.red)),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Отмена'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final password = passwordController.text;
+                  if (password.length < 10) {
+                    setDialogState(() => errorText = 'Нужно не менее 10 символов.');
+                    return;
+                  }
+                  if (confirm && password != confirmController.text) {
+                    setDialogState(() => errorText = 'Пароли не совпадают.');
+                    return;
+                  }
+                  Navigator.pop(dialogContext, password);
+                },
+                child: Text(confirm ? 'Создать копию' : 'Продолжить'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } finally {
+      passwordController.dispose();
+      confirmController.dispose();
+    }
+  }
+
+  Future<void> _createBackup() async {
+    final password = await _requestBackupPassword(confirm: true);
+    if (password == null || !mounted) return;
+    await _run(
+      () => BackupService.instance.exportToFiles(password: password),
+      'Зашифрованная резервная копия подготовлена. Выберите «Сохранить в Файлы».',
+    );
+  }
 
   Future<void> _restoreBackup() async {
     if (_busy) return;
@@ -299,7 +372,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (merge == null || !mounted) return;
     setState(() => _busy = true);
     try {
-      final result = await BackupService.instance.importFromFiles(merge: merge);
+      final result = await BackupService.instance.importFromFiles(merge: merge, requestPassword: () => _requestBackupPassword(confirm: false));
       if (!mounted) return;
       if (result == BackupImportResult.imported) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -346,13 +419,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Text('Резервное копирование', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
           const SizedBox(height: 8),
           const Text(
-            'Создайте файл со всей сохранённой историей сна, оценками, тегами, заметками и сохранёнными аудиофрагментами. '
-            'Файл можно сохранить в «Файлы» или перенести на другой iPhone.',
+            'Резервная копия содержит историю сна, оценки, теги, заметки, показатели, настройки и сохранённые аудиофрагменты. Новый формат шифруется паролем AES-256-GCM и подходит для переноса на другой iPhone.',
             style: TextStyle(color: AppTheme.muted, height: 1.5),
           ),
           const SizedBox(height: 8),
           const Text(
-            'Важно: резервная копия сейчас создаётся в незашифрованном JSON-файле. В нём могут быть личные сведения о сне и аудиофрагменты. Сохраняйте файл в защищённое место и не отправляйте его посторонним. Защита Face ID внутри приложения не шифрует экспортированный файл.',
+            'Запомните пароль: приложение не хранит его и не сможет восстановить. Старые незашифрованные JSON-копии также можно импортировать, но при переносе рекомендуется создать новую зашифрованную копию.',
             style: TextStyle(color: AppTheme.warning, fontSize: 12, height: 1.45),
           ),
           const SizedBox(height: 14),
