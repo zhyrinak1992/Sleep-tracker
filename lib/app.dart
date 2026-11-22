@@ -14,6 +14,22 @@ class SleepTrackerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // In release builds Flutter's default error widget can appear as a
+    // featureless grey rectangle. Show the actual exception instead.
+    ErrorWidget.builder = (details) => Material(
+      color: AppTheme.background,
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: SelectableText(
+            'Не удалось отобразить этот экран.\n\n${details.exceptionAsString()}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+          ),
+        ),
+      ),
+    );
+
     return MaterialApp(
       title: 'Трекер сна',
       debugShowCheckedModeBanner: false,
@@ -33,7 +49,25 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   int _index = 0;
   final _database = SleepDatabase.instance;
+  final List<Widget?> _pages = List<Widget?>.filled(5, null);
   Timer? _cleanupTimer;
+
+  Widget _createPage(int index) {
+    switch (index) {
+      case 0:
+        return HomeScreen(database: _database);
+      case 1:
+        return AnalysisScreen(database: _database);
+      case 2:
+        return DiaryScreen(database: _database);
+      case 3:
+        return NotesScreen(database: _database);
+      case 4:
+        return const SettingsScreen();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
 
   @override
   void initState() {
@@ -43,12 +77,22 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   }
 
   @override
-  void dispose() { _cleanupTimer?.cancel(); WidgetsBinding.instance.removeObserver(this); super.dispose(); }
+  void dispose() {
+    _cleanupTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
   Future<void> _cleanupAudio() async {
-    await _database.deleteExpiredAudioEvents(DateTime.now());
-    final events = await _database.getAudioEvents();
-    await NotificationService.instance.scheduleAudioExpiry(events.map((row) => DateTime.parse(row['expires_at']! as String)));
+    try {
+      await _database.deleteExpiredAudioEvents(DateTime.now());
+      final events = await _database.getAudioEvents();
+      await NotificationService.instance.scheduleAudioExpiry(
+        events.map((row) => DateTime.parse(row['expires_at']! as String)),
+      );
+    } catch (error, stackTrace) {
+      debugPrint('Audio cleanup failed: $error\n$stackTrace');
+    }
   }
 
   @override
@@ -60,13 +104,12 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final pages = <Widget>[
-      HomeScreen(database: _database),
-      AnalysisScreen(database: _database),
-      DiaryScreen(database: _database),
-      NotesScreen(database: _database),
-      const SettingsScreen(),
-    ];
+    _pages[_index] ??= _createPage(_index);
+    final pages = List<Widget>.generate(
+      _pages.length,
+      (index) => _pages[index] ?? const SizedBox.shrink(),
+    );
+
     return Scaffold(
       body: SafeArea(child: IndexedStack(index: _index, children: pages)),
       bottomNavigationBar: NavigationBar(
