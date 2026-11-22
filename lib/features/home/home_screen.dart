@@ -354,86 +354,111 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
         children: [
           Padding(
-            padding: const EdgeInsets.only(bottom: 22),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(30),
-              child: SizedBox(
-                height: 390,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    CustomPaint(painter: _DreamyNightPainter()),
-                    const DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [Color(0x160A102A), Color(0x1A0A102A), Color(0xF20A102A)],
-                          stops: [0, .42, 1],
+            padding: const EdgeInsets.fromLTRB(4, 4, 4, 18),
+            child: Row(
+              children: [
+                const Icon(Icons.calendar_month_rounded, color: Color(0xFFE8C7F6), size: 19),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    DateFormat('EEEE, d MMMM', 'ru').format(now),
+                    style: const TextStyle(color: Color(0xFFE9E0F7), fontSize: 13,
+                      letterSpacing: .7, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF211B43),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: const Color(0xFF9F80C8).withValues(alpha: .75)),
+                    boxShadow: [BoxShadow(color: const Color(0xFFB98CEB).withValues(alpha: .12), blurRadius: 18)],
+                  ),
+                  child: const Row(children: [
+                    Icon(Icons.nightlight_round, color: Color(0xFFFFD8A8), size: 15),
+                    SizedBox(width: 7),
+                    Text('РЕЖИМ СНА', style: TextStyle(color: Colors.white, fontSize: 10,
+                      letterSpacing: 1.1, fontWeight: FontWeight.w700)),
+                  ]),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            height: 390,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(32),
+              gradient: const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                colors: [Color(0xFF19183F), Color(0xFF111532), Color(0xFF0A102A)]),
+              border: Border.all(color: const Color(0xFF8170B5).withValues(alpha: .28)),
+              boxShadow: [BoxShadow(color: const Color(0xFF8E67C9).withValues(alpha: .13), blurRadius: 32, spreadRadius: 1)],
+            ),
+            child: Stack(
+              children: [
+                Positioned.fill(child: ClipRRect(
+                  borderRadius: BorderRadius.circular(32),
+                  child: CustomPaint(painter: _PremiumSleepPainter()),
+                )),
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(26, 26, 26, 24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 2),
+                        Container(
+                          width: 66, height: 66,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: const Color(0xFFB58DEB).withValues(alpha: .12),
+                            border: Border.all(color: const Color(0xFFE6C8FF).withValues(alpha: .4)),
+                            boxShadow: [BoxShadow(color: const Color(0xFFB78BF3).withValues(alpha: .18), blurRadius: 22)],
+                          ),
+                          child: const Icon(Icons.bedtime_rounded, size: 31, color: Color(0xFFE8C7FF)),
                         ),
-                      ),
-                    ),
-                    Positioned(
-                      top: 18, left: 20, right: 20,
-                      child: Row(
-                        children: [
-                          const Icon(Icons.auto_awesome, color: Color(0xFFFFD7B0), size: 17),
-                          const SizedBox(width: 8),
-                          Text(DateFormat('EEEE, d MMMM', 'ru').format(now).toUpperCase(),
-                            style: const TextStyle(color: Color(0xFFE5D7FF), letterSpacing: 1.5, fontSize: 10, fontWeight: FontWeight.w700)),
-                        ],
-                      ),
-                    ),
-                    Positioned(
-                      left: 22, right: 22, bottom: 22,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Text(_open == null ? 'Пора отдыхать?' : 'Сладких снов',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontSize: 27, height: 1.15, fontWeight: FontWeight.w700,
-                              color: Colors.white, shadows: [Shadow(color: Color(0xAA120D2C), blurRadius: 18)])),
-                          const SizedBox(height: 7),
-                          Text(_open == null ? 'Начните ночное наблюдение и позвольте себе отдохнуть' : 'Ночная сессия уже идёт',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(color: Color(0xFFE0D8F4), fontSize: 12, height: 1.4)),
-                          const SizedBox(height: 17),
-                          SizedBox(
-                            width: double.infinity,
+                        const SizedBox(height: 15),
+                        Text(_open == null ? 'Готовы ко сну?' : 'Ночная запись идёт',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w700,
+                            letterSpacing: .1, color: Colors.white)),
+                        const SizedBox(height: 8),
+                        Text(_open == null
+                            ? 'Запустите наблюдение, чтобы отслеживать ваш сон'
+                            : 'Начало: ${DateFormat('HH:mm').format(_open!.startedAt)}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Color(0xFFC8BEDF), fontSize: 13, height: 1.45)),
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 58,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(30),
+                              gradient: const LinearGradient(begin: Alignment.centerLeft, end: Alignment.centerRight,
+                                colors: [Color(0xFFE6B9F5), Color(0xFFB78AF0), Color(0xFF8E82E9)]),
+                              boxShadow: [BoxShadow(color: const Color(0xFFC18CF3).withValues(alpha: .32),
+                                blurRadius: 24, offset: const Offset(0, 7))],
+                            ),
                             child: FilledButton.icon(
                               onPressed: _loading ? null : _toggleSession,
-                              icon: Icon(_open == null ? Icons.play_arrow_rounded : Icons.stop_rounded, size: 23),
+                              icon: Icon(_open == null ? Icons.play_arrow_rounded : Icons.stop_rounded, size: 24),
                               label: Text(_open == null ? 'Начать сон' : 'Завершить запись'),
                               style: FilledButton.styleFrom(
-                                backgroundColor: const Color(0xFFE4B8F7),
-                                foregroundColor: const Color(0xFF21143D),
-                                elevation: 10,
-                                shadowColor: const Color(0xFFFFB8E8).withValues(alpha: .35),
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                                textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                                backgroundColor: Colors.transparent,
+                                disabledBackgroundColor: Colors.transparent,
+                                shadowColor: Colors.transparent,
+                                foregroundColor: const Color(0xFF211638),
                                 shape: const StadiumBorder(),
+                                textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: .2),
                               ),
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                    Positioned(
-                      top: 18, right: 18,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-                        decoration: BoxDecoration(color: const Color(0x66201A42), borderRadius: BorderRadius.circular(30),
-                          border: Border.all(color: const Color(0x88E7C5FF))),
-                        child: const Row(children: [
-                          Icon(Icons.nightlight_round, color: Color(0xFFFFD9A9), size: 14),
-                          SizedBox(width: 5),
-                          Text('SLEEP MODE', style: TextStyle(color: Colors.white, fontSize: 9, letterSpacing: 1.1, fontWeight: FontWeight.w700)),
-                        ]),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
           if (_open == null && (now.hour == 23 && now.minute >= 55 || now.hour >= 0 && now.hour < 6)) ...[
@@ -574,6 +599,81 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
+
+class _PremiumSleepPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final center = Offset(size.width / 2, size.height * .49);
+    final radius = size.width * .39;
+
+    // Subtle star field.
+    final stars = <Offset>[
+      Offset(size.width * .10, size.height * .12), Offset(size.width * .82, size.height * .13),
+      Offset(size.width * .91, size.height * .31), Offset(size.width * .13, size.height * .42),
+      Offset(size.width * .76, size.height * .56), Offset(size.width * .23, size.height * .68),
+      Offset(size.width * .88, size.height * .79), Offset(size.width * .54, size.height * .09),
+    ];
+    for (var i = 0; i < stars.length; i++) {
+      final p = stars[i];
+      canvas.drawCircle(p, i % 3 == 0 ? 2.0 : 1.2,
+        Paint()..color = const Color(0xFFDCC8FF).withValues(alpha: i % 2 == 0 ? .8 : .45));
+    }
+
+    // Large soft halo and refined circular arc.
+    final circleRect = Rect.fromCircle(center: center, radius: radius);
+    final halo = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 9
+      ..color = const Color(0xFFB88AF0).withValues(alpha: .12)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 17);
+    canvas.drawCircle(center, radius, halo);
+
+    final track = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.2
+      ..strokeCap = StrokeCap.round
+      ..color = const Color(0xFF8873B8).withValues(alpha: .36);
+    canvas.drawArc(circleRect, -2.25, 4.95, false, track);
+
+    final arc = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.4
+      ..strokeCap = StrokeCap.round
+      ..shader = const SweepGradient(
+        startAngle: -1.1,
+        endAngle: 5.1,
+        colors: [Color(0xFF9B7AF0), Color(0xFFE5B6F4), Color(0xFFFFD0C2), Color(0xFF9B7AF0)],
+      ).createShader(circleRect);
+    canvas.drawArc(circleRect, -2.15, 3.25, false, arc);
+
+    // Crescent moon in the upper-right corner.
+    final moon = Offset(size.width * .79, size.height * .19);
+    canvas.drawCircle(moon, 23, Paint()
+      ..color = const Color(0xFFFFCFAE).withValues(alpha: .22)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16));
+    canvas.drawCircle(moon, 17, Paint()..color = const Color(0xFFFFD9AE));
+    canvas.drawCircle(moon.translate(8, -5), 16, Paint()..color = const Color(0xFF19183F));
+
+    // Low, layered cloud silhouettes keep the composition quiet.
+    final cloudPaint = Paint()..shader = const LinearGradient(
+      begin: Alignment.topCenter, end: Alignment.bottomCenter,
+      colors: [Color(0xFF8E79B4), Color(0xFF3B365F), Color(0x00171638)],
+    ).createShader(Rect.fromLTWH(0, size.height * .70, size.width, size.height * .30));
+    final path = Path()
+      ..moveTo(0, size.height * .82)
+      ..cubicTo(size.width * .10, size.height * .70, size.width * .18, size.height * .74, size.width * .28, size.height * .82)
+      ..cubicTo(size.width * .38, size.height * .69, size.width * .49, size.height * .73, size.width * .57, size.height * .82)
+      ..cubicTo(size.width * .68, size.height * .69, size.width * .83, size.height * .72, size.width, size.height * .81)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(path, cloudPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _DreamyNightPainter extends CustomPainter {
