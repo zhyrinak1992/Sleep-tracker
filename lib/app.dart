@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'data/notification_service.dart';
 import 'data/sleep_database.dart';
+import 'data/yandex_smart_home_service.dart';
 import 'features/home/home_screen.dart';
 import 'features/diary/diary_screen.dart';
 import 'features/analysis/analysis_screen.dart';
@@ -60,6 +61,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   final _database = SleepDatabase.instance;
   final List<Widget?> _pages = List<Widget?>.filled(5, null);
   Timer? _cleanupTimer;
+  Timer? _climateTimer;
 
   Widget _createPage(int index) {
     switch (index) {
@@ -83,11 +85,14 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _cleanupTimer = Timer.periodic(const Duration(minutes: 30), (_) => _cleanupAudio());
+    _climateTimer = Timer.periodic(const Duration(minutes: 15), (_) => _refreshClimate());
+    _refreshClimate();
   }
 
   @override
   void dispose() {
     _cleanupTimer?.cancel();
+    _climateTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -104,10 +109,19 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _refreshClimate() async {
+    try {
+      await YandexSmartHomeService.instance.refreshConfiguredDeviceIfNeeded();
+    } catch (error, stackTrace) {
+      debugPrint('Yandex climate sampling failed: $error\\n$stackTrace');
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _cleanupAudio();
+      _refreshClimate();
     }
   }
 
