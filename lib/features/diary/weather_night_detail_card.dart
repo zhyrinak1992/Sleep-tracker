@@ -73,6 +73,10 @@ class _WeatherNightDetailCardState extends State<WeatherNightDetailCard> {
     return _WeatherNightDetail(location: location, summary: summary, solarDay: solar, updatedAt: updatedAt);
   }
 
+  String _updatedLabel(DateTime? value) => value == null
+      ? 'время обновления неизвестно'
+      : 'обновлено ${DateFormat('d MMM yyyy, HH:mm', 'ru').format(value)}';
+
   String _number(double? value, String unit) =>
       value == null ? 'Нет данных' : '${value.toStringAsFixed(1)} $unit';
 
@@ -149,7 +153,7 @@ class _WeatherNightDetailCardState extends State<WeatherNightDetailCard> {
             _row('Расчётная освещённость Луны',
               moon == null ? 'Нет данных' : '${(moon.illumination * 100).round()}%'),
             if (data != null)
-              Text('Источник: Open-Meteo Historical Weather API · ${data.updatedAt == null ? 'время обновления неизвестно' : 'обновлено ${DateFormat('d MMM yyyy, HH:mm', 'ru').format(data.updatedAt!)}'}',
+              Text('Источник: Open-Meteo Historical Weather API · ${_updatedLabel(data.updatedAt)}',
                 style: const TextStyle(color: AppTheme.muted, fontSize: 10, height: 1.35)),
             const Text(
               'Погодные значения — архивная модель для координат выбранного города, а не измерение внутри спальни. Фаза и освещённость Луны рассчитываются локально и не измеряют яркость в помещении.',
