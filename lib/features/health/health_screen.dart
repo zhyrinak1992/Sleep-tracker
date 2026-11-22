@@ -287,7 +287,7 @@ class _HealthScreenState extends State<HealthScreen> {
             else ...[
               _CoverageCard(samples: visible),
               const SizedBox(height: 12),
-              _ComparisonCard(current: visible, previous: previous, previousStart: previousStart, previousEnd: previousEnd),
+              _ComparisonCard(current: visible, previous: previous, currentStart: selectedStart, currentEnd: selectedEnd, previousStart: previousStart, previousEnd: previousEnd),
               const SizedBox(height: 12),
               for (final entry in visible.entries)
                 Padding(
@@ -499,9 +499,11 @@ class _HealthDayCalendarCard extends StatelessWidget {
 }
 
 class _ComparisonCard extends StatelessWidget {
-  const _ComparisonCard({required this.current, required this.previous, required this.previousStart, required this.previousEnd});
+  const _ComparisonCard({required this.current, required this.previous, required this.currentStart, required this.currentEnd, required this.previousStart, required this.previousEnd});
   final Map<String, List<_MetricSample>> current;
   final Map<String, List<_MetricSample>> previous;
+  final DateTime currentStart;
+  final DateTime currentEnd;
   final DateTime previousStart;
   final DateTime previousEnd;
 
@@ -509,14 +511,15 @@ class _ComparisonCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final common = current.keys.where((key) => previous.containsKey(key)).toList();
     if (common.isEmpty) {
-      return const SectionCard(child: Text('Для сравнения пока недостаточно измерений в предыдущем равном по длительности периоде.', style: TextStyle(color: AppTheme.muted)));
+      return const SectionCard(child: Text('Для выбранных периодов пока недостаточно общих физиологических показателей для сравнения.', style: TextStyle(color: AppTheme.muted)));
     }
     return SectionCard(child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('Сравнение периодов', style: TextStyle(fontWeight: FontWeight.w700)),
         const SizedBox(height: 4),
-        Text('${_date(previousStart)} — ${_date(previousEnd)}', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+        Text('Выбранный: ${_date(currentStart)} — ${_date(currentEnd)}', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+        Text('Сравнение: ${_date(previousStart)} — ${_date(previousEnd)}', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
         const SizedBox(height: 10),
         for (final key in common) ...[
           _ComparisonRow(type: key, current: current[key]!, previous: previous[key]!),
@@ -549,7 +552,7 @@ class _ComparisonRow extends StatelessWidget {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(type, style: const TextStyle(fontWeight: FontWeight.w600)),
       const SizedBox(height: 4),
-      Text('Сейчас: ${_number(currentAverage)} $unit · ранее: ${_number(previousAverage)} $unit', style: const TextStyle(fontSize: 12)),
+      Text('Выбранный период: ${_number(currentAverage)} $unit · период сравнения: ${_number(previousAverage)} $unit', style: const TextStyle(fontSize: 12)),
       Text('Изменение: $deltaText$percentText', style: const TextStyle(color: AppTheme.muted, fontSize: 12)),
       Text('${current.length} / ${previous.length} измерений', style: const TextStyle(color: AppTheme.muted, fontSize: 10)),
     ]);
