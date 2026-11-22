@@ -1,12 +1,223 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
+import 'dart:async';
 import '../../data/notification_service.dart';
 import '../../data/audio_observation_service.dart';
 import '../../data/sleep_database.dart';
 import '../../models/sleep_session.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
+
+class NightSessionScreen extends StatefulWidget {
+  const NightSessionScreen({super.key, required this.database, required this.session});
+  final SleepDatabase database;
+  final SleepSession session;
+  @override
+  State<NightSessionScreen> createState() => _NightSessionScreenState();
+}
+
+class _NightSessionScreenState extends State<NightSessionScreen> {
+  Timer? _ticker;
+  DateTime _now = DateTime.now();
+  int _eventCount = 0;
+  int _audioSeconds = 0;
+  bool _finishing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+    _loadStats();
+  }
+
+  Future<void> _loadStats() async {
+    final rows = await widget.database.getAudioEvents(sessionId: widget.session.id);
+    if (!mounted) return;
+    setState(() {
+      _eventCount = rows.length;
+      _audioSeconds = rows.fold<int>(0, (sum, row) => sum + (((row['duration_ms'] as int?) ?? 0) ~/ 1000));
+    });
+  }
+
+  String _elapsed(Duration d) =>
+      '\${d.inHours.toString().padLeft(2, '0')}:\${d.inMinutes.remainder(60).toString().padLeft(2, '0')}:\${d.inSeconds.remainder(60).toString().padLeft(2, '0')}';
+
+  String _audioDuration() {
+    final m = _audioSeconds ~/ 60;
+    final s = _audioSeconds % 60;
+    return m == 0 ? '$s с' : '$m мин \${s.toString().padLeft(2, '0')} с';
+  }
+
+  Future<void> _pause(bool paused) async {
+    try {
+      if (paused) {
+        await AudioObservationService.instance.resumeObservation();
+      } else {
+        await AudioObservationService.instance.pauseObservation();
+      }
+      await _loadStats();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Не удалось изменить аудио: $e')));
+    }
+  }
+
+  Future<void> _finish() async {
+    if (_finishing) return;
+    final yes = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('Завершить эту ночь?'),
+      content: const Text('Аудионаблюдение остановится, а сессия сохранится в дневнике.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Продолжить ночь')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Завершить')),
+      ],
+    ));
+    if (yes != true || !mounted) return;
+    setState(() => _finishing = true);
+    try {
+      await AudioObservationService.instance.stopObservation();
+      await widget.database.finishSession(widget.session.id);
+      await NotificationService.instance.reportReady();
+      await NotificationService.instance.scheduleNightReminders();
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _finishing = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Не удалось завершить сессию: $e')));
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final elapsed = _now.difference(widget.session.startedAt);
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(gradient: LinearGradient(
+          begin: Alignment.topCenter, end: Alignment.bottomCenter,
+          colors: [Color(0xFF121E3C), Color(0xFF091528), Color(0xFF071222)],
+        )),
+        child: SafeArea(child: ListView(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 30),
+          children: [
+            Align(alignment: Alignment.centerLeft, child: IconButton(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 30),
+              tooltip: 'Свернуть ночной экран',
+            )),
+            const SizedBox(height: 10),
+            const Icon(Icons.nights_stay_rounded, size: 68, color: Color(0xFFC3B5FF)),
+            const SizedBox(height: 16),
+            const Center(child: Text('ДОБРОЙ НОЧИ', style: TextStyle(
+              letterSpacing: 4, fontSize: 12, color: Color(0xFFB9B0E9), fontWeight: FontWeight.w700))),
+            const SizedBox(height: 8),
+            const Center(child: Text('Пусть эта ночь будет\nспокойной', textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 25, height: 1.25, fontWeight: FontWeight.w600))),
+            const SizedBox(height: 28),
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(32),
+                gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
+                  colors: [Color(0xFF1D3457), Color(0xFF10243D), Color(0xFF17213D)]),
+                border: Border.all(color: const Color(0xFF9B8DE0).withValues(alpha: .45)),
+                boxShadow: [BoxShadow(color: const Color(0xFF8D83D5).withValues(alpha: .16), blurRadius: 38, spreadRadius: 2)],
+              ),
+              child: Column(children: [
+                const Text('ВРЕМЯ НАБЛЮДЕНИЯ', style: TextStyle(letterSpacing: 2, fontSize: 11, color: Color(0xFFAABBD5))),
+                const SizedBox(height: 10),
+                Text(_elapsed(elapsed), style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w300, letterSpacing: 2)),
+                const SizedBox(height: 8),
+                const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Icon(Icons.circle, color: AppTheme.teal, size: 8),
+                  SizedBox(width: 8),
+                  Text('Ночная сессия продолжается', style: TextStyle(color: AppTheme.teal, fontSize: 12)),
+                ]),
+                const SizedBox(height: 22),
+                Row(mainAxisAlignment: MainAxisAlignment.center, children: List.generate(25, (i) =>
+                  Container(margin: const EdgeInsets.symmetric(horizontal: 2), width: 3, height: 10 + ((i * 17) % 25).toDouble(),
+                    decoration: BoxDecoration(color: i % 3 == 0 ? const Color(0xFFB5A4F5) : AppTheme.teal, borderRadius: BorderRadius.circular(4))))),
+                const SizedBox(height: 22),
+                Divider(color: Colors.white.withValues(alpha: .12)),
+                Row(children: [
+                  Expanded(child: _NightMetric(label: 'Начало', value: DateFormat('HH:mm').format(widget.session.startedAt))),
+                  Expanded(child: _NightMetric(label: 'События', value: '$_eventCount')),
+                ]),
+                const SizedBox(height: 18),
+                Row(children: [
+                  Expanded(child: _NightMetric(label: 'Длительность фрагментов', value: _audioDuration())),
+                  Expanded(child: _NightMetric(label: 'Дата', value: DateFormat('d MMM', 'ru').format(widget.session.startedAt))),
+                ]),
+              ]),
+            ),
+            const SizedBox(height: 20),
+            ValueListenableBuilder<bool>(
+              valueListenable: AudioObservationService.instance.observing,
+              builder: (context, observing, _) => ValueListenableBuilder<bool>(
+                valueListenable: AudioObservationService.instance.paused,
+                builder: (context, paused, _) => Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: .045),
+                    borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white.withValues(alpha: .09))),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      Icon(observing && !paused ? Icons.graphic_eq_rounded : Icons.mic_off_rounded, color: AppTheme.teal),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(!observing ? 'Аудио не активно' : paused ? 'Аудио на паузе' : 'Аудионаблюдение активно',
+                        style: const TextStyle(fontWeight: FontWeight.w600))),
+                    ]),
+                    const SizedBox(height: 8),
+                    const Text('Сохраняются отдельные звуковые события. Тихие промежутки не записываются.',
+                      style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4)),
+                    if (observing) ...[
+                      const SizedBox(height: 14),
+                      SizedBox(width: double.infinity, child: OutlinedButton.icon(
+                        onPressed: () => _pause(paused),
+                        icon: Icon(paused ? Icons.play_arrow_rounded : Icons.pause_rounded),
+                        label: Text(paused ? 'Возобновить аудио' : 'Пауза аудио'),
+                      )),
+                    ],
+                  ]),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(width: double.infinity, child: FilledButton.icon(
+              onPressed: _finishing ? null : _finish,
+              icon: const Icon(Icons.wb_sunny_outlined),
+              label: Text(_finishing ? 'Сохраняем ночь…' : 'Завершить ночь'),
+              style: FilledButton.styleFrom(backgroundColor: const Color(0xFF59D8C5), foregroundColor: const Color(0xFF082033),
+                padding: const EdgeInsets.symmetric(vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
+            )),
+            const SizedBox(height: 12),
+            const Text('Фазы сна и физиологические показатели появятся при наличии данных Apple Health.',
+              textAlign: TextAlign.center, style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4)),
+          ],
+        )),
+      ),
+    );
+  }
+}
+
+class _NightMetric extends StatelessWidget {
+  const _NightMetric({required this.label, required this.value});
+  final String label;
+  final String value;
+  @override
+  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    Text(label, style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+    const SizedBox(height: 5),
+    Text(value, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+  ]);
+}
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.database});
@@ -59,6 +270,14 @@ class _HomeScreenState extends State<HomeScreen> {
           }
           return;
         }
+        await _refresh();
+        if (!mounted) return;
+        await Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => NightSessionScreen(database: widget.database, session: session),
+          fullscreenDialog: true,
+        ));
+        await _refresh();
+        return;
       } else {
         await AudioObservationService.instance.stopObservation();
         await widget.database.finishSession(_open!.id);
