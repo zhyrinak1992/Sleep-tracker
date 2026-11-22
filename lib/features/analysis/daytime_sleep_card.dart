@@ -21,7 +21,6 @@ class DaytimeSleepCard extends StatefulWidget {
 
 class _DaytimeSleepCardState extends State<DaytimeSleepCard> {
   static const _storageKey = 'sleep_tracker_daytime_sleep_v1';
-  static const _uuid = Uuid();
   late Future<List<DaytimeSleepEntry>> _entriesFuture;
 
   @override
@@ -236,7 +235,9 @@ class _DaytimeSleepEditorState extends State<_DaytimeSleepEditor> {
       firstDate: DateTime(2000),
       lastDate: DateTime.now().add(const Duration(days: 1)),
     );
-    if (selected != null) setState(() => _date = selected);
+    if (selected != null) {
+      setState(() => _date = selected);
+    }
   }
 
   Future<void> _pickTime({required bool start}) async {
