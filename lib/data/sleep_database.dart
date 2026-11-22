@@ -343,7 +343,7 @@ class SleepDatabase {
     return db.delete('audio_events', where: 'expires_at <= ?', whereArgs: [now.toUtc().toIso8601String()]);
   }
   Future<Map<String, Object?>?> getMorningReport(String sessionId) async { final rows = await (await database).query('morning_reports', where: 'session_id = ?', whereArgs: [sessionId], limit: 1); return rows.isEmpty ? null : rows.first; }
-  Future<void> saveMorningReport({required String sessionId, required int wellbeing, required int quality, required String answersJson}) async {
+  Future<void> saveMorningReport({required String sessionId, required int? wellbeing, required int? quality, required String answersJson}) async {
     await (await database).insert('morning_reports', {'id': _uuid.v4(), 'session_id': sessionId, 'report_date': DateTime.now().toIso8601String().substring(0, 10), 'wellbeing': wellbeing, 'sleep_quality': quality, 'answers_json': answersJson, 'created_at': DateTime.now().toUtc().toIso8601String()}, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
