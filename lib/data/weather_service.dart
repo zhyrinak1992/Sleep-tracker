@@ -4,6 +4,9 @@ import 'package:http/http.dart' as http;
 
 import 'sleep_database.dart';
 
+String _weatherDateKey(DateTime value) =>
+    '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+
 DateTime _parseWeatherUtc(String value) {
   final hasOffset = RegExp(r'(Z|[+-]\d{2}:\d{2})$').hasMatch(value);
   if (hasOffset) return DateTime.parse(value).toUtc();
@@ -119,16 +122,23 @@ class HourlyWeatherPoint {
 }
 
 class SolarEvent {
-  const SolarEvent({required this.date, this.sunriseUtc, this.sunsetUtc});
+  const SolarEvent({
+    required this.date,
+    this.sunriseUtc,
+    this.sunsetUtc,
+    this.daylightDurationSeconds,
+  });
 
   final String date;
   final DateTime? sunriseUtc;
   final DateTime? sunsetUtc;
+  final double? daylightDurationSeconds;
 
   Map<String, Object?> toJson() => {
     'date': date,
     'sunriseUtc': sunriseUtc?.toUtc().toIso8601String(),
     'sunsetUtc': sunsetUtc?.toUtc().toIso8601String(),
+    'daylightDurationSeconds': daylightDurationSeconds,
   };
 
   factory SolarEvent.fromJson(Map value) {
@@ -139,7 +149,14 @@ class SolarEvent {
       if (raw is! String) return null;
       return _parseWeatherUtc(raw);
     }
-    return SolarEvent(date: date, sunriseUtc: parse('sunriseUtc'), sunsetUtc: parse('sunsetUtc'));
+    final daylight = value['daylightDurationSeconds'];
+    return SolarEvent(
+      date: date,
+      sunriseUtc: parse('sunriseUtc'),
+      sunsetUtc: parse('sunsetUtc'),
+      daylightDurationSeconds: daylight is num && daylight.toDouble().isFinite
+          ? daylight.toDouble() : null,
+    );
   }
 }
 
@@ -166,6 +183,7 @@ class WeatherNightSummary {
     this.averagePressureHpa,
     this.sunriseUtc,
     this.sunsetUtc,
+    this.daylightDurationSeconds,
   });
 
   final int sampleCount;
@@ -176,6 +194,7 @@ class WeatherNightSummary {
   final double? averagePressureHpa;
   final DateTime? sunriseUtc;
   final DateTime? sunsetUtc;
+  final double? daylightDurationSeconds;
 
   static WeatherNightSummary summarize(
     Iterable<HourlyWeatherPoint> points, {
@@ -194,6 +213,34 @@ class WeatherNightSummary {
         ? null
         : data.reduce((a, b) => a + b) / data.length;
     final precipitation = values((point) => point.precipitationMm);
+    final solar = solarEvents.toList();
+    final sunset = _nearestSolarEvent(
+      solar.map((event) => event.sunsetUtc).whereType<DateTime>(),
+      start.toUtc(),
+      before: true,
+    );
+    final sunrise = _nearestSolarEvent(
+      solar.map((event) => event.sunriseUtc).whereType<DateTime>(),
+      end.toUtc(),
+      before: false,
+    );
+    SolarEvent? solarDay;
+    final wakeDate = _weatherDateKey(end.toUtc());
+    for (final event in solar) {
+      if (event.date == wakeDate) {
+        solarDay = event;
+        break;
+      }
+    }
+    if (solarDay == null && sunrise != null) {
+      for (final event in solar) {
+        if (event.sunriseUtc?.toUtc() == sunrise) {
+          solarDay = event;
+          break;
+        }
+      }
+    }
+    final daylightDuration = solarDay?.daylightDurationSeconds;
     return WeatherNightSummary(
       sampleCount: selected.length,
       averageTemperatureC: average(values((point) => point.temperatureC)),
@@ -203,16 +250,9 @@ class WeatherNightSummary {
           : precipitation.reduce((a, b) => a + b),
       averageWindKmh: average(values((point) => point.windKmh)),
       averagePressureHpa: average(values((point) => point.pressureHpa)),
-      sunsetUtc: _nearestSolarEvent(
-        solarEvents.map((event) => event.sunsetUtc).whereType<DateTime>(),
-        start.toUtc(),
-        before: true,
-      ),
-      sunriseUtc: _nearestSolarEvent(
-        solarEvents.map((event) => event.sunriseUtc).whereType<DateTime>(),
-        end.toUtc(),
-        before: false,
-      ),
+      sunsetUtc: sunset,
+      sunriseUtc: sunrise,
+      daylightDurationSeconds: daylightDuration,
     );
   }
 }
@@ -362,6 +402,40 @@ class WeatherService {
     return merged;
   }
 
+  Future<DateTime?> loadLatestCacheUpdatedAt({
+    required SleepDatabase database,
+    required WeatherLocation location,
+  }) async {
+    final keys = [
+      '$_cachePrefix${location.id}',
+      'sleep_tracker_solar_cache_v1_${location.id}',
+    ];
+    final updates = <DateTime>[];
+    for (final key in keys) {
+      final raw = await database.getAppMetadata(key);
+      if (raw == null || raw.isEmpty) continue;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) continue;
+      final value = decoded['updatedAt'];
+      if (value is String) {
+        final parsed = DateTime.tryParse(value);
+        if (parsed != null) updates.add(parsed.toLocal());
+      }
+    }
+    if (updates.isEmpty) return null;
+    return updates.reduce((a, b) => a.isAfter(b) ? a : b);
+  }
+
+  Future<WeatherLocation?> loadSelectedLocation({required SleepDatabase database}) async {
+    final raw = await database.getAppMetadata(locationStorageKey);
+    if (raw == null || raw.isEmpty) return null;
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map) {
+      throw const FormatException('Сохранённое местоположение повреждено.');
+    }
+    return WeatherLocation.fromJson(decoded);
+  }
+
   Future<List<SolarEvent>> loadSolarEvents({
     required SleepDatabase database,
     required WeatherLocation location,
@@ -387,8 +461,10 @@ class WeatherService {
       cachedEvents = rawEvents.whereType<Map>().map(SolarEvent.fromJson).toList();
       final cachedStart = cached['startDate'];
       final cachedEnd = cached['endDate'];
+      final hasDaylight = cachedEvents.any((event) => event.daylightDurationSeconds != null);
       if (cachedStart is String && cachedEnd is String &&
-          cachedStart.compareTo(startDate) <= 0 && cachedEnd.compareTo(endDate) >= 0) {
+          cachedStart.compareTo(startDate) <= 0 && cachedEnd.compareTo(endDate) >= 0 &&
+          hasDaylight) {
         return cachedEvents;
       }
     }
@@ -398,7 +474,7 @@ class WeatherService {
       'longitude': location.longitude.toStringAsFixed(5),
       'start_date': startDate,
       'end_date': endDate,
-      'daily': 'sunrise,sunset',
+      'daily': 'sunrise,sunset,daylight_duration',
       'timezone': 'UTC',
       'timeformat': 'iso8601',
     });
@@ -422,6 +498,7 @@ class WeatherService {
     final dates = daily['time'];
     final sunrises = daily['sunrise'];
     final sunsets = daily['sunset'];
+    final daylight = daily['daylight_duration'];
     if (dates is! List || sunrises is! List || sunsets is! List) {
       if (cachedEvents.isNotEmpty) return cachedEvents;
       throw const FormatException('В ответе архива отсутствуют солнечные события.');
@@ -434,7 +511,15 @@ class WeatherService {
         if (i >= values.length || values[i] is! String) return null;
         return _parseWeatherUtc(values[i] as String);
       }
-      fetched.add(SolarEvent(date: date, sunriseUtc: parse(sunrises), sunsetUtc: parse(sunsets)));
+      final daylightSeconds = daylight is List && i < daylight.length && daylight[i] is num
+          ? (daylight[i] as num).toDouble() : null;
+      fetched.add(SolarEvent(
+        date: date,
+        sunriseUtc: parse(sunrises),
+        sunsetUtc: parse(sunsets),
+        daylightDurationSeconds: daylightSeconds != null && daylightSeconds.isFinite
+            ? daylightSeconds : null,
+      ));
     }
     if (fetched.isEmpty) {
       if (cachedEvents.isNotEmpty) return cachedEvents;
