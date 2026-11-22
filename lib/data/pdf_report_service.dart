@@ -7,6 +7,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 import '../models/sleep_session.dart';
 import '../features/diary/sleep_session_metrics.dart';
+import '../features/diary/sleep_metric_summary.dart';
 import 'sleep_database.dart';
 
 class PdfReportService {
@@ -39,6 +40,41 @@ class PdfReportService {
           stages: stagesBySession[session.id] ?? const [],
         ),
     };
+    // Include real physiological and bedroom-sensor samples already associated
+    // with each night. Keep units separate and never infer missing data.
+    final nightContext = <pw.Widget>[];
+    for (final session in selected) {
+      final healthSamples = await SleepDatabase.instance.getMetrics(session.id);
+      final healthSummaries = SleepMetricSummary.fromSamples(healthSamples);
+      final climateSamples = await SleepDatabase.instance.getClimateSamples(sessionId: session.id);
+      final climateGroups = <(String, String), List<double>>{};
+      for (final sample in climateSamples) {
+        final type = sample['metric_type'];
+        final unit = sample['unit'];
+        final value = sample['value'];
+        if (type is! String || unit is! String || value is! num || !value.toDouble().isFinite) continue;
+        climateGroups.putIfAbsent((type, unit), () => []).add(value.toDouble());
+      }
+      if (healthSummaries.isEmpty && climateGroups.isEmpty) continue;
+      nightContext.add(pw.SizedBox(height: 8));
+      nightContext.add(pw.Text('Дополнительные измерения — ' + DateFormat('dd.MM.yyyy').format(session.startedAt),
+        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)));
+      for (final summary in healthSummaries) {
+        nightContext.add(pw.Text(
+          '• ' + summary.metricType + ': среднее ' + summary.average.toStringAsFixed(1) + ' ' + summary.unit + '; мин. ' + summary.minimum.toStringAsFixed(1) + '; макс. ' + summary.maximum.toStringAsFixed(1) + '; измерений: ' + summary.count.toString(),
+          style: const pw.TextStyle(fontSize: 8),
+        ));
+      }
+      for (final entry in climateGroups.entries) {
+        final values = entry.value;
+        final averageValue = values.reduce((a, b) => a + b) / values.length;
+        final label = entry.key.$1 == 'temperature' ? 'Температура в спальне' : entry.key.$1 == 'humidity' ? 'Влажность в спальне' : entry.key.$1;
+        nightContext.add(pw.Text(
+          '• ' + label + ': среднее ' + averageValue.toStringAsFixed(1) + ' ' + entry.key.$2 + '; измерений: ' + values.length.toString(),
+          style: const pw.TextStyle(fontSize: 8),
+        ));
+      }
+    }
     final reports = <Map<String, Object?>>[];
     for (final session in selected) { final report = await SleepDatabase.instance.getMorningReport(session.id); if (report != null) reports.add(report); }
     final wellbeing = reports.where((r) => r['wellbeing'] != null).map((r) => (r['wellbeing'] as num).toDouble()).toList();
@@ -87,8 +123,9 @@ class PdfReportService {
           ];
         }).toList(),
       ),
+      ...nightContext,
       pw.SizedBox(height: 10),
-      pw.Text('Отчёт содержит только сохранённые данные. Отсутствующие показатели не моделируются.'),
+      pw.Text('Отчёт содержит только сохранённые данные. Отсутствующие показатели не моделируются. Погодный архив и астрономические расчёты отображаются в карточке ночи в приложении.'),
     ]));
     final dir = await getTemporaryDirectory();
     final file = File(p.join(dir.path, 'SleepTracker-report-${DateTime.now().millisecondsSinceEpoch}.pdf'));
