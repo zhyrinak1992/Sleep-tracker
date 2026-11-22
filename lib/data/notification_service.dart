@@ -120,6 +120,27 @@ class NotificationService {
       ), androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle);
   }
 
+  /// Напоминает за 24 часа до ближайшего окончательного удаления ночи.
+  Future<void> scheduleTrashExpiry(Iterable<DateTime> expiries) async {
+    await initialize();
+    const notificationId = 4301;
+    await _plugin.cancel(notificationId);
+    final future = expiries.toList()..sort();
+    if (future.isEmpty) return;
+    final expiry = future.first;
+    final reminderAt = expiry.subtract(const Duration(hours: 24));
+    final now = tz.TZDateTime.now(tz.local);
+    if (!expiry.isAfter(now)) return;
+    const details = NotificationDetails(
+      iOS: DarwinNotificationDetails(presentAlert: true, presentSound: true),
+      android: AndroidNotificationDetails('sleep_trash', 'Корзина записей сна', importance: Importance.defaultImportance, priority: Priority.defaultPriority),
+    );
+    if (!reminderAt.isAfter(now)) {
+      await _plugin.show(notificationId, 'Скоро очистка корзины', 'Одна или несколько удалённых ночей будут окончательно удалены в ближайшие 24 часа. Их ещё можно восстановить.', details);
+      return;
+    }
+    await _plugin.zonedSchedule(notificationId, 'Скоро очистка корзины', 'Через 24 часа одна или несколько ночей будут удалены из корзины окончательно.', tz.TZDateTime.from(reminderAt, tz.local), details, androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle);
+  }
   Future<void> cancelNightReminders() async {
     // Remove legacy repeating IDs from previous app versions.
     for (var id = 4200; id <= 4213; id++) {

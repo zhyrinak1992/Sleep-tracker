@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../data/sleep_database.dart';
+import '../../data/notification_service.dart';
 import '../../models/sleep_session.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
@@ -23,6 +24,8 @@ class _DiaryScreenState extends State<DiaryScreen> {
   late Future<List<SleepSession>> _sessions;
   DateTime _visibleMonth = DateTime(DateTime.now().year, DateTime.now().month);
   DateTime _selectedDay = DateUtils.dateOnly(DateTime.now());
+  final Set<String> _selectedSessionIds = <String>{};
+  bool _selectionMode = false;
 
   @override
   void initState() {
@@ -35,6 +38,25 @@ class _DiaryScreenState extends State<DiaryScreen> {
     await _sessions;
   }
 
+  void _toggleSessionSelection(SleepSession session) {
+    if (session.isOpen) return;
+    setState(() {
+      _selectionMode = true;
+      if (!_selectedSessionIds.add(session.id)) _selectedSessionIds.remove(session.id);
+      if (_selectedSessionIds.isEmpty) _selectionMode = false;
+    });
+  }
+
+  Future<void> _moveSelectedToTrash() async {
+    if (_selectedSessionIds.isEmpty) return;
+    final ids = _selectedSessionIds.toList();
+    await widget.database.moveSessionsToTrash(ids);
+    if (!mounted) return;
+    setState(() { _selectedSessionIds.clear(); _selectionMode = false; });
+    await _reload();
+    await NotificationService.instance.scheduleTrashExpiry(await widget.database.getTrashExpiryDates());
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Перемещено в корзину: ' + ids.length.toString())));
+  }
   DateTime _day(DateTime value) => DateTime(value.year, value.month, value.day);
 
   Color _ratingColor(int? rating) {
@@ -166,12 +188,17 @@ class _DiaryScreenState extends State<DiaryScreen> {
           padding: const EdgeInsets.only(bottom: 10),
           child: InkWell(
             borderRadius: BorderRadius.circular(22),
-            onTap: () => _openSession(session),
+            onLongPress: () => _toggleSessionSelection(session),
+            onTap: () => _selectionMode ? _toggleSessionSelection(session) : _openSession(session),
             child: SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
+                if (_selectionMode && !session.isOpen) Checkbox(
+                  value: _selectedSessionIds.contains(session.id),
+                  onChanged: (_) => _toggleSessionSelection(session),
+                ),
                 Expanded(child: Text(session.isOpen ? 'Сессия продолжается' : 'Ночная сессия',
                   style: const TextStyle(color: AppTheme.muted))),
-                IconButton(
+                if (!_selectionMode) IconButton(
                   tooltip: 'Изменить запись',
                   onPressed: () async {
                     final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
@@ -181,7 +208,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
                   },
                   icon: const Icon(Icons.edit_outlined, color: AppTheme.teal),
                 ),
-                const Icon(Icons.chevron_right, color: AppTheme.muted),
+                if (!_selectionMode) const Icon(Icons.chevron_right, color: AppTheme.muted),
               ]),
               const SizedBox(height: 7),
               Text(_duration(session.duration), style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold)),
@@ -263,6 +290,25 @@ class _DiaryScreenState extends State<DiaryScreen> {
             icon: const Icon(Icons.delete_outline),
             label: const Text('Корзина'),
           ),
+          if (_selectionMode) ...[
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(child: FilledButton.icon(
+                onPressed: _selectedSessionIds.isEmpty ? null : _moveSelectedToTrash,
+                icon: const Icon(Icons.delete_outline),
+                label: Text('В корзину (' + _selectedSessionIds.length.toString() + ')'),
+              )),
+              const SizedBox(width: 8),
+              TextButton(onPressed: () => setState(() { _selectedSessionIds.clear(); _selectionMode = false; }), child: const Text('Отмена')),
+            ]),
+          ] else ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => setState(() => _selectionMode = true),
+              icon: const Icon(Icons.checklist),
+              label: const Text('Выбрать ночи для удаления'),
+            ),
+          ],
           const SizedBox(height: 18),
           if (snapshot.connectionState == ConnectionState.waiting)
             const Center(child: Padding(padding: EdgeInsets.all(28), child: CircularProgressIndicator()))

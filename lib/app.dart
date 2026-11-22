@@ -89,7 +89,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _cleanupTimer = Timer.periodic(const Duration(minutes: 30), (_) => _cleanupAudio());
+    _cleanupTimer = Timer.periodic(const Duration(minutes: 30), (_) { _cleanupAudio(); _cleanupTrash(); });
+    _cleanupTrash();
     _startClimatePolling();
     _ensureNightReminders();
   }
@@ -143,6 +144,15 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _cleanupTrash() async {
+    try {
+      await _database.purgeExpiredTrash();
+      final expiries = await _database.getTrashExpiryDates();
+      await NotificationService.instance.scheduleTrashExpiry(expiries);
+    } catch (error, stackTrace) {
+      debugPrint('Trash cleanup failed: $error\\n$stackTrace');
+    }
+  }
   Future<void> _refreshClimate() async {
     if (_climateRefreshInProgress) return;
     _climateRefreshInProgress = true;
@@ -160,6 +170,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       _startClimatePolling();
       _cleanupAudio();
+      _cleanupTrash();
       _ensureNightReminders();
     } else if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused ||

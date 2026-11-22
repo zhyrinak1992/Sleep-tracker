@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../data/sleep_database.dart';
+import '../../data/notification_service.dart';
 import '../analysis/climate_analytics.dart';
 import 'screen_time_card.dart';
 import 'weather_night_detail_card.dart';
@@ -174,6 +175,7 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                 ));
                 if (confirm != true || !mounted) return;
                 await widget.database.moveSessionToTrash(session.id);
+                await NotificationService.instance.scheduleTrashExpiry(await widget.database.getTrashExpiryDates());
                 if (mounted) Navigator.pop(context, true);
               },
             ),
