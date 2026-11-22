@@ -572,7 +572,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           : 'Проверь разрешение на микрофон. Ночная сессия остаётся активной.',
                         style: const TextStyle(color: AppTheme.muted, height: 1.4, fontSize: 12),
                       ),
-                      if (observing) ...[
+                      if (observing || paused) ...[
                         const SizedBox(height: 14),
                         SizedBox(width: double.infinity, child: OutlinedButton.icon(
                           onPressed: () => _toggleAudioPause(paused),
