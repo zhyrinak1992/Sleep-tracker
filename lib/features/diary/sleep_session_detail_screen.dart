@@ -358,9 +358,17 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                           const Text('Фактические показания выбранного датчика в интервале этой ночи.',
                             style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4)),
                           const SizedBox(height: 12),
-                          _NightClimateMetric(title: 'Температура', summary: temperature),
+                          _NightClimateMetric(
+                            title: 'Температура',
+                            summary: temperature,
+                            samples: rows.where((row) => row['metric_type'] == 'temperature').toList(),
+                          ),
                           const Divider(height: 18, color: AppTheme.surfaceLight),
-                          _NightClimateMetric(title: 'Влажность', summary: humidity),
+                          _NightClimateMetric(
+                            title: 'Влажность',
+                            summary: humidity,
+                            samples: rows.where((row) => row['metric_type'] == 'humidity').toList(),
+                          ),
                           const SizedBox(height: 8),
                           Text(
                             rows.isEmpty
@@ -381,9 +389,14 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
 
 
 class _NightClimateMetric extends StatelessWidget {
-  const _NightClimateMetric({required this.title, required this.summary});
+  const _NightClimateMetric({
+    required this.title,
+    required this.summary,
+    required this.samples,
+  });
   final String title;
   final ClimateMetricSummary? summary;
+  final List<Map<String, Object?>> samples;
 
   @override
   Widget build(BuildContext context) {
@@ -400,10 +413,61 @@ class _NightClimateMetric extends StatelessWidget {
       Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
       const SizedBox(height: 4),
       Text('Мин. ${value.minimum.toStringAsFixed(1)} ${value.unit} · сред. ${value.average.toStringAsFixed(1)} ${value.unit} · макс. ${value.maximum.toStringAsFixed(1)} ${value.unit}'),
+      Text('Последнее: ${value.lastValue.toStringAsFixed(1)} ${value.unit} · ${DateFormat('HH:mm').format(value.lastMeasuredAt)}',
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
       Text('${value.count} точек · ${first}–${last}', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+      if (samples.length >= 2) ...[
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 44,
+          width: double.infinity,
+          child: CustomPaint(painter: _ClimateSparklinePainter(
+            values: samples.map((row) => (row['value'] as num).toDouble()).toList(),
+            color: title == 'Температура' ? AppTheme.teal : AppTheme.purple,
+          )),
+        ),
+      ],
       if (value.coveragePercent != null)
         Text('Расчётное покрытие интервала: ${value.coveragePercent!.toStringAsFixed(0)}%',
           style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
     ]);
   }
+}
+
+
+class _ClimateSparklinePainter extends CustomPainter {
+  const _ClimateSparklinePainter({required this.values, required this.color});
+  final List<double> values;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.length < 2 || size.width <= 0 || size.height <= 0) return;
+    final minValue = values.reduce((a, b) => a < b ? a : b);
+    final maxValue = values.reduce((a, b) => a > b ? a : b);
+    final range = maxValue - minValue;
+    final usableHeight = size.height - 8;
+    final points = <Offset>[];
+    for (var i = 0; i < values.length; i++) {
+      final x = 4 + (size.width - 8) * i / (values.length - 1);
+      final normalized = range == 0 ? 0.5 : (values[i] - minValue) / range;
+      final y = 4 + (1 - normalized) * usableHeight;
+      points.add(Offset(x, y));
+    }
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    for (var i = 1; i < points.length; i++) {
+      path.lineTo(points[i].dx, points[i].dy);
+    }
+    canvas.drawPath(path, Paint()
+      ..color = color
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round);
+    canvas.drawCircle(points.last, 3, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ClimateSparklinePainter oldDelegate) =>
+      oldDelegate.values != values || oldDelegate.color != color;
 }
