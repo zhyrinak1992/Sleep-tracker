@@ -15,7 +15,7 @@ class BackupService {
   static final BackupService instance = BackupService._();
 
   static const format = 'sleep_tracker_backup';
-  static const formatVersion = 3;
+  static const formatVersion = 4;
 
   Future<void> exportToFiles() async {
     final snapshot = await SleepDatabase.instance.exportSnapshot();
@@ -23,9 +23,11 @@ class BackupService {
     var audioBytesTotal = 0;
     for (final row in audioRows) {
       final path = row['file_path'];
-      if (path is! String || path.isEmpty) throw StateError('У одного из аудиофрагментов отсутствует путь к файлу. Резервная копия не создана.');
+      // Исторические события старше 7 дней сохраняются без аудиовложения.
+      if (path == null || path == '') continue;
+      if (path is! String) throw StateError('Некорректный путь к аудиофайлу. Резервная копия не создана.');
       final source = File(path);
-      if (!await source.exists()) throw StateError('Не найден аудиофайл одного из событий. Резервная копия не создана, чтобы не потерять данные.');
+      if (!await source.exists()) throw StateError('Не найден аудиофайл события, срок хранения которого ещё не истёк. Резервная копия не создана.');
       final bytes = await source.readAsBytes();
       if (bytes.isEmpty) throw StateError('Обнаружен пустой аудиофайл. Резервная копия не создана.');
       audioBytesTotal += bytes.length;
@@ -98,7 +100,7 @@ class BackupService {
         final encoded = row.remove('audioDataB64');
         // Format v3 promises a complete audio archive; reject damaged archives.
         if (encoded == null) {
-          if (decoded['formatVersion'] == 3) throw const FormatException('В резервной копии отсутствует аудиофайл. Импорт отменён без изменения текущих данных.');
+          if (decoded['formatVersion'] == 3 && row['file_path'] != null) throw const FormatException('В резервной копии отсутствует аудиофайл, который должен быть в архиве. Импорт отменён без изменения текущих данных.');
           // Legacy archives may contain metadata without original audio bytes.
           continue;
         }
