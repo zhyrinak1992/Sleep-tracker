@@ -56,8 +56,8 @@ class ClimateTrendChart extends StatelessWidget {
         child: Text('Нет измерений для графика', style: TextStyle(color: Colors.grey, fontSize: 11)),
       );
     }
-    final minimum = points.map((point) => point.value).reduce(math.min);
-    final maximum = points.map((point) => point.value).reduce(math.max);
+    final minimum = points.map((point) => point.value).reduce((a, b) => a < b ? a : b);
+    final maximum = points.map((point) => point.value).reduce((a, b) => a > b ? a : b);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
