@@ -395,8 +395,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.all(20),
     children: [
-      Text('Настройки', style: Theme.of(context).textTheme.headlineMedium),
-      const SizedBox(height: 20),
+      const ScreenHeader(
+        title: 'Настройки',
+        subtitle: 'Безопасность, источники данных и резервные копии',
+        icon: Icons.tune_rounded,
+      ),
+      const SizedBox(height: 0),
       SectionCard(child: ValueListenableBuilder<bool>(
         valueListenable: AppLockService.instance.enabled,
         builder: (context, enabled, _) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
