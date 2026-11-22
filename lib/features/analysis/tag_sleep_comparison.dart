@@ -52,12 +52,12 @@ class TagSleepComparison {
   static TagSleepComparisonResult calculate({
     required Iterable<SleepSession> sessions,
     required Map<String, Set<String>> tagsBySession,
-    required String tagKey,
+    required Set<String> tagKeys,
     required DateTime start,
     required DateTime endExclusive,
     required TagSleepMetric metric,
   }) {
-    if (tagKey.trim().isEmpty || !endExclusive.isAfter(start)) {
+    if (tagKeys.isEmpty || tagKeys.any((key) => key.trim().isEmpty) || !endExclusive.isAfter(start)) {
       throw ArgumentError('Некорректные параметры сравнения.');
     }
 
@@ -75,7 +75,8 @@ class TagSleepComparison {
       };
       if (value == null || !value.isFinite) continue;
 
-      final hasTag = tagsBySession[session.id]?.contains(tagKey) ?? false;
+      final sessionTags = tagsBySession[session.id] ?? const <String>{};
+      final hasTag = tagKeys.every(sessionTags.contains);
       (hasTag ? withValues : withoutValues).add(value);
     }
 
@@ -103,19 +104,19 @@ class TagComparisonTemplate {
   const TagComparisonTemplate({
     required this.id,
     required this.name,
-    required this.tagKey,
+    required this.tagKeys,
     required this.metric,
   });
 
   final String id;
   final String name;
-  final String tagKey;
+  final List<String> tagKeys;
   final TagSleepMetric metric;
 
   Map<String, Object?> toJson() => {
     'id': id,
     'name': name,
-    'tagKey': tagKey,
+    'tagKeys': tagKeys,
     'metric': metric.name,
   };
 
@@ -127,15 +128,26 @@ class TagComparisonTemplate {
     }
     final id = json['id'];
     final name = json['name'];
-    final tagKey = json['tagKey'];
+    final rawTagKeys = json['tagKeys'];
+    final legacyTagKey = json['tagKey'];
+    final List<String>? tagKeys;
+    if (rawTagKeys is List && rawTagKeys.isNotEmpty &&
+        rawTagKeys.every((item) => item is String && item.trim().isNotEmpty)) {
+      tagKeys = rawTagKeys.cast<String>().toSet().toList();
+    } else if (rawTagKeys == null && legacyTagKey is String && legacyTagKey.trim().isNotEmpty) {
+      // Read templates created by the first single-tag implementation.
+      tagKeys = [legacyTagKey];
+    } else {
+      tagKeys = null;
+    }
     if (id is! String || id.isEmpty || name is! String || name.trim().isEmpty ||
-        tagKey is! String || tagKey.isEmpty || metric == null) {
+        tagKeys == null || tagKeys.isEmpty || metric == null) {
       throw const FormatException('Шаблон сравнения повреждён.');
     }
     return TagComparisonTemplate(
       id: id,
       name: name.trim(),
-      tagKey: tagKey,
+      tagKeys: tagKeys,
       metric: metric,
     );
   }

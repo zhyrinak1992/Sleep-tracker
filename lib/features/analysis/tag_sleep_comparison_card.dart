@@ -28,7 +28,7 @@ class TagSleepComparisonCard extends StatefulWidget {
 
 class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
   late Future<_TagComparisonData> _data;
-  String? _tagKey;
+  Set<String> _tagKeys = {SleepTag.catalog.first.key};
   TagSleepMetric _metric = TagSleepMetric.sleepDuration;
   String? _activeTemplateId;
   bool _saving = false;
@@ -91,8 +91,8 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
   }
 
   Future<void> _saveTemplate(_TagComparisonData data) async {
-    final tagKey = _tagKey;
-    if (tagKey == null) return;
+    final tagKeys = _tagKeys.toList()..sort();
+    if (tagKeys.isEmpty) return;
     final controller = TextEditingController();
     final name = await showDialog<String>(
       context: context,
@@ -135,7 +135,7 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
       final template = TagComparisonTemplate(
         id: const Uuid().v4(),
         name: name.trim(),
-        tagKey: tagKey,
+        tagKeys: tagKeys,
         metric: _metric,
       );
       await _store.save([...templates, template]);
@@ -188,7 +188,7 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
       return;
     }
     await _store.save(templates.map((item) => item.id == template.id
-      ? TagComparisonTemplate(id: item.id, name: name.trim(), tagKey: item.tagKey, metric: item.metric)
+      ? TagComparisonTemplate(id: item.id, name: name.trim(), tagKeys: item.tagKeys, metric: item.metric)
       : item).toList());
     await _reload();
   }
@@ -233,14 +233,15 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
         }
         return 'Отметка недоступна';
       }
-      final selectedKey = availableTags.any((tag) => tag.key == _tagKey)
-          ? _tagKey!
-          : availableTags.first.key;
-      final selectedTag = availableTags.firstWhere((tag) => tag.key == selectedKey);
+      final selectedKeys = _tagKeys.where(
+        (key) => availableTags.any((tag) => tag.key == key),
+      ).toSet();
+      if (selectedKeys.isEmpty) selectedKeys.add(availableTags.first.key);
+      final selectedLabels = selectedKeys.map(tagLabel).toList();
       final result = TagSleepComparison.calculate(
         sessions: widget.sessions,
         tagsBySession: data.tagsBySession,
-        tagKey: selectedKey,
+        tagKeys: selectedKeys,
         start: widget.start,
         endExclusive: widget.endExclusive,
         metric: _metric,
@@ -255,7 +256,7 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
             const Text('Сравнение по отметкам', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
             const SizedBox(height: 5),
             const Text(
-              'Сопоставление ночей с выбранной отметкой и без неё. Это наблюдаемая связь, а не доказательство причины.',
+              'Сопоставление ночей со всеми выбранными отметками одновременно и без полной комбинации. Это наблюдаемая связь, а не доказательство причины.',
               style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4),
             ),
             const SizedBox(height: 12),
@@ -266,11 +267,11 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
                 dense: true,
                 contentPadding: EdgeInsets.zero,
                 title: Text(template.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                subtitle: Text('${tagLabel(template.tagKey)} · ${template.metric.label}'),
+                subtitle: Text('${template.tagKeys.map(tagLabel).join(' + ')} · ${template.metric.label}'),
                 selected: template.id == _activeTemplateId,
                 onTap: () => setState(() {
                   _activeTemplateId = template.id;
-                  _tagKey = template.tagKey;
+                  _tagKeys = template.tagKeys.toSet();
                   _metric = template.metric;
                 }),
                 trailing: PopupMenuButton<String>(
@@ -287,18 +288,36 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
               )),
               const Divider(height: 18),
             ],
-            DropdownButtonFormField<String>(
-              value: selectedKey,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Отметка ночи'),
-              items: availableTags.map((tag) => DropdownMenuItem(
-                value: tag.key,
-                child: Text(tag.label, overflow: TextOverflow.ellipsis),
+            const Text('Сопоставить сочетание отметок', style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 7,
+              runSpacing: 4,
+              children: availableTags.map((tag) => FilterChip(
+                label: Text(tag.label),
+                selected: selectedKeys.contains(tag.key),
+                onSelected: (selected) {
+                  if (!selected && selectedKeys.length == 1) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Оставь хотя бы одну отметку для сравнения.')),
+                    );
+                    return;
+                  }
+                  setState(() {
+                    if (selected) {
+                      _tagKeys.add(tag.key);
+                    } else {
+                      _tagKeys.remove(tag.key);
+                    }
+                    _activeTemplateId = null;
+                  });
+                },
               )).toList(),
-              onChanged: (value) => setState(() {
-                _tagKey = value;
-                _activeTemplateId = null;
-              }),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'В группу «с отметками» попадают ночи, где присутствуют все выбранные отметки одновременно.',
+              style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<TagSleepMetric>(
@@ -317,9 +336,9 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
               }),
             ),
             const SizedBox(height: 14),
-            _groupRow('С отметкой «${selectedTag.label}»', result.withTag, result.metric),
+            _groupRow('Со всеми отметками: «${selectedLabels.join(' + ')}»', result.withTag, result.metric),
             const SizedBox(height: 7),
-            _groupRow('Без этой отметки', result.withoutTag, result.metric),
+            _groupRow('Без полной комбинации', result.withoutTag, result.metric),
             const SizedBox(height: 12),
             if (!result.isSufficient)
               Text(
@@ -328,7 +347,7 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
               )
             else
               Text(
-                'Разница средних: ${_formatDifference(result.difference!, result.metric)} в группе с отметкой. Выборки: ${result.withTag.nights} и ${result.withoutTag.nights} ночей.',
+                'Разница средних: ${_formatDifference(result.difference!, result.metric)} в группе со всеми отметками. Выборки: ${result.withTag.nights} и ${result.withoutTag.nights} ночей.',
                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, height: 1.4),
               ),
             const SizedBox(height: 5),
