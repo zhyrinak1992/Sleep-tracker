@@ -261,6 +261,9 @@ class SleepDatabase {
       'morning_rating': null,
       'created_at': now,
       'updated_at': now,
+      'actual_sleep_started_at': startedAt.toUtc().toIso8601String(),
+      'actual_sleep_ended_at': endedAt.toUtc().toIso8601String(),
+      'user_edited': 0,
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
     return inserted > 0;
   }
@@ -301,8 +304,7 @@ class SleepDatabase {
         createdAt: DateTime.now(), updatedAt: DateTime.now(),
         actualSleepStartedAt: startedAt, actualSleepEndedAt: endedAt, userEdited: true,
       );
-      final values = session.toMap()..['button_started_at'] = now.toUtc().toIso8601String();
-    await db.insert('sleep_sessions', values);
+      await db.insert('sleep_sessions', session.toMap());
       return;
     }
     final rows = await db.query('sleep_sessions', columns: ['id'], where: 'id = ?', whereArgs: [id], limit: 1);
@@ -389,7 +391,8 @@ class SleepDatabase {
       createdAt: now,
       updatedAt: now,
     );
-    await db.insert('sleep_sessions', session.toMap());
+    final values = session.toMap()..['button_started_at'] = now.toUtc().toIso8601String();
+    await db.insert('sleep_sessions', values);
     return session;
   }
 
@@ -400,6 +403,7 @@ class SleepDatabase {
       'sleep_sessions',
       {
         'ended_at': now.toUtc().toIso8601String(),
+        'button_ended_at': now.toUtc().toIso8601String(),
         'updated_at': now.toUtc().toIso8601String(),
       },
       where: 'id = ? AND ended_at IS NULL',
