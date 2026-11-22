@@ -8,6 +8,7 @@ import 'data/yandex_smart_home_service.dart';
 import 'features/home/home_screen.dart';
 import 'features/diary/diary_screen.dart';
 import 'features/analysis/analysis_screen.dart';
+import 'features/health/health_screen.dart';
 import 'features/notes/notes_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'theme/app_theme.dart';
@@ -60,7 +61,7 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   int _index = 0;
   final _database = SleepDatabase.instance;
-  final List<Widget?> _pages = List<Widget?>.filled(5, null);
+  final List<Widget?> _pages = List<Widget?>.filled(6, null);
   Timer? _cleanupTimer;
   Timer? _climateTimer;
   bool _climateRefreshInProgress = false;
@@ -76,6 +77,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       case 3:
         return NotesScreen(database: _database);
       case 4:
+        return HealthScreen(database: _database);
+      case 5:
         return const SettingsScreen();
       default:
         return const SizedBox.shrink();
@@ -199,6 +202,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           NavigationDestination(icon: Icon(Icons.insights_outlined), label: 'Анализ'),
           NavigationDestination(icon: Icon(Icons.calendar_month_outlined), label: 'Дневник'),
           NavigationDestination(icon: Icon(Icons.sticky_note_2_outlined), label: 'Заметки'),
+          NavigationDestination(icon: Icon(Icons.favorite_outline_rounded), label: 'Здоровье'),
           NavigationDestination(icon: Icon(Icons.settings_outlined), label: 'Настройки'),
         ],
       ),
