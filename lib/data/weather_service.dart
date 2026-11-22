@@ -234,8 +234,16 @@ class WeatherNightSummary {
       end.toUtc(),
       before: false,
     );
-    final solarDay = _nextSunriseDay(solar, end.toUtc()) ??
-        solar.where((event) => event.date == _weatherDateKey(end.toUtc())).firstOrNull;
+    SolarEvent? solarDay = _nextSunriseDay(solar, end.toUtc());
+    if (solarDay == null) {
+      final wakeDate = _weatherDateKey(end.toUtc());
+      for (final event in solar) {
+        if (event.date == wakeDate) {
+          solarDay = event;
+          break;
+        }
+      }
+    }
     final daylightDuration = solarDay?.daylightDurationSeconds;
     return WeatherNightSummary(
       sampleCount: selected.length,
