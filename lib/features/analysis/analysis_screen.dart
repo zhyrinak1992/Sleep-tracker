@@ -237,7 +237,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             const SizedBox(height: 14),
             _RegularityCard(summary: SleepAnalytics.regularity(current.sessions)),
             const SizedBox(height: 14),
-            DaytimeSleepCard(database: widget.database),
+            DaytimeSleepCard(database: widget.database, sessions: current.sessions),
             const SizedBox(height: 14),
             _ClimateSummary(database: widget.database),
             const SizedBox(height: 12),
