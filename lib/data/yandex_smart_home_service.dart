@@ -104,6 +104,7 @@ class YandexSmartHomeService {
       if (id is String && name is String) {
         roomNames[id] = name;
         rooms.add(YandexRoom(id: id, name: name));
+        await SleepDatabase.instance.setAppMetadata('yandex_room_name_$id', name);
       }
     }
     final devices = <YandexSensorDevice>[];
