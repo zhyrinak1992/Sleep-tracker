@@ -114,14 +114,10 @@ class WeatherHistoryService {
       _timezoneReady = true;
     }
     final zone = _locationTimeZone(location.timezone);
-    final localStarts = completed.map((session) => tz.TZDateTime.from(
-      session.actualSleepStartedAt!.toUtc(), zone,
-    )).toList();
-    final localEnds = completed.map((session) => tz.TZDateTime.from(
-      session.actualSleepEndedAt!.toUtc(), zone,
-    )).toList();
-    final first = localStarts.reduce((a, b) => a.isBefore(b) ? a : b);
-    final last = localEnds.reduce((a, b) => a.isAfter(b) ? a : b);
+    final utcStarts = completed.map((session) => session.actualSleepStartedAt!.toUtc()).toList();
+    final utcEnds = completed.map((session) => session.actualSleepEndedAt!.toUtc()).toList();
+    final first = utcStarts.reduce((a, b) => a.isBefore(b) ? a : b);
+    final last = utcEnds.reduce((a, b) => a.isAfter(b) ? a : b);
     final startDate = _dateKey(first);
     final endDate = _dateKey(last);
 
@@ -132,7 +128,7 @@ class WeatherHistoryService {
       'end_date': endDate,
       'hourly': 'temperature_2m,relative_humidity_2m,pressure_msl,precipitation,wind_speed_10m',
       'daily': 'sunrise,sunset,daylight_duration',
-      'timezone': location.timezone,
+      'timezone': 'UTC',
       'temperature_unit': 'celsius',
       'wind_speed_unit': 'kmh',
       'precipitation_unit': 'mm',
@@ -150,7 +146,7 @@ class WeatherHistoryService {
     }
     final hourly = decoded['hourly'] is Map ? decoded['hourly'] as Map : const {};
     final daily = decoded['daily'] is Map ? decoded['daily'] as Map : const {};
-    final times = _stringList(hourly['time']);
+    final times = _stringList(hourly['time']).map(_parseArchiveTime).toList();
     final temp = _numberList(hourly['temperature_2m']);
     final humidity = _numberList(hourly['relative_humidity_2m']);
     final pressure = _numberList(hourly['pressure_msl']);
@@ -166,16 +162,12 @@ class WeatherHistoryService {
     final fetchedAt = DateTime.now();
     for (var i = 0; i < completed.length; i++) {
       final session = completed[i];
-      final start = localStarts[i];
-      final end = localEnds[i];
-      final firstHour = _ceilHour(start);
-      final lastHour = _floorHour(end);
-      final fromKey = _hourKey(firstHour);
-      final toKey = _hourKey(lastHour);
+      final start = utcStarts[i];
+      final end = utcEnds[i];
       final indices = <int>[];
       for (var index = 0; index < times.length; index++) {
-        final key = _normalizeHourKey(times[index]);
-        if (key.compareTo(fromKey) >= 0 && key.compareTo(toKey) <= 0) {
+        final time = times[index];
+        if (!time.isBefore(start) && !time.isAfter(end)) {
           indices.add(index);
         }
       }
@@ -196,8 +188,10 @@ class WeatherHistoryService {
           : precipitationValues.reduce((a, b) => a + b);
 
       final dayIndex = dailyTimes.indexOf(_dateKey(end));
-      final sunriseValue = dayIndex >= 0 && dayIndex < sunrise.length ? sunrise[dayIndex] : null;
-      final sunsetValue = dayIndex >= 0 && dayIndex < sunset.length ? sunset[dayIndex] : null;
+      final sunriseValue = dayIndex >= 0 && dayIndex < sunrise.length
+          ? _toLocalIso(sunrise[dayIndex], zone) : null;
+      final sunsetValue = dayIndex >= 0 && dayIndex < sunset.length
+          ? _toLocalIso(sunset[dayIndex], zone) : null;
       final daylightSeconds = dayIndex >= 0 && dayIndex < daylight.length ? daylight[dayIndex] : null;
       final sampleCount = indices.where((index) =>
         (index < temp.length && temp[index] != null) ||
@@ -250,19 +244,33 @@ class WeatherHistoryService {
   static String _dateKey(DateTime date) =>
       '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
-  static String _hourKey(tz.TZDateTime date) =>
-      '${_dateKey(date)}T${date.hour.toString().padLeft(2, '0')}:00';
+  static DateTime _parseArchiveTime(String value) {
+    final hasOffset = RegExp(r'(Z|[+-]\\d{2}:\\d{2})
+  static List<String> _stringList(Object? value) =>
+      value is List ? value.whereType<String>().toList() : const [];
 
-  static String _normalizeHourKey(String value) => value.length >= 16 ? value.substring(0, 16) : value;
+  static List<String?> _nullableStringList(Object? value) =>
+      value is List ? value.map((item) => item is String ? item : null).toList() : const [];
 
-  static tz.TZDateTime _ceilHour(tz.TZDateTime value) {
-    final floor = tz.TZDateTime(value.location, value.year, value.month, value.day, value.hour);
-    if (value.minute == 0 && value.second == 0) return floor;
-    return floor.add(const Duration(hours: 1));
+  static List<double?> _numberList(Object? value) => value is List
+      ? value.map((item) => item is num && item.toDouble().isFinite ? item.toDouble() : null).toList()
+      : const [];
+}
+).hasMatch(value);
+    if (hasOffset) return DateTime.parse(value).toUtc();
+    final parsed = DateTime.parse(value);
+    return DateTime.utc(parsed.year, parsed.month, parsed.day, parsed.hour,
+      parsed.minute, parsed.second, parsed.millisecond);
   }
 
-  static tz.TZDateTime _floorHour(tz.TZDateTime value) =>
-      tz.TZDateTime(value.location, value.year, value.month, value.day, value.hour);
+  static String? _toLocalIso(String? value, tz.Location zone) {
+    if (value == null || value.isEmpty) return null;
+    try {
+      return tz.TZDateTime.from(_parseArchiveTime(value), zone).toIso8601String();
+    } catch (_) {
+      return null;
+    }
+  }
 
   static List<String> _stringList(Object? value) =>
       value is List ? value.whereType<String>().toList() : const [];
