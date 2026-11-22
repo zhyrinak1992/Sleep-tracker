@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:health/health.dart';
 
 import 'sleep_database.dart';
@@ -30,6 +32,13 @@ class AppleHealthService {
     HealthDataType.RESPIRATORY_RATE,
     HealthDataType.BLOOD_OXYGEN,
     HealthDataType.HEART_RATE_VARIABILITY_SDNN,
+  ];
+
+  static const List<HealthDataType> _activityTypes = [
+    HealthDataType.STEPS,
+    HealthDataType.ACTIVE_ENERGY_BURNED,
+    HealthDataType.EXERCISE_TIME,
+    HealthDataType.WORKOUT,
   ];
 
   Future<AppleHealthSyncResult> syncRecentSleep({int days = 30}) async {
@@ -182,6 +191,113 @@ class AppleHealthService {
         }
       }
     }
+    // Optional pre-sleep activity is stored separately from sleep physiology.
+    // The interval is the preceding waking period, capped at 24 hours and
+    // shortened to the end of the previous imported night when available.
+    var activityAuthorized = false;
+    try {
+      activityAuthorized = await _health.requestAuthorization(
+        _activityTypes,
+        permissions: List.filled(_activityTypes.length, HealthDataAccess.READ),
+      );
+    } catch (_) {
+      // Activity permissions are optional and must never block sleep import.
+    }
+    if (activityAuthorized) {
+      for (var index = 0; index < groups.length; index++) {
+        final group = groups[index];
+        final nightStart = group
+            .map((point) => point.dateFrom)
+            .reduce((a, b) => a.isBefore(b) ? a : b);
+        var wakingStart = nightStart.subtract(const Duration(hours: 24));
+        if (index > 0) {
+          final previousEnd = groups[index - 1]
+              .map((point) => point.dateTo)
+              .reduce((a, b) => a.isAfter(b) ? a : b);
+          if (previousEnd.isAfter(wakingStart) && previousEnd.isBefore(nightStart)) {
+            wakingStart = previousEnd;
+          }
+        }
+        final intervalSeconds = nightStart.difference(wakingStart).inSeconds;
+        if (intervalSeconds <= 0) continue;
+        final first = group.first;
+        final sessionId = sessionIdsByGroup[first.uuid];
+        if (sessionId == null) continue;
+
+        final activity = <String, Object?>{
+          'schemaVersion': 1,
+          'sessionId': sessionId,
+          'windowStart': wakingStart.toUtc().toIso8601String(),
+          'windowEnd': nightStart.toUtc().toIso8601String(),
+          'syncedAt': DateTime.now().toUtc().toIso8601String(),
+        };
+        try {
+          final aggregates = await _health.getHealthIntervalDataFromTypes(
+            types: const [
+              HealthDataType.STEPS,
+              HealthDataType.ACTIVE_ENERGY_BURNED,
+              HealthDataType.EXERCISE_TIME,
+            ],
+            startDate: wakingStart,
+            endDate: nightStart,
+            interval: intervalSeconds,
+          );
+          for (final point in aggregates) {
+            if (point.value is! NumericHealthValue) continue;
+            final value = (point.value as NumericHealthValue).numericValue.toDouble();
+            if (!value.isFinite) continue;
+            switch (point.type) {
+              case HealthDataType.STEPS:
+                activity['steps'] = value.round();
+                break;
+              case HealthDataType.ACTIVE_ENERGY_BURNED:
+                activity['activeEnergyKcal'] = value;
+                break;
+              case HealthDataType.EXERCISE_TIME:
+                activity['exerciseMinutes'] = value;
+                break;
+              default:
+                break;
+            }
+          }
+        } catch (_) {
+          // One unavailable aggregate does not invalidate the other activity types.
+        }
+        try {
+          final workouts = await _health.getHealthDataFromTypes(
+            types: const [HealthDataType.WORKOUT],
+            startTime: wakingStart,
+            endTime: nightStart,
+          );
+          final uniqueWorkouts = _health.removeDuplicates(workouts);
+          if (uniqueWorkouts.isNotEmpty) {
+            activity['workoutCount'] = uniqueWorkouts.length;
+            activity['workoutDurationMinutes'] = uniqueWorkouts.fold<int>(
+              0,
+              (sum, point) => sum + point.dateTo.difference(point.dateFrom).inMinutes,
+            );
+            activity['workouts'] = uniqueWorkouts.map((point) => <String, Object?>{
+              'type': point.workoutSummary?.workoutType.toString() ?? 'Тренировка',
+              'startedAt': point.dateFrom.toUtc().toIso8601String(),
+              'endedAt': point.dateTo.toUtc().toIso8601String(),
+              'source': point.sourceName,
+            }).toList();
+          }
+        } catch (_) {
+          // Workout detail is optional; keep any successfully read aggregates.
+        }
+        if (activity.keys.any((key) =>
+            key == 'steps' || key == 'activeEnergyKcal' ||
+            key == 'exerciseMinutes' || key == 'workoutCount' ||
+            key == 'workoutDurationMinutes')) {
+          await SleepDatabase.instance.setAppMetadata(
+            'sleep_tracker_activity_v1_$sessionId',
+            jsonEncode(activity),
+          );
+        }
+      }
+    }
+
     return AppleHealthSyncResult(imported: imported, found: groups.length);
   }
 
