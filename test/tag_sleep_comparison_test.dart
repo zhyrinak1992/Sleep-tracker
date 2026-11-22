@@ -37,7 +37,7 @@ void main() {
       final result = TagSleepComparison.calculate(
         sessions: sessions,
         tagsBySession: tags,
-        tagKey: 'caffeine',
+        tagKeys: {'caffeine'},
         start: start,
         endExclusive: end,
         metric: TagSleepMetric.sleepDuration,
@@ -49,6 +49,36 @@ void main() {
       expect(result.withTag.average, 450);
       expect(result.withoutTag.average, 390);
       expect(result.difference, 60);
+    });
+
+    test('requires every selected tag to be present for a combined comparison', () {
+      final sessions = <SleepSession>[
+        for (var i = 0; i < 4; i++)
+          _session(id: 'both-$i', start: start.add(Duration(days: i)), durationMinutes: 450),
+        for (var i = 0; i < 4; i++)
+          _session(id: 'coffee-only-$i', start: start.add(Duration(days: i + 5)), durationMinutes: 420),
+        for (var i = 0; i < 4; i++)
+          _session(id: 'neither-$i', start: start.add(Duration(days: i + 10)), durationMinutes: 390),
+      ];
+      final tags = <String, Set<String>>{
+        for (var i = 0; i < 4; i++) 'both-$i': {'caffeine', 'stress'},
+        for (var i = 0; i < 4; i++) 'coffee-only-$i': {'caffeine'},
+      };
+
+      final result = TagSleepComparison.calculate(
+        sessions: sessions,
+        tagsBySession: tags,
+        tagKeys: {'caffeine', 'stress'},
+        start: start,
+        endExclusive: end,
+        metric: TagSleepMetric.sleepDuration,
+      );
+
+      expect(result.withTag.nights, 4);
+      expect(result.withoutTag.nights, 8);
+      expect(result.withTag.average, 450);
+      expect(result.withoutTag.average, 405);
+      expect(result.difference, 45);
     });
 
     test('does not treat manual button times as actual sleep duration', () {
@@ -69,7 +99,7 @@ void main() {
       final result = TagSleepComparison.calculate(
         sessions: sessions,
         tagsBySession: tags,
-        tagKey: 'caffeine',
+        tagKeys: {'caffeine'},
         start: start,
         endExclusive: end,
         metric: TagSleepMetric.sleepDuration,
@@ -93,7 +123,7 @@ void main() {
       final result = TagSleepComparison.calculate(
         sessions: sessions,
         tagsBySession: tags,
-        tagKey: 'stress',
+        tagKeys: {'stress'},
         start: start,
         endExclusive: end,
         metric: TagSleepMetric.sleepDuration,
@@ -146,7 +176,7 @@ void main() {
       final result = TagSleepComparison.calculate(
         sessions: sessions,
         tagsBySession: tags,
-        tagKey: 'caffeine',
+        tagKeys: ['caffeine'],
         start: start,
         endExclusive: end,
         metric: TagSleepMetric.sleepDuration,
@@ -177,9 +207,26 @@ void main() {
       expect(loaded, hasLength(1));
       expect(loaded.single.id, template.id);
       expect(loaded.single.name, template.name);
-      expect(loaded.single.tagKey, template.tagKey);
+      expect(loaded.single.tagKeys, template.tagKeys);
       expect(loaded.single.metric, template.metric);
       expect(metadata.keys, [TagComparisonTemplateStore.metadataKey]);
+    });
+
+    test('loads legacy single-tag templates and upgrades them to tagKeys on save', () async {
+      final metadata = <String, String>{
+        TagComparisonTemplateStore.metadataKey:
+            '[{"id":"legacy-1","name":"Кофе","tagKey":"caffeine","metric":"sleepDuration"}]',
+      };
+      final store = TagComparisonTemplateStore(
+        (key) async => metadata[key],
+        (key, value) async => metadata[key] = value,
+      );
+
+      final loaded = await store.load();
+      expect(loaded.single.tagKeys, ['caffeine']);
+      await store.save(loaded);
+      expect(metadata[TagComparisonTemplateStore.metadataKey], contains('"tagKeys":["caffeine"]'));
+      expect(metadata[TagComparisonTemplateStore.metadataKey], isNot(contains('"tagKey"')));
     });
 
     test('rejects malformed stored template data without silently replacing it', () async {
