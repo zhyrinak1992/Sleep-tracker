@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'screen_time_card.dart';
 import '../../data/sleep_database.dart';
 import '../analysis/climate_analytics.dart';
 import '../../models/sleep_session.dart';
@@ -298,6 +299,8 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                           style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4)),
                       ],
                     )),
+                    const SizedBox(height: 12),
+                    ScreenTimeCard(database: widget.database, session: session),
                     const SizedBox(height: 12),
                     SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       const Text('Фазы сна', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
