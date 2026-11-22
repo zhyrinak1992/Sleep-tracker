@@ -293,7 +293,7 @@ class AppleHealthFileImportService {
       'HKCategoryValueSleepAnalysis',
     ];
     var carry = '';
-    await for (final chunk in file.openRead().transform(utf8.decoder.allowMalformed(true))) {
+    await for (final chunk in file.openRead().transform(const Utf8Decoder(allowMalformed: true))) {
       final text = carry + chunk;
       if (markers.any(text.contains)) return true;
       // Preserve enough trailing characters to catch a marker split between
