@@ -185,11 +185,66 @@ class SleepDatabase {
         throw const FormatException('В резервной копии обнаружена некорректная оценка самочувствия.');
       }
     }
-    for (final table in ['sleep_session_tags', 'sleep_notes', 'sleep_stages', 'sleep_metrics', 'audio_events', 'morning_reports']) {
+    // Проверяем обязательные поля и уникальность до начала транзакции.
+    // Это даёт понятную ошибку архива вместо частичного импорта или ошибки SQLite.
+    const requiredFields = <String, List<String>>{
+      'sleep_session_tags': ['session_id', 'tag_key', 'label', 'created_at'],
+      'sleep_notes': ['id', 'session_id', 'body', 'created_at', 'updated_at'],
+      'app_metadata': ['key', 'value'],
+      'sleep_stages': ['id', 'session_id', 'stage', 'started_at', 'ended_at', 'source'],
+      'sleep_metrics': ['id', 'session_id', 'metric_type', 'value', 'unit', 'measured_at', 'source'],
+      'audio_events': ['id', 'category', 'captured_at', 'expires_at', 'duration_ms', 'user_corrected'],
+      'morning_reports': ['id', 'session_id', 'report_date', 'created_at'],
+      'climate_samples': ['id', 'device_id', 'metric_type', 'value', 'unit', 'source', 'measured_at', 'received_at', 'quality'],
+    };
+    for (final entry in requiredFields.entries) {
+      for (final row in rowsByTable[entry.key]!) {
+        for (final field in entry.value) {
+          if (!row.containsKey(field) || row[field] == null) {
+            throw FormatException('В разделе ${entry.key} отсутствует обязательное поле $field.');
+          }
+        }
+      }
+    }
+
+    for (final table in ['sleep_session_tags', 'sleep_notes', 'sleep_stages', 'sleep_metrics', 'morning_reports']) {
       for (final row in rowsByTable[table]!) {
-        if (row['session_id'] != null && (row['session_id'] is! String || !sessionIds.contains(row['session_id']))) {
+        final sessionId = row['session_id'];
+        if (sessionId is! String || !sessionIds.contains(sessionId)) {
+          throw FormatException('В разделе $table есть пустая или недействительная ссылка на ночь.');
+        }
+      }
+    }
+    for (final table in ['audio_events', 'climate_samples']) {
+      for (final row in rowsByTable[table]!) {
+        final sessionId = row['session_id'];
+        if (sessionId != null && (sessionId is! String || !sessionIds.contains(sessionId))) {
           throw FormatException('В разделе $table есть ссылка на отсутствующую ночь.');
         }
+      }
+    }
+
+    void ensureUnique(String table, String field) {
+      final seen = <Object?>{};
+      for (final row in rowsByTable[table]!) {
+        if (!seen.add(row[field])) {
+          throw FormatException('В разделе $table обнаружены повторяющиеся значения $field.');
+        }
+      }
+    }
+    for (final table in ['sleep_notes', 'sleep_stages', 'sleep_metrics', 'audio_events', 'morning_reports']) {
+      ensureUnique(table, 'id');
+    }
+    ensureUnique('app_metadata', 'key');
+    final tagKeys = <String>{};
+    for (final row in rowsByTable['sleep_session_tags']!) {
+      final key = '${row['session_id']}::${row['tag_key']}';
+      if (!tagKeys.add(key)) throw const FormatException('В резервной копии обнаружены повторяющиеся теги ночи.');
+    }
+    final reportSessions = <String>{};
+    for (final row in rowsByTable['morning_reports']!) {
+      if (!reportSessions.add(row['session_id']! as String)) {
+        throw const FormatException('В резервной копии обнаружено несколько утренних отчётов для одной ночи.');
       }
     }
 
