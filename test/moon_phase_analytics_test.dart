@@ -27,4 +27,11 @@ void main() {
     expect(groups[4].count,1);
     expect(groups.fold<int>(0,(sum,g)=>sum+g.count),2);
   });
+  test('detects a phase boundary crossed during a night', () {
+    final start = DateTime.utc(2000, 1, 6, 18, 14);
+    final end = start.add(Duration(microseconds: (MoonPhaseAnalytics.synodicMonthDays / 8 * Duration.microsecondsPerDay).round()));
+    final session = SleepSession(id:'crossing', startedAt:start, endedAt:end);
+    expect(MoonPhaseAnalytics.phaseChangedDuring(session), isTrue);
+  });
+
 }
