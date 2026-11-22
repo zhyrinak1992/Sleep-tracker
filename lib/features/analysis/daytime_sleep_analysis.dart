@@ -1,5 +1,5 @@
-import '../models/daytime_sleep_entry.dart';
-import '../models/sleep_session.dart';
+import '../../models/daytime_sleep_entry.dart';
+import '../../models/sleep_session.dart';
 
 class DaytimeSleepComparison {
   const DaytimeSleepComparison({
