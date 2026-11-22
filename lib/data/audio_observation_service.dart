@@ -45,6 +45,7 @@ class AudioObservationService {
     _lastLoudAt = null;
     _observing = true;
     _paused = false;
+    await SleepDatabase.instance.setAppMetadata('audio_observation_user_paused', 'false');
     observing.value = true;
     paused.value = false;
     try {
@@ -63,6 +64,7 @@ class AudioObservationService {
       observing.value = false;
       _paused = false;
       paused.value = false;
+      await SleepDatabase.instance.setAppMetadata('audio_observation_user_paused', 'false');
       rethrow;
     }
   }
@@ -70,6 +72,16 @@ class AudioObservationService {
   /// Reconnects the microphone after iOS interrupts the native recorder.
   /// A user-requested pause is respected and is never auto-resumed.
   Future<void> recoverObservationIfNeeded() async {
+    // A pause is a user privacy decision and must survive process termination.
+    // Never reopen the microphone automatically after such a pause.
+    final userPaused = await SleepDatabase.instance.getAppMetadata('audio_observation_user_paused') == 'true';
+    if (userPaused) {
+      _paused = true;
+      paused.value = true;
+      _observing = false;
+      observing.value = false;
+      return;
+    }
     if (_paused) return;
     if (_observing) {
       var nativeRecording = false;
@@ -101,6 +113,7 @@ class AudioObservationService {
     observing.value = false;
     _paused = false;
     paused.value = false;
+    await SleepDatabase.instance.setAppMetadata('audio_observation_user_paused', 'false');
     await _subscription?.cancel();
     _subscription = null;
     try {
@@ -229,6 +242,7 @@ class AudioObservationService {
     if (!_observing || _paused) return;
     _paused = true;
     paused.value = true;
+    await SleepDatabase.instance.setAppMetadata('audio_observation_user_paused', 'true');
     try {
       await _recorder.pause();
       if (_eventBytes != null) await _saveCurrentEvent();
@@ -241,10 +255,20 @@ class AudioObservationService {
   }
 
   Future<void> resumeObservation() async {
-    if (!_observing || !_paused) return;
+    if (!_observing) {
+      // The app process may have been terminated while the user had paused.
+      // Resume only after an explicit tap in the UI.
+      if (await SleepDatabase.instance.getAppMetadata('audio_observation_user_paused') == 'true') {
+        await startObservation();
+        return;
+      }
+      return;
+    }
+    if (!_paused) return;
     await _recorder.resume();
     _paused = false;
     paused.value = false;
+    await SleepDatabase.instance.setAppMetadata('audio_observation_user_paused', 'false');
     _preRoll.clear();
   }
 
@@ -254,6 +278,7 @@ class AudioObservationService {
     observing.value = false;
     _paused = false;
     paused.value = false;
+    await SleepDatabase.instance.setAppMetadata('audio_observation_user_paused', 'false');
     await _subscription?.cancel();
     _subscription = null;
     try { await _recorder.stop(); } catch (_) {}
