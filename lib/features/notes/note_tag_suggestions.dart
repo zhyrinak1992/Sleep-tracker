@@ -35,14 +35,22 @@ class NoteTagSuggestionAnalyzer {
       final tokens = RegExp(r'[a-zа-яё0-9]+', caseSensitive: false)
           .allMatches(note.text.toLowerCase())
           .map((match) => match.group(0)!)
-          .where((token) => token.length >= 3 && !_stopWords.contains(token))
           .toList();
       final candidates = <String>{};
       for (var i = 0; i < tokens.length; i++) {
-        candidates.add(tokens[i]);
-        if (i + 1 < tokens.length) candidates.add('${tokens[i]} ${tokens[i + 1]}');
+        final first = tokens[i];
+        if (first.length >= 3 && !_stopWords.contains(first)) candidates.add(first);
+        if (i + 1 < tokens.length) {
+          final pair = [tokens[i], tokens[i + 1]];
+          if (pair.every((token) => token.length >= 3 && !_stopWords.contains(token))) {
+            candidates.add(pair.join(' '));
+          }
+        }
         if (i + 2 < tokens.length) {
-          candidates.add('${tokens[i]} ${tokens[i + 1]} ${tokens[i + 2]}');
+          final phrase = [tokens[i], tokens[i + 1], tokens[i + 2]];
+          if (phrase.every((token) => token.length >= 3 && !_stopWords.contains(token))) {
+            candidates.add(phrase.join(' '));
+          }
         }
       }
       for (final phrase in candidates) {
