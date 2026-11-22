@@ -160,6 +160,16 @@ class SolarEvent {
   }
 }
 
+SolarEvent? _nextSunriseDay(Iterable<SolarEvent> events, DateTime reference) {
+  final candidates = events.where((event) =>
+    event.sunriseUtc != null && !event.sunriseUtc!.isBefore(reference.toUtc())
+  ).toList();
+  if (candidates.isEmpty) return null;
+  return candidates.reduce((a, b) =>
+    a.sunriseUtc!.isBefore(b.sunriseUtc!) ? a : b
+  );
+}
+
 DateTime? _nearestSolarEvent(
   Iterable<DateTime> events,
   DateTime reference, {
@@ -224,22 +234,8 @@ class WeatherNightSummary {
       end.toUtc(),
       before: false,
     );
-    SolarEvent? solarDay;
-    final wakeDate = _weatherDateKey(end.toUtc());
-    for (final event in solar) {
-      if (event.date == wakeDate) {
-        solarDay = event;
-        break;
-      }
-    }
-    if (solarDay == null && sunrise != null) {
-      for (final event in solar) {
-        if (event.sunriseUtc?.toUtc() == sunrise) {
-          solarDay = event;
-          break;
-        }
-      }
-    }
+    final solarDay = _nextSunriseDay(solar, end.toUtc()) ??
+        solar.where((event) => event.date == _weatherDateKey(end.toUtc())).firstOrNull;
     final daylightDuration = solarDay?.daylightDurationSeconds;
     return WeatherNightSummary(
       sampleCount: selected.length,
