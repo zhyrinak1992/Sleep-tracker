@@ -255,13 +255,15 @@ class _DaytimeSleepEditorState extends State<_DaytimeSleepEditor> {
       context: context,
       initialTime: start ? _start : _end,
     );
-    if (selected != null) setState(() {
-      if (start) {
-        _start = selected;
-      } else {
-        _end = selected;
-      }
-    });
+    if (selected != null) {
+      setState(() {
+        if (start) {
+          _start = selected;
+        } else {
+          _end = selected;
+        }
+      });
+    }
   }
 
   void _save() {
