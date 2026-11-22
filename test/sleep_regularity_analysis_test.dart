@@ -35,7 +35,7 @@ void main() {
         _session(1, 23 * 60, 7 * 60),
         _session(2, 23 * 60, 7 * 60, source: 'manual'),
         _session(3, 23 * 60, 7 * 60, edited: true),
-        const SleepSession(id: 'open', startedAt: DateTime(2026, 11, 4)),
+        SleepSession(id: 'open', startedAt: DateTime(2026, 11, 4)),
       ]);
       expect(result.nights, hasLength(1));
       expect(result.excludedCount, 3);
