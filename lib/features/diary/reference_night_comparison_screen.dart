@@ -84,20 +84,20 @@ class _ReferenceNightComparisonScreenState extends State<ReferenceNightCompariso
                   if (stageSnapshot.connectionState == ConnectionState.waiting) return const SectionCard(child: LinearProgressIndicator());
                   if (stageSnapshot.hasError) return SectionCard(child: Text('Не удалось загрузить фазы сна: ${stageSnapshot.error}'));
                   final stages = stageSnapshot.data ?? const <String, List<Map<String, Object?>>>{};
-                  final baseline = _metrics(reference!, stages);
+                  final baseline = _metrics(reference, stages);
                   final others = sessions.where((s) => s.id != reference!.id).toList();
                   return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                     SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       const Text('Эталонные показатели', style: TextStyle(fontWeight: FontWeight.w700)),
                       const SizedBox(height: 8),
-                      Text(_date(reference!), style: const TextStyle(color: AppTheme.muted, fontSize: 12)),
+                      Text(_date(reference), style: const TextStyle(color: AppTheme.muted, fontSize: 12)),
                       const SizedBox(height: 8),
                       _metric('Длительность сна', _duration(baseline.sleepDurationMinutes)),
                       _metric('Время в постели', _duration(baseline.timeInBedMinutes)),
                       _metric('Эффективность', baseline.sleepEfficiencyPercent == null ? 'Нет данных' : '${baseline.sleepEfficiencyPercent!.toStringAsFixed(1)}%'),
                       _metric('Пробуждения', '${baseline.awakeningCount}'),
                       _metric('Бодрствование', _duration(baseline.awakeStageMinutes)),
-                      _metric('Самочувствие', reference!.morningRating == null ? 'Не оценено' : '${reference.morningRating} из 5'),
+                      _metric('Самочувствие', reference.morningRating == null ? 'Не оценено' : '${reference.morningRating} из 5'),
                     ])),
                     const SizedBox(height: 14),
                     Text('Другие ночи · ${others.length}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
