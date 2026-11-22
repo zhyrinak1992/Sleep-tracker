@@ -313,7 +313,7 @@ class _WeatherAnalysisCardState extends State<WeatherAnalysisCard> {
               style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4)),
           ],
           const SizedBox(height: 8),
-          const Text('Источник: Open-Meteo Historical Weather API (архивная реанализная оценка). Местоположение выбирается вручную. Weather data by Open-Meteo.com.',
+          const Text('Источник: Open-Meteo Historical Weather API (архивная реанализная оценка); названия мест — GeoNames. Местоположение выбирается вручную. Weather data by Open-Meteo.com.',
             style: TextStyle(color: AppTheme.muted, fontSize: 10, height: 1.35)),
         ],
       ));
