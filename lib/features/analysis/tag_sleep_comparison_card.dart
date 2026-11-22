@@ -227,6 +227,12 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
       }
       final data = snapshot.data!;
       final availableTags = [...SleepTag.catalog, ...data.customTags];
+      String tagLabel(String key) {
+        for (final tag in availableTags) {
+          if (tag.key == key) return tag.label;
+        }
+        return 'Отметка недоступна';
+      }
       final selectedKey = availableTags.any((tag) => tag.key == _tagKey)
           ? _tagKey!
           : availableTags.first.key;
@@ -260,7 +266,7 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
                 dense: true,
                 contentPadding: EdgeInsets.zero,
                 title: Text(template.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                subtitle: Text('${availableTags.where((tag) => tag.key == template.tagKey).map((tag) => tag.label).firstOrNull ?? 'Отметка недоступна'} · ${template.metric.label}'),
+                subtitle: Text('${tagLabel(template.tagKey)} · ${template.metric.label}'),
                 selected: template.id == _activeTemplateId,
                 onTap: () => setState(() {
                   _activeTemplateId = template.id;
