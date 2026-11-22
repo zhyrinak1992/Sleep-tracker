@@ -177,12 +177,23 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                       children: [
                         const Text('Время', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 8),
-                        _detailRow('Начало', _dateTime(session.startedAt), icon: Icons.bedtime_outlined),
+                        _detailRow('Нажатие «Ложусь спать»', _dateTime(session.buttonStartedAt), icon: Icons.touch_app_outlined),
                         const Divider(height: 1),
-                        _detailRow('Окончание', _dateTime(session.endedAt), icon: Icons.wb_sunny_outlined),
+                        _detailRow('Фактическое засыпание', _dateTime(session.actualSleepStartedAt), icon: Icons.bedtime_outlined),
                         const Divider(height: 1),
-                        _detailRow('Источник записи', session.source == 'manual' ? 'Вручную' : session.source,
+                        _detailRow('Нажатие «Я проснулась»', _dateTime(session.buttonEndedAt), icon: Icons.touch_app_outlined),
+                        const Divider(height: 1),
+                        _detailRow('Фактическое пробуждение', _dateTime(session.actualSleepEndedAt), icon: Icons.wb_sunny_outlined),
+                        const Divider(height: 1),
+                        _detailRow('Источник записи', session.source == 'manual' || session.source == 'manual_entry'
+                            ? 'Вручную' : session.source,
                             icon: Icons.info_outline),
+                        if (session.userEdited)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: Text('Время записи скорректировано вручную. Исходные отметки кнопок сохранены отдельно.',
+                              style: TextStyle(color: AppTheme.teal, fontSize: 12, height: 1.4)),
+                          ),
                       ],
                     )),
                     const SizedBox(height: 12),
