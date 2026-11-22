@@ -1,66 +1,63 @@
-import '../../models/screen_time_entry.dart';
-import '../../models/sleep_session.dart';
-
-class ScreenTimeSleepGroup {
-  const ScreenTimeSleepGroup({
-    required this.label,
-    required this.nights,
-    required this.averageSleepMinutes,
-    required this.averageScreenMinutes,
+class ScreenTimeSleepSample {
+  const ScreenTimeSleepSample({
+    required this.screenMinutes,
+    required this.lastUseGapMinutes,
+    required this.sleepMinutes,
   });
 
-  final String label;
-  final int nights;
-  final double averageSleepMinutes;
-  final double averageScreenMinutes;
+  final double screenMinutes;
+  final double lastUseGapMinutes;
+  final double sleepMinutes;
 }
 
-class ScreenTimeSleepAnalysis {
-  ScreenTimeSleepAnalysis._();
+class ScreenTimeSleepGroupSummary {
+  const ScreenTimeSleepGroupSummary({
+    required this.nights,
+    required this.averageScreenMinutes,
+    required this.averageLastUseGapMinutes,
+    required this.averageSleepMinutes,
+  });
 
-  static const _groups = [
-    (label: 'До 30 минут', maxGap: 30),
-    (label: '31–60 минут', maxGap: 60),
-    (label: '61–120 минут', maxGap: 120),
-    (label: 'Более 120 минут', maxGap: 1440),
-  ];
+  final int nights;
+  final double averageScreenMinutes;
+  final double averageLastUseGapMinutes;
+  final double averageSleepMinutes;
+}
 
-  static List<ScreenTimeSleepGroup> summarize({
-    required Iterable<SleepSession> sessions,
-    required Map<String, ScreenTimeEntry> entries,
-  }) {
-    final values = <({int gap, int screen, double sleep})>[];
-    for (final session in sessions) {
-      final start = session.actualSleepStartedAt ?? session.startedAt;
-      final end = session.actualSleepEndedAt ?? session.endedAt;
-      if (end == null || !end.isAfter(start)) continue;
-      final entry = entries[session.id];
-      if (entry == null || entry.sessionId != session.id) continue;
-      final gap = start.difference(entry.lastUseAt).inMinutes;
-      if (gap < 0 || gap > 1440) continue;
-      if (entry.durationMinutes < 0 || entry.durationMinutes > 360) continue;
-      values.add((
-        gap: gap,
-        screen: entry.durationMinutes,
-        sleep: end.difference(start).inMinutes.toDouble(),
-      ));
-    }
+class ScreenTimeSleepComparison {
+  const ScreenTimeSleepComparison({
+    required this.belowMedian,
+    required this.atOrAboveMedian,
+  });
 
-    final result = <ScreenTimeSleepGroup>[];
-    var lowerBound = 0;
-    for (final group in _groups) {
-      final selected = values.where((value) =>
-        value.gap >= lowerBound && value.gap <= group.maxGap).toList();
-      if (selected.isNotEmpty) {
-        result.add(ScreenTimeSleepGroup(
-          label: group.label,
-          nights: selected.length,
-          averageSleepMinutes: selected.map((value) => value.sleep).reduce((a, b) => a + b) / selected.length,
-          averageScreenMinutes: selected.map((value) => value.screen.toDouble()).reduce((a, b) => a + b) / selected.length,
-        ));
-      }
-      lowerBound = group.maxGap + 1;
-    }
-    return result;
+  final ScreenTimeSleepGroupSummary belowMedian;
+  final ScreenTimeSleepGroupSummary atOrAboveMedian;
+
+  static ScreenTimeSleepComparison? fromSamples(Iterable<ScreenTimeSleepSample> samples) {
+    final valid = samples.where((sample) =>
+      sample.screenMinutes.isFinite &&
+      sample.screenMinutes >= 0 &&
+      sample.screenMinutes <= 360 &&
+      sample.lastUseGapMinutes.isFinite &&
+      sample.lastUseGapMinutes >= 0 &&
+      sample.lastUseGapMinutes <= 1440 &&
+      sample.sleepMinutes.isFinite &&
+      sample.sleepMinutes > 0
+    ).toList()..sort((a, b) => a.screenMinutes.compareTo(b.screenMinutes));
+    if (valid.length < 4) return null;
+
+    final midpoint = valid.length ~/ 2;
+    ScreenTimeSleepGroupSummary summarize(List<ScreenTimeSleepSample> group) =>
+      ScreenTimeSleepGroupSummary(
+        nights: group.length,
+        averageScreenMinutes: group.map((x) => x.screenMinutes).reduce((a, b) => a + b) / group.length,
+        averageLastUseGapMinutes: group.map((x) => x.lastUseGapMinutes).reduce((a, b) => a + b) / group.length,
+        averageSleepMinutes: group.map((x) => x.sleepMinutes).reduce((a, b) => a + b) / group.length,
+      );
+
+    return ScreenTimeSleepComparison(
+      belowMedian: summarize(valid.take(midpoint).toList()),
+      atOrAboveMedian: summarize(valid.skip(midpoint).toList()),
+    );
   }
 }
