@@ -225,6 +225,17 @@ class _DiaryScreenState extends State<DiaryScreen> {
               icon: const Icon(Icons.compare_arrows), label: const Text('Сравнить'),
             )),
           ]),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () async {
+              await Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => SleepTrashScreen(database: widget.database),
+              ));
+              await _reload();
+            },
+            icon: const Icon(Icons.delete_outline),
+            label: const Text('Корзина'),
+          ),
           const SizedBox(height: 18),
           if (snapshot.connectionState == ConnectionState.waiting)
             const Center(child: Padding(padding: EdgeInsets.all(28), child: CircularProgressIndicator()))
