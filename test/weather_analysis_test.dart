@@ -101,4 +101,24 @@ void main() {
     );
   });
 
+  test('solar events preserve missing values and convert to selected location time', () {
+    final day = WeatherSolarDay.fromJson({
+      'date': '2026-11-22',
+      'sunriseUtc': '2026-11-22T07:00:00Z',
+      'sunsetUtc': null,
+      'daylightDurationSeconds': 28800,
+    });
+    expect(day.sunriseUtc, DateTime.utc(2026, 11, 22, 7));
+    expect(day.sunsetUtc, isNull);
+    expect(day.daylightDurationSeconds, 28800);
+    expect(
+      WeatherService.instance.formatSolarTime(day.sunriseUtc, 'Europe/Moscow'),
+      '10:00',
+    );
+    expect(
+      WeatherService.instance.formatSolarTime(day.sunsetUtc, 'Europe/Moscow'),
+      'Нет данных',
+    );
+  });
+
 }
