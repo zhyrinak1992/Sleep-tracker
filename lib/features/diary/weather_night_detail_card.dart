@@ -108,7 +108,7 @@ class _WeatherNightDetailCardState extends State<WeatherNightDetailCard> {
   }
 
   String _daylight(double? seconds) {
-    if (seconds == null || !seconds.isFinite || seconds <= 0) return 'Нет данных';
+    if (seconds == null || !seconds.isFinite || seconds < 0) return 'Нет данных';
     final minutes = (seconds / 60).round();
     return '${minutes ~/ 60} ч ${minutes % 60} мин';
   }
