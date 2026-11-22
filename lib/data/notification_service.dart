@@ -34,38 +34,62 @@ class NotificationService {
       ));
   }
 
+  // Three rolling days keep 42 night reminders below iOS's pending
+  // local-notification limit while leaving room for other app notifications.
+  static const int _nightReminderBaseId = 5000;
+  static const int _nightReminderDays = 3;
+  static const List<(int, int)> _nightReminderTimes = [
+    (23, 55), (0, 0), (0, 30), (1, 0), (1, 30), (2, 0), (2, 30),
+    (3, 0), (3, 30), (4, 0), (4, 30), (5, 0), (5, 30), (6, 0),
+  ];
+
+  static int _nightReminderId(int dayOffset, int slotIndex) =>
+      _nightReminderBaseId + dayOffset * 20 + slotIndex;
+
   Future<void> scheduleNightReminders() async {
     await initialize();
+    await cancelNightReminders();
     final now = tz.TZDateTime.now(tz.local);
-    final times = <(int, int, int)>[(4200, 23, 55), (4201, 0, 0)];
-    for (var minute = 30; minute <= 360; minute += 30) {
-      times.add((4201 + minute ~/ 30, minute ~/ 60, minute % 60));
-    }
-    for (final item in times) {
-      var next = tz.TZDateTime(tz.local, now.year, now.month, now.day, item.$2, item.$3);
-      if (!next.isAfter(now)) next = tz.TZDateTime(tz.local, now.year, now.month, now.day + 1, item.$2, item.$3);
-      await _plugin.zonedSchedule(
-        item.$1, item.$1 == 4200 ? 'Проверка перед сном' : 'Ночное наблюдение не начато',
-        item.$1 == 4200
-          ? 'Вы уже ложитесь спать? Откройте приложение, чтобы начать ночное наблюдение.'
-          : 'Если вы уже спите, откройте Sleep Tracker и запустите запись звуковых событий.',
-        next,
-        const NotificationDetails(
-          iOS: DarwinNotificationDetails(presentAlert: true, presentSound: true),
-          android: AndroidNotificationDetails('sleep_night', 'Ночное наблюдение', importance: Importance.defaultImportance, priority: Priority.defaultPriority),
-        ),
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-        matchDateTimeComponents: DateTimeComponents.time,
-      );
+    for (var dayOffset = 0; dayOffset < _nightReminderDays; dayOffset++) {
+      final day = tz.TZDateTime(tz.local, now.year, now.month, now.day + dayOffset);
+      for (var slotIndex = 0; slotIndex < _nightReminderTimes.length; slotIndex++) {
+        final time = _nightReminderTimes[slotIndex];
+        final scheduled = tz.TZDateTime(tz.local, day.year, day.month, day.day, time.$1, time.$2);
+        if (!scheduled.isAfter(now)) continue;
+        final isPreSleep = slotIndex == 0;
+        await _plugin.zonedSchedule(
+          _nightReminderId(dayOffset, slotIndex),
+          isPreSleep ? 'Проверка перед сном' : 'Ночное наблюдение не начато',
+          isPreSleep
+              ? 'Вы уже ложитесь спать? Откройте приложение, чтобы начать ночное наблюдение.'
+              : 'Если вы уже спите, откройте Sleep Tracker и запустите запись звуковых событий.',
+          scheduled,
+          const NotificationDetails(
+            iOS: DarwinNotificationDetails(presentAlert: true, presentSound: true),
+            android: AndroidNotificationDetails('sleep_night', 'Ночное наблюдение', importance: Importance.defaultImportance, priority: Priority.defaultPriority),
+          ),
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        );
+      }
     }
   }
 
   Future<void> cancelNextMidnightAttempt() async {
+    await initialize();
     final now = tz.TZDateTime.now(tz.local);
-    if (now.hour == 23) { await _plugin.cancel(4201); return; }
-    final currentMinutes = now.hour * 60 + now.minute;
-    final nextSlot = ((currentMinutes ~/ 30) + 1) * 30;
-    if (nextSlot <= 360) await _plugin.cancel(4201 + nextSlot ~/ 30);
+    // Cancel one upcoming 00:00–06:00 half-hour slot only. All other
+    // reminders, including the following night's series, remain scheduled.
+    for (var dayOffset = 0; dayOffset < _nightReminderDays; dayOffset++) {
+      final day = tz.TZDateTime(tz.local, now.year, now.month, now.day + dayOffset);
+      for (var slotIndex = 1; slotIndex < _nightReminderTimes.length; slotIndex++) {
+        final time = _nightReminderTimes[slotIndex];
+        final scheduled = tz.TZDateTime(tz.local, day.year, day.month, day.day, time.$1, time.$2);
+        if (scheduled.isAfter(now)) {
+          await _plugin.cancel(_nightReminderId(dayOffset, slotIndex));
+          return;
+        }
+      }
+    }
   }
 
   Future<void> scheduleAudioExpiry(Iterable<DateTime> expiries) async {
@@ -97,7 +121,16 @@ class NotificationService {
   }
 
   Future<void> cancelNightReminders() async {
-    for (var id = 4200; id <= 4213; id++) { await _plugin.cancel(id); }
+    // Remove legacy repeating IDs from previous app versions.
+    for (var id = 4200; id <= 4213; id++) {
+      await _plugin.cancel(id);
+    }
+    // Remove date-specific IDs in the rolling three-day window.
+    for (var id = _nightReminderBaseId;
+        id < _nightReminderBaseId + _nightReminderDays * 20;
+        id++) {
+      await _plugin.cancel(id);
+    }
   }
 
 
