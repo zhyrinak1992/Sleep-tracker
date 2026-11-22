@@ -13,6 +13,7 @@ import '../../data/notification_service.dart';
 import '../../data/yandex_smart_home_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
+import '../../widgets/screen_header.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
