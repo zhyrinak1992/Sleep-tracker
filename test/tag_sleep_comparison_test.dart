@@ -176,7 +176,7 @@ void main() {
       final result = TagSleepComparison.calculate(
         sessions: sessions,
         tagsBySession: tags,
-        tagKeys: ['caffeine'],
+        tagKeys: {'caffeine'},
         start: start,
         endExclusive: end,
         metric: TagSleepMetric.sleepDuration,
