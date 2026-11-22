@@ -572,7 +572,7 @@ class _HealthDayCalendarCardState extends State<_HealthDayCalendarCard> {
           decoration: BoxDecoration(
             color: isSelected ? AppTheme.teal.withValues(alpha: 0.22) : null,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: isSelected ? AppTheme.accent : selectedToday ? AppTheme.accent.withValues(alpha: 0.55) : Colors.transparent),
+            border: Border.all(color: isSelected ? AppTheme.teal : selectedToday ? AppTheme.teal.withValues(alpha: 0.55) : Colors.transparent),
           ),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             Text('${day.day}', style: TextStyle(fontSize: 12, color: inMonth ? null : AppTheme.muted.withValues(alpha: 0.45), fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500)),
