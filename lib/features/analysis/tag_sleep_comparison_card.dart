@@ -181,7 +181,6 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
         name: name.trim(),
         tagKeys: tagKeys,
         metric: _metric,
-        awakeningCountsBySession: data.awakeningCountsBySession,
       );
       await _store.save([...templates, template]);
       if (!mounted) return;
