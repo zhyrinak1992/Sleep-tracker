@@ -29,7 +29,7 @@ class AppleHealthFilePreview {
     final db = SleepDatabase.instance;
 
     for (final night in _sessions) {
-      final inserted = await db.insertHealthSession(
+      final resolved = await db.upsertHealthSession(
         id: night.id,
         startedAt: night.startedAt,
         endedAt: night.endedAt,
@@ -37,13 +37,16 @@ class AppleHealthFilePreview {
             ? 'Apple Health (импорт из файла)'
             : '${night.sourceName} · импорт из файла',
       );
-      if (!inserted) continue;
-      importedNights++;
+      final sessionId = resolved.$1;
+      if (sessionId == null) continue;
+      if (resolved.$2) importedNights++;
 
+      // Repeated file imports may discover additional records. Deterministic
+      // sample IDs allow safe enrichment without duplicating existing rows.
       for (final stage in night.stages) {
         await db.addSleepStage(
           id: stage.id,
-          sessionId: night.id,
+          sessionId: sessionId,
           stage: stage.name,
           startedAt: stage.from,
           endedAt: stage.to,
@@ -54,7 +57,7 @@ class AppleHealthFilePreview {
       for (final metric in night.metrics) {
         await db.addSleepMetric(
           id: metric.id,
-          sessionId: night.id,
+          sessionId: sessionId,
           type: metric.name,
           value: metric.value,
           unit: metric.unit,
