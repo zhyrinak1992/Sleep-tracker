@@ -181,5 +181,22 @@ class YandexSmartHomeService {
     return saved;
   }
 
+
+  /// Безопасный фоновый для UI опрос: вызывается только пока приложение активно.
+  /// iOS не гарантирует выполнение этого таймера при заблокированном экране.
+  Future<int> refreshConfiguredDeviceIfNeeded({
+    Duration minimumInterval = const Duration(minutes: 15),
+  }) async {
+    final deviceId = await SleepDatabase.instance.getAppMetadata('yandex_selected_device_id');
+    if (deviceId == null || deviceId.isEmpty || !await isConnected) return 0;
+    final latest = await SleepDatabase.instance.getClimateSamples(deviceId: deviceId);
+    if (latest.isNotEmpty) {
+      final received = DateTime.tryParse(latest.last['received_at'] as String? ?? '');
+      if (received != null && DateTime.now().toUtc().difference(received) < minimumInterval) return 0;
+    }
+    final activeSession = await SleepDatabase.instance.getOpenSession();
+    return refreshSelectedDevice(deviceId: deviceId, sessionId: activeSession?.id);
+  }
+
   void dispose() => _client.close();
 }
