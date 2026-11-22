@@ -6,6 +6,7 @@ import '../../data/sleep_database.dart';
 import '../../models/sleep_session.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
+import 'activity_sleep_analysis.dart';
 
 class _ActivityNight {
   const _ActivityNight({
@@ -89,15 +90,12 @@ class ActivityAnalysisCard extends StatelessWidget {
       final nights = snapshot.data ?? const <_ActivityNight>[];
       final stepNights = nights.where((night) => night.steps != null).toList()
         ..sort((a, b) => a.steps!.compareTo(b.steps!));
-      final lower = <_ActivityNight>[];
-      final upper = <_ActivityNight>[];
-      if (stepNights.length >= 4) {
-        final midpoint = stepNights.length ~/ 2;
-        lower.addAll(stepNights.take(midpoint));
-        upper.addAll(stepNights.skip(midpoint));
-      }
-      final lowerSleep = lower.map((night) => night.sleepMinutes).toList();
-      final upperSleep = upper.map((night) => night.sleepMinutes).toList();
+      final comparison = ActivitySleepComparison.fromSamples(
+        stepNights.map((night) => ActivitySleepSample(
+          steps: night.steps!,
+          sleepMinutes: night.sleepMinutes,
+        )),
+      );
       return SectionCard(child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -135,18 +133,18 @@ class ActivityAnalysisCard extends StatelessWidget {
           const Text('Шаги и продолжительность последующего сна',
             style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
           const SizedBox(height: 8),
-          if (stepNights.length < 4)
+          if (comparison == null)
             const Text('Для сопоставления групп нужны минимум 4 ночи, в которых одновременно доступны шаги и длительность сна.',
               style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4))
           else ...[
             _ActivityMetricRow(
-              label: 'Ниже медианы шагов (${lower.length} ноч.)',
-              value: _duration(lowerSleep.reduce((a, b) => a + b) / lowerSleep.length),
+              label: 'Ниже медианы шагов (${comparison.belowMedian.nights} ноч.)',
+              value: _duration(comparison.belowMedian.averageSleepMinutes),
             ),
             const SizedBox(height: 6),
             _ActivityMetricRow(
-              label: 'Не ниже медианы (${upper.length} ноч.)',
-              value: _duration(upperSleep.reduce((a, b) => a + b) / upperSleep.length),
+              label: 'Не ниже медианы (${comparison.atOrAboveMedian.nights} ноч.)',
+              value: _duration(comparison.atOrAboveMedian.averageSleepMinutes),
             ),
             const SizedBox(height: 8),
             const Text(
