@@ -23,6 +23,9 @@ class AppleHealthService {
     HealthDataType.SLEEP_LIGHT,
     HealthDataType.SLEEP_REM,
     HealthDataType.SLEEP_AWAKE,
+  ];
+
+  static const List<HealthDataType> _metricTypes = [
     HealthDataType.HEART_RATE,
     HealthDataType.RESPIRATORY_RATE,
     HealthDataType.BLOOD_OXYGEN,
@@ -34,19 +37,46 @@ class AppleHealthService {
       await _health.configure();
       _configured = true;
     }
-    final authorized = await _health.requestAuthorization(_sleepTypes);
-    if (!authorized) {
-      throw StateError('iOS не завершила запрос разрешения Apple Health.');
+    final sleepAuthorized = await _health.requestAuthorization(
+      _sleepTypes,
+      permissions: List.filled(_sleepTypes.length, HealthDataAccess.READ),
+    );
+    if (!sleepAuthorized) {
+      throw StateError(
+        'HealthKit не завершил запрос доступа к интервалам сна. '
+        'Проверьте, что приложение установлено с разрешением HealthKit, '
+        'а затем повторите запрос.',
+      );
     }
 
     final end = DateTime.now();
     final start = end.subtract(Duration(days: days));
-    final points = await _health.getHealthDataFromTypes(
+
+    // Keep optional physiological metrics separate: a problem with one
+    // metric type must not block importing sleep intervals.
+    final sleepData = await _health.getHealthDataFromTypes(
       types: _sleepTypes,
       startTime: start,
       endTime: end,
     );
-    final unique = _health.removeDuplicates(points);
+    var metricData = <HealthDataPoint>[];
+    try {
+      final metricsAuthorized = await _health.requestAuthorization(
+        _metricTypes,
+        permissions: List.filled(_metricTypes.length, HealthDataAccess.READ),
+      );
+      if (metricsAuthorized) {
+        metricData = await _health.getHealthDataFromTypes(
+          types: _metricTypes,
+          startTime: start,
+          endTime: end,
+        );
+      }
+    } catch (_) {
+      // Sleep remains useful on its own; optional metrics can be retried later.
+    }
+
+    final unique = _health.removeDuplicates([...sleepData, ...metricData]);
     final sleepPoints = unique.where((point) => _stageName(point.type) != null && point.dateTo.isAfter(point.dateFrom)).toList();
     final metricPoints = unique.where((point) => _metricName(point.type) != null).toList();
     if (sleepPoints.isEmpty && metricPoints.isEmpty) return const AppleHealthSyncResult(imported: 0, found: 0);
