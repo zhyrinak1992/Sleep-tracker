@@ -16,6 +16,7 @@ void main() {
       expect(result.minimum, 20);
       expect(result.maximum, 22);
       expect(result.average, 21);
+      expect(result.standardDeviation, closeTo(0.81649658, 0.000001));
       expect(result.lastValue, 21);
       expect(result.coveragePercent, 100);
     });
