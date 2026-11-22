@@ -32,6 +32,7 @@ dependencies:
   xml: ^6.5.0
   http: ^1.3.0
   flutter_secure_storage: ^9.2.4
+  cryptography: ^2.7.0
 
 dependency_overrides:
   # device_info_plus 12.4.0 requires Xcode 26.1+; keep compatibility with current macos-15 runner.
