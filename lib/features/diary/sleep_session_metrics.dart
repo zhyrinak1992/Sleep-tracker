@@ -60,10 +60,13 @@ class SleepSessionMetrics {
       }
     }
 
-    final asleepMinutes = _mergedMinutes(asleep);
     final mergedAwake = _mergeIntervals(awake);
     final awakeMinutes = _durationMinutes(mergedAwake);
     final stageBreakdown = _stageBreakdown(stages, bedStart, bedEnd);
+    // Subtract awake samples even when a broad asleep sample overlaps them.
+    final asleepMinutes = stageBreakdown.entries
+        .where((entry) => entry.key != 'Бодрствование')
+        .fold<int>(0, (sum, entry) => sum + entry.value);
     final coverageMinutes = _mergedMinutes([...asleep, ...awake]);
     final stageStart = asleep.isEmpty
         ? null
