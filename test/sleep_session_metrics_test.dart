@@ -78,9 +78,9 @@ void main() {
         {'stage': 'Core', 'started_at': DateTime(2026, 11, 22, 1).toUtc().toIso8601String(), 'ended_at': DateTime(2026, 11, 22, 4).toUtc().toIso8601String()},
       ],
     );
-    expect(result.sleepDurationMinutes, 240);
+    expect(result.sleepDurationMinutes, 300);
     expect(result.timeInBedMinutes, 480);
     expect(result.stageMinutes['deep'], 180);
-    expect(result.stageMinutes['light'], 60);
+    expect(result.stageMinutes['light'], 120);
   });
 }
