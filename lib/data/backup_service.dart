@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'sleep_database.dart';
+import 'backup_crypto.dart';
 
 /// Ручной перенос локальной базы Sleep Tracker в переносимый JSON-файл.
 /// Восстановление полностью заменяет текущие данные и выполняется транзакционно.
@@ -17,7 +18,7 @@ class BackupService {
   static const format = 'sleep_tracker_backup';
   static const formatVersion = 4;
 
-  Future<void> exportToFiles() async {
+  Future<void> exportToFiles({required String password}) async {
     final snapshot = await SleepDatabase.instance.exportSnapshot();
     final audioRows = (snapshot['audio_events'] as List).cast<Map<String, Object?>>();
     var audioBytesTotal = 0;
@@ -41,22 +42,26 @@ class BackupService {
       'summary': <String, Object?>{'sleepSessions': (snapshot['sleep_sessions'] as List).length, 'notes': (snapshot['sleep_notes'] as List).length, 'audioEvents': audioRows.length, 'audioBytes': audioBytesTotal, 'climateSamples': (snapshot['climate_samples'] as List).length},
       'data': snapshot,
     };
-    final encoded = const JsonEncoder.withIndent('  ').convert(document);
+    final plaintext = const JsonEncoder.withIndent('  ').convert(document);
+    final encryptedBytes = await BackupCrypto.encryptDocument(
+      plaintext: plaintext,
+      password: password,
+    );
     final temp = await getTemporaryDirectory();
     final stamp = DateTime.now().toIso8601String().replaceAll(':', '-').split('.').first;
-    final file = File(p.join(temp.path, 'SleepTracker-backup-$stamp.json'));
-    await file.writeAsString(encoded, flush: true);
+    final file = File(p.join(temp.path, 'SleepTracker-backup-$stamp.stbackup'));
+    await file.writeAsBytes(encryptedBytes, flush: true);
     await Share.shareXFiles(
-      [XFile(file.path, mimeType: 'application/json', name: p.basename(file.path))],
-      subject: 'Резервная копия Sleep Tracker',
-      text: 'Резервная копия истории сна. Сохраните файл в приложении «Файлы».',
+      [XFile(file.path, mimeType: 'application/octet-stream', name: p.basename(file.path))],
+      subject: 'Зашифрованная резервная копия Sleep Tracker',
+      text: 'Зашифрованная резервная копия. Для восстановления потребуется пароль.',
     );
   }
 
-  Future<BackupImportResult> importFromFiles({required bool merge}) async {
+  Future<BackupImportResult> importFromFiles({required bool merge, required Future<String?> Function() requestPassword}) async {
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['json'],
+      allowedExtensions: ['json', 'stbackup'],
       withData: true,
       allowMultiple: false,
     );
@@ -66,7 +71,17 @@ class BackupService {
         (selected.path == null ? null : await File(selected.path!).readAsBytes());
     if (bytes == null) throw const FormatException('Не удалось прочитать выбранный файл.');
 
-    final decoded = jsonDecode(utf8.decode(bytes));
+    String jsonText;
+    final initial = jsonDecode(utf8.decode(bytes));
+    if (BackupCrypto.isEncryptedEnvelope(initial)) {
+      final password = await requestPassword();
+      if (password == null) return BackupImportResult.cancelled;
+      jsonText = await BackupCrypto.decryptDocument(bytes: bytes, password: password);
+    } else {
+      // Legacy plaintext JSON archives remain importable for backward compatibility.
+      jsonText = utf8.decode(bytes);
+    }
+    final decoded = jsonDecode(jsonText);
     if (decoded is! Map<String, dynamic> ||
         decoded['format'] != format ||
         (decoded['formatVersion'] != 1 && decoded['formatVersion'] != 2 && decoded['formatVersion'] != 3 && decoded['formatVersion'] != formatVersion) ||
