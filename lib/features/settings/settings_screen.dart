@@ -10,6 +10,7 @@ import '../../data/audio_observation_service.dart';
 import '../../data/pdf_report_service.dart';
 import '../../data/sleep_database.dart';
 import '../../data/notification_service.dart';
+import '../../data/yandex_smart_home_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 
@@ -23,13 +24,93 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _busy = false;
   bool _healthConnected = false;
+  final TextEditingController _yandexTokenController = TextEditingController();
+  YandexHomeSnapshot? _yandexHome;
+  String? _selectedYandexDeviceId;
+  bool _yandexConnected = false;
 
   @override
   void initState() {
     super.initState();
     _loadHealthOnboarding();
+    _loadYandexConnection();
   }
 
+
+
+  Future<void> _loadYandexConnection() async {
+    final service = YandexSmartHomeService.instance;
+    final connected = await service.isConnected;
+    final selected = await SleepDatabase.instance.getAppMetadata('yandex_selected_device_id');
+    if (!mounted) return;
+    setState(() { _yandexConnected = connected; _selectedYandexDeviceId = selected; });
+    if (connected) await _loadYandexHome();
+  }
+
+  Future<void> _connectYandex() async {
+    final token = _yandexTokenController.text.trim();
+    if (token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Вставьте OAuth-токен Яндекса с разрешением iot:view.')));
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await YandexSmartHomeService.instance.saveAccessToken(token);
+      final home = await YandexSmartHomeService.instance.fetchHome();
+      final previous = await SleepDatabase.instance.getAppMetadata('yandex_selected_device_id');
+      if (!mounted) return;
+      setState(() {
+        _yandexHome = home; _yandexConnected = true;
+        _selectedYandexDeviceId = home.devices.any((d) => d.id == previous) ? previous : null;
+      });
+      await SleepDatabase.instance.setAppMetadata('yandex_connected', 'true');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Яндекс подключён. Датчиков с температурой или влажностью: ${home.devices.length}.')));
+    } catch (error) {
+      await YandexSmartHomeService.instance.disconnect();
+      if (!mounted) return;
+      setState(() => _yandexConnected = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Не удалось подключить Яндекс: $error')));
+    } finally { if (mounted) setState(() => _busy = false); }
+  }
+
+  Future<void> _loadYandexHome() async {
+    try {
+      final home = await YandexSmartHomeService.instance.fetchHome();
+      final previous = _selectedYandexDeviceId ?? await SleepDatabase.instance.getAppMetadata('yandex_selected_device_id');
+      if (!mounted) return;
+      setState(() {
+        _yandexHome = home; _yandexConnected = true;
+        _selectedYandexDeviceId = home.devices.any((d) => d.id == previous) ? previous : null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Не удалось обновить список устройств Яндекса: $error')));
+    }
+  }
+
+  Future<void> _refreshYandexSensor() async {
+    final deviceId = _selectedYandexDeviceId;
+    if (deviceId == null) return;
+    setState(() => _busy = true);
+    try {
+      final count = await YandexSmartHomeService.instance.refreshSelectedDevice(deviceId: deviceId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(count == 0
+        ? 'Новых измерений нет: датчик не передал обновлённые значения температуры или влажности.'
+        : 'Получено и сохранено новых измерений: $count.')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Не удалось получить показания датчика: $error')));
+    } finally { if (mounted) setState(() => _busy = false); }
+  }
+
+  Future<void> _disconnectYandex() async {
+    await YandexSmartHomeService.instance.disconnect();
+    await SleepDatabase.instance.setAppMetadata('yandex_connected', 'false');
+    await SleepDatabase.instance.setAppMetadata('yandex_selected_device_id', '');
+    if (!mounted) return;
+    setState(() { _yandexConnected = false; _yandexHome = null; _selectedYandexDeviceId = null; _yandexTokenController.clear(); });
+  }
 
   Future<void> _changeAppLock(bool value) async {
     final service = AppLockService.instance;
@@ -318,6 +399,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
             style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4)),
         ],
       )),
+      const SizedBox(height: 12),
+
+      SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Expanded(child: Text('Яндекс Умный дом — климат спальни', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17))),
+          Icon(_yandexConnected ? Icons.check_circle : Icons.home_outlined, color: _yandexConnected ? AppTheme.teal : AppTheme.muted),
+        ]),
+        const SizedBox(height: 8),
+        const Text('Подключение только для чтения. Sleep Tracker получает доступные значения температуры и влажности, сохраняет реальные измерения локально и не управляет устройствами. Нужен OAuth-токен приложения Яндекса с разрешением iot:view. Не выдавайте приложению iot:control.',
+          style: TextStyle(color: AppTheme.muted, height: 1.45)),
+        const SizedBox(height: 12),
+        if (!_yandexConnected) ...[
+          TextField(controller: _yandexTokenController, obscureText: true, autocorrect: false, enableSuggestions: false,
+            decoration: const InputDecoration(labelText: 'OAuth-токен Яндекса', hintText: 'Вставьте токен с доступом iot:view', border: OutlineInputBorder())),
+          const SizedBox(height: 10),
+          SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: _busy ? null : _connectYandex,
+            icon: const Icon(Icons.link), label: const Text('Подключить и проверить доступ'))),
+          const SizedBox(height: 6),
+          const Text('Токен хранится в системном хранилище iOS Keychain и не записывается в резервную копию или GitHub.',
+            style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4)),
+        ] else ...[
+          Row(children: [
+            Expanded(child: Text('Найдено датчиков: ${_yandexHome?.devices.length ?? 0}')),
+            IconButton(onPressed: _busy ? null : _loadYandexHome, icon: const Icon(Icons.refresh), tooltip: 'Обновить список'),
+          ]),
+          if ((_yandexHome?.devices.isEmpty ?? true))
+            const Text('Яндекс не вернул датчики с доступными для чтения температурой или влажностью.', style: TextStyle(color: AppTheme.muted)),
+          ...?_yandexHome?.devices.map((device) => RadioListTile<String>(
+            contentPadding: EdgeInsets.zero, value: device.id, groupValue: _selectedYandexDeviceId,
+            onChanged: _busy ? null : (value) async {
+              setState(() => _selectedYandexDeviceId = value);
+              await SleepDatabase.instance.setAppMetadata('yandex_selected_device_id', value ?? '');
+            },
+            title: Text(device.name),
+            subtitle: Text('${device.roomName ?? 'Комната не указана'} · ${device.online ? 'в сети' : 'не в сети'} · ${[if (device.hasTemperature) 'температура', if (device.hasHumidity) 'влажность'].join(', ')}'),
+          )),
+          SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: _busy || _selectedYandexDeviceId == null ? null : _refreshYandexSensor,
+            icon: const Icon(Icons.thermostat), label: const Text('Получить актуальные показания'))),
+          SizedBox(width: double.infinity, child: TextButton.icon(onPressed: _busy ? null : _disconnectYandex,
+            icon: const Icon(Icons.link_off), label: const Text('Отключить Яндекс'))),
+        ],
+      ])),
       const SizedBox(height: 12),
       SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('Аудиособытия', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
