@@ -202,7 +202,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (!mounted) return;
         showDialog<void>(context: context, builder: (ctx) => AlertDialog(
           title: const Text('Подключить Apple Health?'),
-          content: const Text('Можно импортировать записанные в приложении «Здоровье» интервалы сна и доступные показатели. Sleep Tracker запрашивает только чтение — данные в Apple Health не изменяются.'),
+          content: const Text('Можно импортировать интервалы сна, физиологические показатели и доступную дневную активность: шаги, активную энергию, минуты упражнений и тренировки. Sleep Tracker запрашивает только чтение — данные в Apple Health не изменяются.'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Позже')),
             FilledButton(onPressed: () { Navigator.pop(ctx); _syncAppleHealth(); }, child: const Text('Подключить')),
@@ -507,14 +507,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
           const SizedBox(height: 8),
           const Text(
-            'Подключите Apple Health, чтобы импортировать интервалы сна и доступные показатели за последние 30 дней. Приложение запрашивает только чтение. Доступ зависит от разрешений iOS и данных, которые действительно записаны в Apple Health; отсутствующие фазы не восстанавливаются догадками.',
+            'Подключите Apple Health, чтобы импортировать интервалы сна, физиологические показатели и дневную активность за последние 30 дней. Доступные шаги, активная энергия, минуты упражнений и тренировки сопоставляются с предшествующим ночи периодом бодрствования. Приложение запрашивает только чтение. Набор данных зависит от разрешений iOS и фактических записей в Apple Health; отсутствующие значения не подставляются.',
             style: TextStyle(color: AppTheme.muted, height: 1.5),
           ),
           const SizedBox(height: 12),
           SizedBox(width: double.infinity, child: OutlinedButton.icon(
             onPressed: _busy ? null : _syncAppleHealth,
             icon: const Icon(Icons.favorite_outline),
-            label: Text(_healthConnected ? 'Синхронизировать данные сна' : 'Подключить Apple Health и синхронизировать'),
+            label: Text(_healthConnected ? 'Синхронизировать сон и активность' : 'Подключить Apple Health и синхронизировать'),
           )),
           const SizedBox(height: 10),
           SizedBox(width: double.infinity, child: FilledButton.icon(
