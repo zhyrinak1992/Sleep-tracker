@@ -15,3 +15,8 @@ Audio attachments are written to new app-managed files before the database resto
 ## Remaining platform verification
 
 Automated Flutter CI validates static analysis and tests in the repository. It does not replace an on-device iOS restore test, a filesystem interruption test, or a real migration test against an existing user database. Those checks remain required before treating the backup workflow as fully device-verified.
+
+
+## Предварительная проверка структуры архива
+
+До начала SQLite-транзакции импорт проверяет наличие обязательных полей в строках, обязательные ссылки на существующие ночи, уникальность идентификаторов дочерних записей и метаданных, составной ключ тегов и уникальность утреннего отчёта на ночь. Ссылки `session_id` обязательны для тегов, заметок, стадий, метрик и утренних отчётов; для аудиособытий и климатических измерений они могут быть пустыми по модели данных.
