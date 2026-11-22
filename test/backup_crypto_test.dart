@@ -38,6 +38,41 @@ void main() {
       );
     });
 
+
+    test('rejects modified ciphertext before returning plaintext', () async {
+      final encrypted = await BackupCrypto.encryptDocument(
+        plaintext: '{"private":"sleep data"}',
+        password: 'correct horse battery',
+      );
+      final envelope = jsonDecode(utf8.decode(encrypted)) as Map<String, dynamic>;
+      final cipherText = base64Decode(envelope['ciphertext'] as String);
+      cipherText[0] ^= 0x01;
+      envelope['ciphertext'] = base64Encode(cipherText);
+      final tampered = utf8.encode(jsonEncode(envelope));
+
+      await expectLater(
+        BackupCrypto.decryptDocument(
+          bytes: tampered,
+          password: 'correct horse battery',
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('uses a fresh salt and nonce for each archive', () async {
+      final first = jsonDecode(utf8.decode(await BackupCrypto.encryptDocument(
+        plaintext: '{}',
+        password: 'correct horse battery',
+      ))) as Map<String, dynamic>;
+      final second = jsonDecode(utf8.decode(await BackupCrypto.encryptDocument(
+        plaintext: '{}',
+        password: 'correct horse battery',
+      ))) as Map<String, dynamic>;
+
+      expect(first['salt'], isNot(second['salt']));
+      expect(first['nonce'], isNot(second['nonce']));
+    });
+
     test('rejects passwords shorter than ten characters', () async {
       await expectLater(
         BackupCrypto.encryptDocument(
