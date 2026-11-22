@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:archive/archive.dart';
+import 'package:archive/archive_io.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:xml/xml.dart';
 import 'package:xml/xml_events.dart';
@@ -150,20 +151,36 @@ class AppleHealthFileImportService {
     }
 
     if (extension == 'zip') {
-      Uint8List? bytes = file.bytes;
-      if (bytes == null && stream != null) {
-        final builder = BytesBuilder(copy: false);
-        await for (final chunk in stream) {
-          builder.add(chunk);
+      // Keep the archive on disk and decode it through archive_io. Reading a
+      // 250+ MB export into Uint8List can exhaust iPhone memory.
+      String? zipPath = file.path;
+      File? temporaryZip;
+      if (zipPath == null && stream != null) {
+        final tempDir = await getTemporaryDirectory();
+        temporaryZip = File('${tempDir.path}/apple_health_${DateTime.now().microsecondsSinceEpoch}.zip');
+        final sink = temporaryZip.openWrite();
+        try {
+          await for (final chunk in stream) {
+            sink.add(chunk);
+          }
+          await sink.flush();
+        } finally {
+          await sink.close();
         }
-        bytes = builder.takeBytes();
+        zipPath = temporaryZip.path;
       }
-      if (bytes == null) {
+      if (zipPath == null) {
         throw const FormatException(
-          'Не удалось прочитать ZIP-архив. Сохраните его локально в «Файлы» и выберите снова.',
+          'Не удалось получить локальный файл ZIP. Сохраните архив в «Файлы» и выберите повторно.',
         );
       }
-      return await parseExport(bytes);
+      try {
+        return await parseExportFile(zipPath);
+      } finally {
+        if (temporaryZip != null && await temporaryZip.exists()) {
+          await temporaryZip.delete();
+        }
+      }
     }
 
     throw const FormatException(
@@ -213,62 +230,65 @@ class AppleHealthFileImportService {
     return _createPreview(records);
   }
 
-  Future<AppleHealthFilePreview> parseExport(Uint8List bytes) async {
-    final archive = ZipDecoder().decodeBytes(bytes);
-    final xmlFiles = archive.files
-        .where((file) => file.isFile && file.name.toLowerCase().endsWith('.xml'))
-        .toList();
+  Future<AppleHealthFilePreview> parseExportFile(String zipPath) async {
+    final input = InputFileStream(zipPath);
+    final tempDir = await getTemporaryDirectory();
+    File? extractedXml;
+    try {
+      final archive = ZipDecoder().decodeBuffer(input);
+      final xmlFiles = archive.files
+          .where((entry) => entry.isFile && entry.name.toLowerCase().endsWith('.xml'))
+          .toList();
 
-    if (xmlFiles.isEmpty) {
-      final names = archive.files
-          .where((file) => file.isFile)
-          .take(12)
-          .map((file) => file.name)
-          .join(', ');
-      throw FormatException(
-        'В ZIP-архиве не найден XML-файл. Внутри архива обнаружены: ${names.isEmpty ? 'нет доступных файлов' : names}. Выберите исходный экспорт Apple Health.',
-      );
-    }
+      if (xmlFiles.isEmpty) {
+        final names = archive.files
+            .where((entry) => entry.isFile)
+            .take(12)
+            .map((entry) => entry.name)
+            .join(', ');
+        throw FormatException(
+          'В ZIP-архиве не найден XML-файл. Внутри обнаружены: ${names.isEmpty ? 'нет доступных файлов' : names}.',
+        );
+      }
 
-    // Apple Health exports can be renamed or wrapped in an extra folder.
-    // Select the XML that actually contains HealthKit sleep records instead
-    // of relying on a fixed filename such as export.xml.
-    ArchiveFile? healthXml;
-    for (final candidate in xmlFiles) {
-      final content = candidate.content;
-      if (content is! List<int>) continue;
-      final probeLength = content.length < 8 * 1024 * 1024
-          ? content.length
-          : 8 * 1024 * 1024;
-      final probe = utf8.decode(
-        content.sublist(0, probeLength),
-        allowMalformed: true,
-      );
-      if (probe.contains('HKCategoryTypeIdentifierSleepAnalysis') ||
-          probe.contains('HKCategoryValueSleepAnalysis')) {
-        healthXml = candidate;
-        break;
+      // Extract XML candidates to disk one at a time. Never materialize the
+      // entire ZIP or the decompressed XML in RAM.
+      for (final entry in xmlFiles) {
+        final safeName = entry.name.split('/').last.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+        final candidate = File('${tempDir.path}/apple_health_${DateTime.now().microsecondsSinceEpoch}_$safeName');
+        final output = OutputFileStream(candidate.path);
+        try {
+          entry.writeContent(output);
+        } finally {
+          output.close();
+        }
+
+        final file = await candidate.open();
+        final probe = await file.read(8 * 1024 * 1024);
+        await file.close();
+        final textProbe = utf8.decode(probe, allowMalformed: true);
+        if (textProbe.contains('HKCategoryTypeIdentifierSleepAnalysis') ||
+            textProbe.contains('HKCategoryValueSleepAnalysis')) {
+          extractedXml = candidate;
+          break;
+        }
+        await candidate.delete();
+      }
+
+      if (extractedXml == null) {
+        final names = xmlFiles.take(12).map((entry) => entry.name).join(', ');
+        throw FormatException(
+          'В ZIP найдены XML-файлы, но записи сна Apple Health не обнаружены. Файлы: $names. Проверьте, что выбран основной экспорт, а не export_cda.',
+        );
+      }
+      return await parseXmlStream(extractedXml!.openRead());
+    } finally {
+      await input.close();
+      if (extractedXml != null && await extractedXml!.exists()) {
+        await extractedXml!.delete();
       }
     }
-
-    if (healthXml == null) {
-      final names = xmlFiles.take(12).map((file) => file.name).join(', ');
-      throw FormatException(
-        'В ZIP найден XML, но в нём не обнаружены записи сна Apple Health. XML-файлы в архиве: $names. Возможно, выбран export_cda вместо основного экспорта.',
-      );
-    }
-
-    final content = healthXml.content;
-    if (content is! List<int>) {
-      throw FormatException(
-        'Не удалось прочитать XML-файл ${healthXml.name} из архива.',
-      );
-    }
-
-    // Reuse the incremental parser so the XML DOM is not duplicated in RAM.
-    return await parseXmlStream(Stream<List<int>>.value(content));
   }
-
 
   AppleHealthFilePreview _createPreview(List<_HealthRecord> records) {
     final sleepRecords = records.where((r) => r.stage != null &&
