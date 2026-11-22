@@ -267,8 +267,13 @@ class IndividualSleepNeedAnalysis {
   }
 
   static (DateTime, DateTime)? _sleepInterval(SleepSession session) {
-    final start = session.actualSleepStartedAt ?? session.startedAt;
-    final end = session.actualSleepEndedAt ?? session.endedAt;
+    final actualStart = session.actualSleepStartedAt;
+    final actualEnd = session.actualSleepEndedAt;
+    if (actualStart != null && actualEnd != null && actualEnd.isAfter(actualStart)) {
+      return (actualStart, actualEnd);
+    }
+    final start = session.startedAt;
+    final end = session.endedAt;
     if (end == null || !end.isAfter(start)) return null;
     return (start, end);
   }
