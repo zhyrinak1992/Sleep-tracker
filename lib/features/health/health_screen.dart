@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../data/sleep_database.dart';
 import '../../models/sleep_session.dart';
+import '../diary/sleep_session_detail_screen.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/screen_header.dart';
@@ -292,7 +293,7 @@ class _HealthScreenState extends State<HealthScreen> {
               for (final entry in visible.entries)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
-                  child: _MetricCard(type: entry.key, samples: entry.value, sessions: {for (final session in data.sessions) session.id: session}),
+                  child: _MetricCard(database: widget.database, type: entry.key, samples: entry.value, sessions: {for (final session in data.sessions) session.id: session}),
                 ),
             ],
             const Text(
@@ -653,7 +654,8 @@ class _CoverageCard extends StatelessWidget {
 }
 
 class _MetricCard extends StatelessWidget {
-  const _MetricCard({required this.type, required this.samples, required this.sessions});
+  const _MetricCard({required this.database, required this.type, required this.samples, required this.sessions});
+  final SleepDatabase database;
   final String type;
   final List<_MetricSample> samples;
   final Map<String, SleepSession> sessions;
@@ -726,14 +728,24 @@ class _MetricCard extends StatelessWidget {
               final sample = rows[index];
               final session = sessions[sample.sessionId];
               final nightLabel = session == null ? 'Ночная запись не найдена' : 'Ночь от ' + _date(session.startedAt);
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(_number(sample.value) + ' ' + sample.unit, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 2),
-                  Text(_date(sample.measuredAt) + ' · ' + nightLabel, style: const TextStyle(fontSize: 12, color: AppTheme.muted)),
-                  Text(sample.source, style: const TextStyle(fontSize: 11, color: AppTheme.muted)),
-                ],
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(_number(sample.value) + ' ' + sample.unit, style: const TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_date(sample.measuredAt) + ' · ' + nightLabel),
+                    Text(sample.source, style: const TextStyle(fontSize: 11, color: AppTheme.muted)),
+                  ],
+                ),
+                trailing: session == null ? null : const Icon(Icons.chevron_right_rounded),
+                enabled: session != null,
+                onTap: session == null ? null : () {
+                  Navigator.pop(dialogContext);
+                  Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => SleepSessionDetailScreen(database: database, session: session),
+                  ));
+                },
               );
             },
           ),
