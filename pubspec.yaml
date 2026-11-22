@@ -1,7 +1,7 @@
 name: sleep_tracker
 description: Локальный трекер сна для iPhone.
 publish_to: "none"
-version: 0.14.0+15
+version: 0.15.0+16
 
 environment:
   sdk: ">=3.12.0 <4.0.0"
