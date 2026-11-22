@@ -318,19 +318,32 @@ class SleepDatabase {
   }) async {
     if (!endedAt.isAfter(startedAt)) return false;
     final db = await database;
-    final existing = await db.query(
-      'sleep_sessions',
-      columns: ['id'],
-      where: 'started_at = ? AND ended_at = ? AND source LIKE ?',
-      whereArgs: [startedAt.toUtc().toIso8601String(), endedAt.toUtc().toIso8601String(), 'apple_health:%'],
-      limit: 1,
+    // First use the stable HealthKit-derived ID, then compare instants for
+    // older imports whose timestamps may have been stored in local ISO form.
+    final existingById = await db.query(
+      'sleep_sessions', columns: ['id'],
+      where: 'id = ?', whereArgs: [id], limit: 1,
     );
-    if (existing.isNotEmpty) return false;
+    if (existingById.isNotEmpty) return false;
+    final existingHealthNights = await db.query(
+      'sleep_sessions',
+      columns: ['started_at', 'ended_at'],
+      where: 'source LIKE ? AND ended_at IS NOT NULL',
+      whereArgs: ['apple_health:%'],
+    );
+    final duplicate = existingHealthNights.any((row) {
+      final storedStart = DateTime.tryParse(row['started_at']! as String);
+      final storedEnd = DateTime.tryParse(row['ended_at']! as String);
+      return storedStart != null && storedEnd != null &&
+          storedStart.isAtSameMomentAs(startedAt) &&
+          storedEnd.isAtSameMomentAs(endedAt);
+    });
+    if (duplicate) return false;
     final now = DateTime.now().toUtc().toIso8601String();
     final inserted = await db.insert('sleep_sessions', {
       'id': id,
-      'started_at': startedAt.toIso8601String(),
-      'ended_at': endedAt.toIso8601String(),
+      'started_at': startedAt.toUtc().toIso8601String(),
+      'ended_at': endedAt.toUtc().toIso8601String(),
       'source': 'apple_health:$sourceName',
       'note': null,
       'morning_rating': null,
