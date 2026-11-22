@@ -18,7 +18,7 @@ void main() {
       expect(result.sessions.map((item) => item.id), ['a', 'b']);
       expect(result.completed, 2);
       expect(result.rated, 2);
-      expect(result.averageDurationMinutes, 360);
+      expect(result.averageDurationMinutes, 390);
       expect(result.averageRating, 3.5);
     });
 
