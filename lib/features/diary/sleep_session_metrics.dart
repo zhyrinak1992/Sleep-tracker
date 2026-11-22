@@ -90,6 +90,9 @@ class SleepSessionMetrics {
       disjoint[category]!.add(_SleepInterval(start, end, category));
     }
 
+    for (final category in _categories) {
+      disjoint[category] = _mergeIntervals(disjoint[category]!);
+    }
     final stageMinutes = <String, int>{
       for (final category in _categories)
         category: _mergedMinutes(disjoint[category]!),
@@ -181,24 +184,30 @@ class SleepSessionMetrics {
     _ => 4,
   };
 
-  static int _mergedMinutes(List<_SleepInterval> intervals) {
-    if (intervals.isEmpty) return 0;
+  static List<_SleepInterval> _mergeIntervals(List<_SleepInterval> intervals) {
+    if (intervals.isEmpty) return <_SleepInterval>[];
     final sorted = intervals.toList()..sort((a, b) => a.start.compareTo(b.start));
     var start = sorted.first.start;
     var end = sorted.first.end;
-    var total = 0;
+    final merged = <_SleepInterval>[];
     for (final interval in sorted.skip(1)) {
       if (!interval.start.isAfter(end)) {
         if (interval.end.isAfter(end)) end = interval.end;
       } else {
-        total += end.difference(start).inMinutes;
+        merged.add(_SleepInterval(start, end, sorted.first.category));
         start = interval.start;
         end = interval.end;
       }
     }
-    total += end.difference(start).inMinutes;
-    return total;
+    merged.add(_SleepInterval(start, end, sorted.first.category));
+    return merged;
   }
+
+  static int _mergedMinutes(List<_SleepInterval> intervals) =>
+      _mergeIntervals(intervals).fold<int>(
+        0,
+        (total, interval) => total + interval.end.difference(interval.start).inMinutes,
+      );
 }
 
 class _SleepInterval {
