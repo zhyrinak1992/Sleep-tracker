@@ -29,6 +29,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     _future = widget.database.getSessions(limit: 10000);
   }
 
+  void _reload() {
+    setState(() => _future = widget.database.getSessions(limit: 10000));
+  }
+
   void _shift(int direction) {
     final start = SleepAnalytics.periodStart(_anchor, _period);
     setState(() => _anchor = direction < 0
@@ -97,6 +101,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               onPressed: start.isBefore(SleepAnalytics.periodStart(DateTime.now(), _period)) ? () => _shift(1) : null,
               icon: const Icon(Icons.chevron_right),
             ),
+            IconButton(tooltip: 'Обновить данные', onPressed: _reload, icon: const Icon(Icons.refresh_rounded)),
           ]),
           if (snapshot.connectionState == ConnectionState.waiting)
             const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()))
@@ -107,6 +112,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               title: 'Средняя длительность',
               value: _duration(current.averageDurationMinutes),
               detail: '${current.completed} завершённых ${_nightWord(current.completed)}',
+              currentValue: current.averageDurationMinutes,
               previousValue: previous.averageDurationMinutes,
               unit: 'мин',
             ),
@@ -115,6 +121,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               title: 'Средняя оценка самочувствия',
               value: current.averageRating == null ? 'Нет оценок' : '${current.averageRating!.toStringAsFixed(1)} из 5',
               detail: '${current.rated} ${_ratingWord(current.rated)}',
+              currentValue: current.averageRating,
               previousValue: previous.averageRating,
               unit: 'балл',
             ),
@@ -164,13 +171,36 @@ String _nightWord(int count) {
 String _ratingWord(int count) => count == 1 ? 'оценка' : (count >= 2 && count <= 4 ? 'оценки' : 'оценок');
 
 class _MetricCard extends StatelessWidget {
-  const _MetricCard({required this.title, required this.value, required this.detail, required this.previousValue, required this.unit});
+  const _MetricCard({required this.title, required this.value, required this.detail, required this.currentValue, required this.previousValue, required this.unit});
   final String title, value, detail, unit;
+  final double? currentValue;
   final double? previousValue;
 
   @override
   Widget build(BuildContext context) {
-    final hasComparison = previousValue != null;
+    final hasComparison = currentValue != null && previousValue != null;
+    String? changeLabel;
+    IconData? changeIcon;
+    Color? changeColor;
+    if (hasComparison) {
+      final difference = currentValue! - previousValue!;
+      if (unit == 'мин' && previousValue! > 0) {
+        final percent = difference / previousValue! * 100;
+        changeLabel = '${percent > 0 ? '+' : ''}${percent.toStringAsFixed(0)}%';
+      } else if (unit == 'балл') {
+        changeLabel = '${difference > 0 ? '+' : ''}${difference.toStringAsFixed(1)} балла';
+      }
+      if (difference > 0) {
+        changeIcon = Icons.trending_up_rounded;
+        changeColor = AppTheme.teal;
+      } else if (difference < 0) {
+        changeIcon = Icons.trending_down_rounded;
+        changeColor = const Color(0xFFFFA6B5);
+      } else {
+        changeIcon = Icons.trending_flat_rounded;
+        changeColor = AppTheme.muted;
+      }
+    }
     return SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(title, style: const TextStyle(color: AppTheme.muted)),
       const SizedBox(height: 7),
@@ -178,8 +208,17 @@ class _MetricCard extends StatelessWidget {
       const SizedBox(height: 5),
       Row(children: [
         Expanded(child: Text(detail, style: const TextStyle(color: AppTheme.muted, fontSize: 12))),
-        if (hasComparison) Text('пред. ${unit == 'мин' ? _duration(previousValue) : '${previousValue!.toStringAsFixed(1)} из 5'}', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+        if (hasComparison && changeLabel != null) ...[
+          Icon(changeIcon, size: 16, color: changeColor),
+          const SizedBox(width: 3),
+          Text(changeLabel, style: TextStyle(color: changeColor, fontSize: 12, fontWeight: FontWeight.w700)),
+        ],
       ]),
+      if (previousValue != null) ...[
+        const SizedBox(height: 5),
+        Text('Предыдущий период: ${unit == 'мин' ? _duration(previousValue) : '${previousValue.toStringAsFixed(1)} из 5'}',
+          style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+      ],
     ]));
   }
 }
