@@ -66,6 +66,21 @@ class _SleepPeriodComparisonScreenState extends State<SleepPeriodComparisonScree
     return '${value ~/ 60} ч ${value % 60} мин';
   }
 
+  String _minutes(double? value) {
+    if (value == null) return 'Недостаточно данных';
+    return '${value.round()} мин';
+  }
+
+  String _variabilityChange(double? a, double? b) {
+    if (a == null || b == null) return 'Недостаточно данных для сравнения';
+    final delta = a - b;
+    if (delta.abs() < 0.5) return 'Разброс практически не изменился';
+    final amount = delta.abs().round();
+    return delta > 0
+        ? 'В периоде A разброс меньше на $amount мин'
+        : 'В периоде B разброс меньше на $amount мин';
+  }
+
   String _change(double? value, {bool percentage = false}) {
     if (value == null) return 'Недостаточно данных для сравнения';
     final sign = value > 0 ? '+' : '';
@@ -102,7 +117,7 @@ class _SleepPeriodComparisonScreenState extends State<SleepPeriodComparisonScree
           const Text('Сравнение произвольных периодов',
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
-          const Text('Выберите любые два диапазона дат. В расчёт попадают только реальные записи; незавершённые ночи не участвуют в средней длительности.',
+          const Text('Выберите любые два диапазона дат. Помимо длительности и оценки, сравнивается стабильность времени засыпания и пробуждения. Для этих показателей используется круговая статистика, корректно учитывающая переход через полночь.',
             style: TextStyle(color: AppTheme.muted, height: 1.4)),
           const SizedBox(height: 18),
           SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -135,12 +150,22 @@ class _SleepPeriodComparisonScreenState extends State<SleepPeriodComparisonScree
             b: previous.averageRating == null ? 'Нет оценок' : '${previous.averageRating!.toStringAsFixed(1)} / 5',
             change: _change(ratingDelta)),
           const SizedBox(height: 10),
+          _ComparisonCard(title: 'Стабильность времени засыпания',
+            a: _minutes(current.bedtimeDeviationMinutes),
+            b: _minutes(previous.bedtimeDeviationMinutes),
+            change: _variabilityChange(current.bedtimeDeviationMinutes, previous.bedtimeDeviationMinutes)),
+          const SizedBox(height: 10),
+          _ComparisonCard(title: 'Стабильность времени пробуждения',
+            a: _minutes(current.wakeTimeDeviationMinutes),
+            b: _minutes(previous.wakeTimeDeviationMinutes),
+            change: _variabilityChange(current.wakeTimeDeviationMinutes, previous.wakeTimeDeviationMinutes)),
+          const SizedBox(height: 10),
           _ComparisonCard(title: 'Записи сна',
             a: '${current.sessions.length} всего · ${current.completed} завершено · ${current.rated} с оценкой',
             b: '${previous.sessions.length} всего · ${previous.completed} завершено · ${previous.rated} с оценкой',
             change: 'Количество записей сравнивается напрямую'),
           const SizedBox(height: 12),
-          const Text('Сравнение описывает различия между выбранными периодами и само по себе не устанавливает причины изменений. Отсутствующие измерения не заменяются нулями.',
+          const Text('Стабильность — среднее абсолютное отклонение фактического времени засыпания и пробуждения от кругового среднего; меньшее значение означает более ровный режим. Для расчёта нужно не менее двух завершённых ночей. Сравнение не устанавливает причины изменений, отсутствующие измерения не заменяются нулями.',
             style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.45)),
         ],
       );
