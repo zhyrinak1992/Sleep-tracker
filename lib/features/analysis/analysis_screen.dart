@@ -12,6 +12,7 @@ import 'climate_analytics.dart';
 import 'daytime_sleep_card.dart';
 import 'activity_summary_card.dart';
 import 'activity_analysis_card.dart';
+import 'screen_time_sleep_analysis_card.dart';
 import 'sleep_period_comparison_screen.dart';
 
 class AnalysisScreen extends StatefulWidget {
@@ -242,6 +243,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             DaytimeSleepCard(database: widget.database, sessions: current.sessions),
             const SizedBox(height: 14),            ActivitySummaryCard(database: widget.database),
             const SizedBox(height: 14),            ActivityAnalysisCard(database: widget.database, sessions: current.sessions),
+            const SizedBox(height: 14),
+            ScreenTimeSleepAnalysisCard(database: widget.database, sessions: current.sessions),
             const SizedBox(height: 14),
             _ClimateSummary(database: widget.database),
             const SizedBox(height: 12),
