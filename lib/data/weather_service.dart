@@ -283,10 +283,7 @@ class WeatherService {
   }
 
   static DateTime _parseUtc(String value) {
-    final hasOffset = RegExp(r'(Z|[+-]\\d{2}:\\d{2})
-      '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
-}
-).hasMatch(value);
+    final hasOffset = RegExp(r'(Z|[+-]\d{2}:\d{2})$').hasMatch(value);
     if (hasOffset) return DateTime.parse(value).toUtc();
     final parsed = DateTime.parse(value);
     // The archive request explicitly asks for timezone=UTC. Open-Meteo may
