@@ -310,52 +310,63 @@ class SleepDatabase {
   /// Сохраняет импортированную ночь из Apple Health, не затрагивая ручные записи.
   /// ID привязан к первому HealthKit sample, поэтому повторная синхронизация
   /// не создаёт копии уже импортированной ночи.
-  Future<bool> insertHealthSession({
+  /// Возвращает ID существующей или вновь созданной ночи Apple Health.
+  /// Повторная синхронизация может безопасно дополнять стадии и метрики.
+  Future<(String?, bool)> upsertHealthSession({
     required String id,
     required DateTime startedAt,
     required DateTime endedAt,
     required String sourceName,
   }) async {
-    if (!endedAt.isAfter(startedAt)) return false;
+    if (!endedAt.isAfter(startedAt)) return (null, false);
     final db = await database;
-    // First use the stable HealthKit-derived ID, then compare instants for
-    // older imports whose timestamps may have been stored in local ISO form.
-    final existingById = await db.query(
-      'sleep_sessions', columns: ['id'],
-      where: 'id = ?', whereArgs: [id], limit: 1,
-    );
-    if (existingById.isNotEmpty) return false;
-    final existingHealthNights = await db.query(
-      'sleep_sessions',
-      columns: ['started_at', 'ended_at'],
-      where: 'source LIKE ? AND ended_at IS NOT NULL',
-      whereArgs: ['apple_health:%'],
-    );
-    final duplicate = existingHealthNights.any((row) {
-      final storedStart = DateTime.tryParse(row['started_at']! as String);
-      final storedEnd = DateTime.tryParse(row['ended_at']! as String);
-      return storedStart != null && storedEnd != null &&
-          storedStart.isAtSameMomentAs(startedAt) &&
-          storedEnd.isAtSameMomentAs(endedAt);
-    });
-    if (duplicate) return false;
-    final now = DateTime.now().toUtc().toIso8601String();
-    final inserted = await db.insert('sleep_sessions', {
-      'id': id,
-      'started_at': startedAt.toUtc().toIso8601String(),
-      'ended_at': endedAt.toUtc().toIso8601String(),
-      'source': 'apple_health:$sourceName',
-      'note': null,
-      'morning_rating': null,
-      'created_at': now,
-      'updated_at': now,
-      'actual_sleep_started_at': startedAt.toUtc().toIso8601String(),
-      'actual_sleep_ended_at': endedAt.toUtc().toIso8601String(),
-      'user_edited': 0,
-    }, conflictAlgorithm: ConflictAlgorithm.ignore);
-    return inserted > 0;
-  }
+    return db.transaction((txn) async {
+      final existingById = await txn.query(
+        'sleep_sessions', columns: ['id'],
+        where: 'id = ?', whereArgs: [id], limit: 1,
+      );
+      if (existingById.isNotEmpty) {
+        return (existingById.first['id']! as String, false);
+      }
 
+      final existingHealthNights = await txn.query(
+        'sleep_sessions',
+        columns: ['id', 'started_at', 'ended_at'],
+        where: 'source LIKE ? AND ended_at IS NOT NULL',
+        whereArgs: ['apple_health:%'],
+      );
+      for (final row in existingHealthNights) {
+        final storedStart = DateTime.tryParse(row['started_at']! as String);
+        final storedEnd = DateTime.tryParse(row['ended_at']! as String);
+        if (storedStart != null && storedEnd != null &&
+            storedStart.isAtSameMomentAs(startedAt) &&
+            storedEnd.isAtSameMomentAs(endedAt)) {
+          return (row['id']! as String, false);
+        }
+      }
+
+      final now = DateTime.now().toUtc().toIso8601String();
+      final inserted = await txn.insert('sleep_sessions', {
+        'id': id,
+        'started_at': startedAt.toUtc().toIso8601String(),
+        'ended_at': endedAt.toUtc().toIso8601String(),
+        'source': 'apple_health:$sourceName',
+        'note': null,
+        'morning_rating': null,
+        'created_at': now,
+        'updated_at': now,
+        'actual_sleep_started_at': startedAt.toUtc().toIso8601String(),
+        'actual_sleep_ended_at': endedAt.toUtc().toIso8601String(),
+        'user_edited': 0,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      if (inserted == 0) {
+        final raced = await txn.query('sleep_sessions', columns: ['id'],
+            where: 'id = ?', whereArgs: [id], limit: 1);
+        return (raced.isEmpty ? null : raced.first['id']! as String, false);
+      }
+      return (id, true);
+    });
+  }
 
   Future<void> _createV4Tables(DatabaseExecutor db) async {
     await db.execute('CREATE TABLE IF NOT EXISTS sleep_stages (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, stage TEXT NOT NULL, started_at TEXT NOT NULL, ended_at TEXT NOT NULL, source TEXT NOT NULL, FOREIGN KEY (session_id) REFERENCES sleep_sessions(id) ON DELETE CASCADE)');
