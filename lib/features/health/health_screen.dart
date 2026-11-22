@@ -353,12 +353,14 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
       final previousMonthStart = DateTime(now.year, now.month - 1);
       final currentMonthCount = dates.where((d) => !d.isBefore(monthStart)).length;
       final previousMonthCount = dates.where((d) => !d.isBefore(previousMonthStart) && d.isBefore(monthStart)).length;
-      final recordedDays = entries.keys.where((d) => !d.isBefore(DateTime(now.year, now.month - 11))).length;
-      final percentage = recordedDays == 0 ? 0.0 : dates.length / recordedDays * 100;
+      final twelveMonthStart = DateTime(now.year, now.month - 11);
+      final recentDates = dates.where((d) => !d.isBefore(twelveMonthStart)).toList();
+      final recordedDays = entries.keys.where((d) => !d.isBefore(twelveMonthStart)).length;
+      final percentage = recordedDays == 0 ? 0.0 : recentDates.length / recordedDays * 100;
       final monthlyCounts = List<int>.generate(12, (index) {
         final start = DateTime(now.year, now.month - 11 + index);
         final end = DateTime(start.year, start.month + 1);
-        return dates.where((d) => !d.isBefore(start) && d.isBefore(end)).length;
+        return recentDates.where((d) => !d.isBefore(start) && d.isBefore(end)).length;
       });
       return SectionCard(child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
