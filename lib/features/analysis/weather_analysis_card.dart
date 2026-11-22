@@ -73,9 +73,9 @@ class _WeatherAnalysisCardState extends State<WeatherAnalysisCard> {
     }
     final location = WeatherLocation.fromJson(decoded);
     final valid = widget.sessions.map((session) {
-      final start = session.actualSleepStartedAt ?? session.startedAt;
-      final end = session.actualSleepEndedAt ?? session.endedAt;
-      if (end == null || !end.isAfter(start)) return null;
+      final start = session.actualSleepStartedAt;
+      final end = session.actualSleepEndedAt;
+      if (start == null || end == null || !end.isAfter(start)) return null;
       return (session: session, start: start, end: end);
     }).whereType<({SleepSession session, DateTime start, DateTime end})>().toList();
     if (valid.isEmpty) {
@@ -237,6 +237,11 @@ class _WeatherAnalysisCardState extends State<WeatherAnalysisCard> {
     return '${rounded ~/ 60} ч ${rounded % 60} мин';
   }
 
+  String _daylight(double? seconds) {
+    if (seconds == null || !seconds.isFinite) return '—';
+    return '${(seconds / 3600).toStringAsFixed(1)} ч';
+  }
+
   String _solarTime(DateTime? value, WeatherLocation location) {
     if (value == null) return '—';
     try {
@@ -288,7 +293,7 @@ class _WeatherAnalysisCardState extends State<WeatherAnalysisCard> {
         ));
       }
       final available = data.nights.where((night) => night.summary.sampleCount > 0).toList();
-      final solarRows = data.nights.where((night) => night.summary.sunriseUtc != null || night.summary.sunsetUtc != null).toList()
+      final solarRows = data.nights.where((night) => night.summary.sunriseUtc != null || night.summary.sunsetUtc != null || night.summary.daylightDurationSeconds != null).toList()
         ..sort((a, b) => b.startedAt.compareTo(a.startedAt));
       final temperatureNights = data.nights.where((night) => night.summary.averageTemperatureC != null).toList();
       final comparison = WeatherSleepComparison.fromSamples(temperatureNights.map((night) =>
@@ -328,7 +333,7 @@ class _WeatherAnalysisCardState extends State<WeatherAnalysisCard> {
           else
             ...solarRows.take(7).map((night) => _WeatherMetricRow(
               label: DateFormat('d MMM', 'ru').format(night.startedAt),
-              value: 'Закат ${_solarTime(night.summary.sunsetUtc, location)} · восход ${_solarTime(night.summary.sunriseUtc, location)}',
+              value: 'Закат ${_solarTime(night.summary.sunsetUtc, location)} · восход ${_solarTime(night.summary.sunriseUtc, location)} · день ${_daylight(night.summary.daylightDurationSeconds)}',
             )),
           const Divider(height: 18, color: AppTheme.surfaceLight),
           const Text('Продолжительность сна при разной температуре',
