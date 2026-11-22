@@ -244,7 +244,7 @@ class _WeatherAnalysisCardState extends State<WeatherAnalysisCard> {
   }
 
   String _daylight(double? seconds) {
-    if (seconds == null || !seconds.isFinite || seconds <= 0) return '—';
+    if (seconds == null || !seconds.isFinite || seconds < 0) return '—';
     final minutes = (seconds / 60).round();
     return '${minutes ~/ 60} ч ${minutes % 60} мин';
   }
