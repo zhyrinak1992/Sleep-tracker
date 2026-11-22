@@ -7,6 +7,7 @@ import '../../models/sleep_tag.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import 'tag_sleep_comparison.dart';
+import 'tag_combination_suggestions.dart';
 
 class TagSleepComparisonCard extends StatefulWidget {
   const TagSleepComparisonCard({
@@ -38,6 +39,11 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
     widget.database.setAppMetadata,
   );
 
+  TagCombinationSuggestionStore get _combinationSuggestionStore => TagCombinationSuggestionStore(
+    widget.database.getAppMetadata,
+    widget.database.setAppMetadata,
+  );
+
   @override
   void initState() {
     super.initState();
@@ -63,7 +69,21 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
       widget.database.getAppMetadata,
       widget.database.setAppMetadata,
     ).load();
-    return _TagComparisonData(tagsBySession: tags, templates: templates, customTags: customTags);
+    final dismissed = await _combinationSuggestionStore.loadDismissed();
+    final suggestions = TagCombinationSuggestionAnalyzer.analyze(
+      sessions: widget.sessions,
+      tagsBySession: tags,
+      start: widget.start,
+      endExclusive: widget.endExclusive,
+      existingCombinations: templates.map((item) => item.tagKeys),
+      dismissedSignatures: dismissed,
+    );
+    return _TagComparisonData(
+      tagsBySession: tags,
+      templates: templates,
+      customTags: customTags,
+      suggestions: suggestions,
+    );
   }
 
   Future<void> _reload() async {
@@ -193,6 +213,11 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
     await _reload();
   }
 
+  Future<void> _dismissCombinationSuggestion(TagCombinationSuggestion suggestion) async {
+    await _combinationSuggestionStore.dismiss(suggestion.tagKeys);
+    await _reload();
+  }
+
   Future<void> _deleteTemplate(TagComparisonTemplate template) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -283,6 +308,50 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
                   itemBuilder: (_) => const [
                     PopupMenuItem(value: 'rename', child: Text('Переименовать')),
                     PopupMenuItem(value: 'delete', child: Text('Удалить')),
+                  ],
+                ),
+              )),
+              const Divider(height: 18),
+            ],
+            if (data.suggestions.isNotEmpty) ...[
+              const Text('Возможные сочетания', style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              const Text(
+                'Эти отметки регулярно встречались вместе в разных ночах текущего периода. Это повод посмотреть данные, а не вывод о причине.',
+                style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
+              ),
+              ...data.suggestions.map((suggestion) => ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(suggestion.tagKeys.map(tagLabel).join(' + ')),
+                subtitle: Text('Вместе в ${suggestion.nightCount} ночах'),
+                trailing: Wrap(
+                  spacing: 0,
+                  children: [
+                    IconButton(
+                      tooltip: 'Открыть сравнение',
+                      onPressed: () => setState(() {
+                        _tagKeys = suggestion.tagKeys.toSet();
+                        _activeTemplateId = null;
+                      }),
+                      icon: const Icon(Icons.open_in_new, color: AppTheme.teal),
+                    ),
+                    IconButton(
+                      tooltip: 'Сохранить шаблон',
+                      onPressed: () {
+                        setState(() {
+                          _tagKeys = suggestion.tagKeys.toSet();
+                          _activeTemplateId = null;
+                        });
+                        _saveTemplate(data);
+                      },
+                      icon: const Icon(Icons.bookmark_add_outlined),
+                    ),
+                    IconButton(
+                      tooltip: 'Не предлагать снова',
+                      onPressed: () => _dismissCombinationSuggestion(suggestion),
+                      icon: const Icon(Icons.close),
+                    ),
                   ],
                 ),
               )),
@@ -390,8 +459,14 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
 }
 
 class _TagComparisonData {
-  const _TagComparisonData({required this.tagsBySession, required this.templates, required this.customTags});
+  const _TagComparisonData({
+    required this.tagsBySession,
+    required this.templates,
+    required this.customTags,
+    required this.suggestions,
+  });
   final Map<String, Set<String>> tagsBySession;
   final List<TagComparisonTemplate> templates;
   final List<SleepTag> customTags;
+  final List<TagCombinationSuggestion> suggestions;
 }
