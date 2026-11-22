@@ -117,6 +117,9 @@ class BackupService {
         } on FormatException {
           throw const FormatException('Не удалось декодировать аудиофайл из резервной копии.');
         }
+        if (audioBytes.isEmpty) {
+          throw const FormatException('В резервной копии обнаружен пустой аудиофайл. Импорт отменён.');
+        }
         final originalPath = row['file_path'];
         final extension = originalPath is String ? p.extension(originalPath) : '';
         final safeExtension = RegExp(r'^\\.[a-zA-Z0-9]{1,8}$').hasMatch(extension)
