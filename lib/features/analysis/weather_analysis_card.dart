@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../data/sleep_database.dart';
@@ -42,6 +43,7 @@ class WeatherAnalysisCard extends StatefulWidget {
 }
 
 class _WeatherAnalysisCardState extends State<WeatherAnalysisCard> {
+  static bool _timeZonesInitialized = false;
   late Future<_WeatherAnalysisData> _future;
 
   String get _sessionSignature =>
@@ -50,6 +52,10 @@ class _WeatherAnalysisCardState extends State<WeatherAnalysisCard> {
   @override
   void initState() {
     super.initState();
+    if (!_timeZonesInitialized) {
+      tzdata.initializeTimeZones();
+      _timeZonesInitialized = true;
+    }
     _future = _load();
   }
 
