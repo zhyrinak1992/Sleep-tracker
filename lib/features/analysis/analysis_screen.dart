@@ -245,7 +245,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               const Text('Сравнение рассчитывается отдельно для каждого показателя. Нет данных — нет процента изменения. Длительность учитывается только для завершённых сессий, оценка — только там, где она действительно сохранена.', style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.45)),
             ])),
             const SizedBox(height: 14),
-            _RegularityCard(sessions: current.sessions, database: widget.database),
+            // Регулярность оценивается по всей доступной истории, а не по выбранной неделе/месяцу:
+            // иначе порог в 7 ночей недостижим для большинства недельных срезов.
+            _RegularityCard(sessions: all, database: widget.database),
             const SizedBox(height: 14),
             TagSleepComparisonCard(
               database: widget.database,
@@ -490,7 +492,10 @@ class _RegularityCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('Регулярность режима сна', style: TextStyle(fontWeight: FontWeight.w600)),
-        const SizedBox(height: 5),
+        const SizedBox(height: 4),
+        const Text('Расчёт по всей доступной истории, независимо от выбранной недели или месяца.',
+          style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.35)),
+        const SizedBox(height: 7),
         Text('Фактические ночи: ${result.nights.length} · исключено неполных или изменённых записей: ${result.excludedCount}',
           style: const TextStyle(color: AppTheme.muted, fontSize: 12)),
         if (!result.isReliable) ...[
