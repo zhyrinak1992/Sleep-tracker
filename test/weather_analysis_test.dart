@@ -118,4 +118,33 @@ void main() {
     expect(summary.sunriseUtc, isNull);
   });
 
+
+  test('uses daylight duration from the day of the next sunrise', () {
+    final events = [
+      SolarEvent(
+        date: '2026-11-22',
+        sunriseUtc: DateTime.utc(2026, 11, 22, 6, 30),
+        sunsetUtc: DateTime.utc(2026, 11, 22, 15, 10),
+        daylightDurationSeconds: 8 * 3600 + 40 * 60,
+      ),
+    ];
+    final summary = WeatherNightSummary.summarize(
+      const [],
+      start: DateTime.utc(2026, 11, 21, 21),
+      end: DateTime.utc(2026, 11, 22, 6),
+      solarEvents: events,
+    );
+    expect(summary.daylightDurationSeconds, 8 * 3600 + 40 * 60);
+  });
+
+  test('solar cache accepts older entries without daylight duration', () {
+    final event = SolarEvent.fromJson({
+      'date': '2026-11-22',
+      'sunriseUtc': '2026-11-22T06:30:00Z',
+      'sunsetUtc': '2026-11-22T15:10:00Z',
+    });
+    expect(event.daylightDurationSeconds, isNull);
+    expect(event.toJson()['daylightDurationSeconds'], isNull);
+  });
+
 }
