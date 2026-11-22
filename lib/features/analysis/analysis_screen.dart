@@ -40,6 +40,88 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         : SleepAnalytics.nextPeriodStart(start, _period));
   }
 
+  DateTime _bucketStart(DateTime periodStart, int index) {
+    if (_period == AnalysisPeriod.week) return periodStart.add(Duration(days: index));
+    return DateTime(periodStart.year, periodStart.month, index * 7 + 1);
+  }
+
+  DateTime _bucketEnd(DateTime periodStart, int index) {
+    if (_period == AnalysisPeriod.week) return periodStart.add(Duration(days: index + 1));
+    final next = DateTime(periodStart.year, periodStart.month, (index + 1) * 7 + 1);
+    final monthEnd = DateTime(periodStart.year, periodStart.month + 1);
+    return next.isBefore(monthEnd) ? next : monthEnd;
+  }
+
+  Future<void> _showChartDetails(
+    BuildContext context,
+    List<SleepSession> all,
+    DateTime currentPeriodStart,
+    DateTime previousPeriodStart,
+    int index,
+  ) async {
+    List<SleepSession> bucket(DateTime periodStart) {
+      final from = _bucketStart(periodStart, index);
+      final to = _bucketEnd(periodStart, index);
+      return all.where((session) =>
+        !session.startedAt.isBefore(from) && session.startedAt.isBefore(to) &&
+        session.duration != null && session.duration!.inMinutes > 0).toList()
+        ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
+    }
+
+    final currentSessions = bucket(currentPeriodStart);
+    final previousSessions = bucket(previousPeriodStart);
+    double? average(List<SleepSession> sessions) => sessions.isEmpty ? null :
+      sessions.fold<int>(0, (sum, item) => sum + item.duration!.inMinutes) / sessions.length;
+    String averageLabel(List<SleepSession> sessions) {
+      final value = average(sessions);
+      return value == null ? 'Нет данных' : _duration(value);
+    }
+    String bucketTitle(DateTime start, DateTime end) =>
+      '${DateFormat('d MMM', 'ru').format(start)} — ${DateFormat('d MMM', 'ru').format(end.subtract(const Duration(days: 1)))}';
+
+    Widget sessionList(List<SleepSession> sessions) {
+      if (sessions.isEmpty) return const Text('Нет завершённых записей', style: TextStyle(color: AppTheme.muted));
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: sessions.map((session) =>
+        Padding(padding: const EdgeInsets.only(top: 8), child: Row(children: [
+          SizedBox(width: 48, child: Text(DateFormat('HH:mm').format(session.startedAt), style: const TextStyle(fontWeight: FontWeight.w600))),
+          Expanded(child: Text(_duration(session.duration))),
+          if (session.morningRating != null) Text('Оценка ${session.morningRating}/5', style: const TextStyle(color: AppTheme.muted, fontSize: 12)),
+        ]))).toList());
+    }
+
+    final currentFrom = _bucketStart(currentPeriodStart, index);
+    final currentTo = _bucketEnd(currentPeriodStart, index);
+    final previousFrom = _bucketStart(previousPeriodStart, index);
+    final previousTo = _bucketEnd(previousPeriodStart, index);
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(_period == AnalysisPeriod.week
+          ? DateFormat('EEEE, d MMMM', 'ru').format(currentFrom)
+          : 'Неделя ${index + 1} месяца'),
+        content: SingleChildScrollView(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Текущий период · ${bucketTitle(currentFrom, currentTo)}', style: const TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 5),
+            Text('Средняя длительность: ${averageLabel(currentSessions)}'),
+            Text('Завершённых ночей: ${currentSessions.length}'),
+            sessionList(currentSessions),
+            const Divider(height: 24),
+            Text('Предыдущий период · ${bucketTitle(previousFrom, previousTo)}', style: const TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 5),
+            Text('Средняя длительность: ${averageLabel(previousSessions)}'),
+            Text('Завершённых ночей: ${previousSessions.length}'),
+            sessionList(previousSessions),
+          ],
+        )),
+        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Закрыть'))],
+      ),
+    );
+  }
+
   String _periodTitle(DateTime start) {
     if (_period == AnalysisPeriod.week) {
       final end = start.add(const Duration(days: 6));
@@ -131,7 +213,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               const SizedBox(height: 4),
               const Text('Среднее для дней с завершёнными сессиями · шкала 0–12 ч', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
               const SizedBox(height: 18),
-              SizedBox(height: 150, child: _DurationChart(values: chart, period: _period)),
+              SizedBox(height: 150, child: _DurationChart(values: chart, period: _period, onTap: (index) => _showChartDetails(context, all, start, previousStart, index)),
             ])),
             const SizedBox(height: 14),
             SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -236,9 +318,10 @@ class _ComparisonRow extends StatelessWidget {
 }
 
 class _DurationChart extends StatelessWidget {
-  const _DurationChart({required this.values, required this.period});
+  const _DurationChart({required this.values, required this.period, required this.onTap});
   final List<double?> values;
   final AnalysisPeriod period;
+  final ValueChanged<int> onTap;
   @override
   Widget build(BuildContext context) {
     final labels = period == AnalysisPeriod.week
@@ -248,7 +331,7 @@ class _DurationChart extends StatelessWidget {
     return Row(crossAxisAlignment: CrossAxisAlignment.end, children: List.generate(values.length, (i) {
       final value = values[i];
       final height = value == null ? 0.0 : (value / maxValue * 104).clamp(0.0, 104.0).toDouble();
-      return Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
+      return Expanded(child: InkWell(onTap: () => onTap(i), borderRadius: BorderRadius.circular(10), child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
         if (value != null) Text('${(value / 60).toStringAsFixed(1).replaceAll('.', ',')} ч', style: const TextStyle(fontSize: 9, color: AppTheme.muted)),
         const SizedBox(height: 5),
         Container(height: 108, alignment: Alignment.bottomCenter, child: Container(
@@ -258,7 +341,7 @@ class _DurationChart extends StatelessWidget {
         )),
         const SizedBox(height: 8),
         Text(labels[i], style: const TextStyle(fontSize: 10, color: AppTheme.muted)),
-      ]));
+      ])));
     }));
   }
 }
