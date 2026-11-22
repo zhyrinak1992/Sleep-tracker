@@ -7,6 +7,7 @@ import '../../widgets/section_card.dart';
 import 'sleep_analytics.dart';
 import 'weekday_comparison_screen.dart';
 import 'moon_phase_screen.dart';
+import 'climate_analytics.dart';
 
 class AnalysisScreen extends StatefulWidget {
   const AnalysisScreen({super.key, required this.database});
@@ -132,6 +133,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               const SizedBox(height: 8),
               const Text('Сравнение рассчитывается отдельно для каждого показателя. Нет данных — нет процента изменения. Длительность учитывается только для завершённых сессий, оценка — только там, где она действительно сохранена.', style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.45)),
             ])),
+            const SizedBox(height: 14),
+            _ClimateSummary(database: widget.database),
             const SizedBox(height: 12),
             const Text('Фазы сна, пульс, дыхание и звуковые события появятся в аналитике после подключения соответствующих источников. Сейчас они не учитываются и не заменяются условными значениями.', style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.45)),
           ],
@@ -215,5 +218,56 @@ class _DurationChart extends StatelessWidget {
         Text(labels[i], style: const TextStyle(fontSize: 10, color: AppTheme.muted)),
       ]));
     }));
+  }
+}
+
+
+class _ClimateSummary extends StatelessWidget {
+  const _ClimateSummary({required this.database});
+  final SleepDatabase database;
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<List<Map<String, Object?>>>(
+    future: database.getClimateSamples(from: DateTime.now().subtract(const Duration(days: 30))),
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) return const SectionCard(child: LinearProgressIndicator());
+      if (snapshot.hasError) return SectionCard(child: Text('Не удалось загрузить климатические измерения: ${snapshot.error}'));
+      final samples = snapshot.data ?? const <Map<String, Object?>>[];
+      final temperature = ClimateMetricSummary.fromSamples(samples, metricType: 'temperature');
+      final humidity = ClimateMetricSummary.fromSamples(samples, metricType: 'humidity');
+      return SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Микроклимат спальни', style: TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 5),
+        const Text('Фактические измерения датчика за последние 30 дней', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
+        const SizedBox(height: 12),
+        _ClimateMetricLine(title: 'Температура', summary: temperature),
+        const Divider(height: 18, color: AppTheme.surfaceLight),
+        _ClimateMetricLine(title: 'Влажность', summary: humidity),
+        const SizedBox(height: 8),
+        Text('Всего измерений: ${samples.length}. Новые значения появляются при доступности датчика и работе приложения. Отсутствующие интервалы не заполняются искусственными данными.',
+          style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4)),
+      ]));
+    },
+  );
+}
+
+class _ClimateMetricLine extends StatelessWidget {
+  const _ClimateMetricLine({required this.title, required this.summary});
+  final String title;
+  final ClimateMetricSummary? summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = summary;
+    if (value == null) {
+      return Row(children: [Expanded(child: Text(title)), const Text('Нет измерений', style: TextStyle(color: AppTheme.muted))]);
+    }
+    final last = DateFormat('d MMM, HH:mm', 'ru').format(value.lastMeasuredAt);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
+      const SizedBox(height: 5),
+      Text('Мин. ${value.minimum.toStringAsFixed(1)}${value.unit} · сред. ${value.average.toStringAsFixed(1)}${value.unit} · макс. ${value.maximum.toStringAsFixed(1)}${value.unit}', style: const TextStyle(fontSize: 12)),
+      Text('Последнее: ${value.lastValue.toStringAsFixed(1)}${value.unit} · $last · точек: ${value.count}', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+    ]);
   }
 }
