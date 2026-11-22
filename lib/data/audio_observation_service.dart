@@ -67,6 +67,28 @@ class AudioObservationService {
     }
   }
 
+  /// Reconnects the microphone after iOS interrupts the native recorder.
+  /// A user-requested pause is respected and is never auto-resumed.
+  Future<void> recoverObservationIfNeeded() async {
+    if (_paused) return;
+    if (_observing) {
+      var nativeRecording = false;
+      try {
+        nativeRecording = await _recorder.isRecording();
+      } catch (error) {
+        debugPrint('Could not inspect native recorder state: $error');
+      }
+      if (nativeRecording) return;
+      _observing = false;
+      observing.value = false;
+      await _subscription?.cancel();
+      _subscription = null;
+      await _saveCurrentEvent();
+      _preRoll.clear();
+    }
+    await startObservation();
+  }
+
   Future<void> _handleStreamError(Object error, StackTrace stackTrace) async {
     debugPrint('Audio observation stream failed: $error\\n$stackTrace');
     _observing = false;
