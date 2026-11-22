@@ -17,8 +17,9 @@ import 'activity_analysis_card.dart';
 import 'screen_time_analysis_card.dart';
 import 'weather_analysis_card.dart';
 import 'sleep_period_comparison_screen.dart';
-import 'tag_sleep_comparison_card.dart';
 import 'sleep_regularity_analysis.dart';
+import 'sleep_achievements_card.dart';
+import 'tag_sleep_comparison_card.dart';
 import '../diary/sleep_session_detail_screen.dart';
 
 class AnalysisScreen extends StatefulWidget {
@@ -245,6 +246,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             ])),
             const SizedBox(height: 14),
             _RegularityCard(sessions: current.sessions, database: widget.database),
+            const SizedBox(height: 14),
+            SleepAchievementsCard(sessions: all),
             const SizedBox(height: 14),
             TagSleepComparisonCard(
               database: widget.database,
