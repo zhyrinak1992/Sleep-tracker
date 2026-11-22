@@ -269,32 +269,6 @@ class AppleHealthFileImportService {
     return await parseXmlStream(Stream<List<int>>.value(content));
   }
 
-  _HealthRecord? _recordFromElement(XmlElement element) {
-    final type = element.getAttribute('type') ?? '';
-    final start = DateTime.tryParse(element.getAttribute('startDate') ?? '');
-    final end = DateTime.tryParse(element.getAttribute('endDate') ?? '');
-    if (start == null || end == null || !end.isAfter(start)) return null;
-
-    final value = element.getAttribute('value') ?? '';
-    final source = element.getAttribute('sourceName') ?? '';
-    final unit = element.getAttribute('unit') ?? '';
-    final sleep = _sleepStage(value);
-    final metric = _metric(type);
-
-    if (type == 'HKCategoryTypeIdentifierSleepAnalysis' && sleep != null) {
-      return _HealthRecord(type, value, start, end, source, unit, null, sleep);
-    }
-    if (metric != null) {
-      final parsed = double.tryParse(value);
-      if (parsed != null && parsed.isFinite) {
-        final number = type == 'HKQuantityTypeIdentifierOxygenSaturation' && parsed <= 1
-            ? parsed * 100
-            : parsed;
-        return _HealthRecord(type, value, start, end, source, unit, number, metric.$1);
-      }
-    }
-    return null;
-  }
 
   AppleHealthFilePreview _createPreview(List<_HealthRecord> records) {
     final sleepRecords = records.where((r) => r.stage != null &&
