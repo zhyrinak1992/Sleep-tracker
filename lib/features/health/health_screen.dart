@@ -208,7 +208,7 @@ class _ComparisonCard extends StatelessWidget {
     return SectionCard(child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Сравнение с предыдущим периодом', style: TextStyle(fontWeight: FontWeight.w700)),
+        const Text('Сравнение периодов', style: TextStyle(fontWeight: FontWeight.w700)),
         const SizedBox(height: 4),
         Text('${_date(previousStart)} — ${_date(previousEnd)}', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
         const SizedBox(height: 10),
