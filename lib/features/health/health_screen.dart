@@ -554,7 +554,6 @@ class _HealthDayCalendarCardState extends State<_HealthDayCalendarCard> {
     final key = DateTime(day.year, day.month, day.day);
     final entry = entries[key];
     final isSelected = key == DateTime(widget.selectedDay.year, widget.selectedDay.month, widget.selectedDay.day);
-    final isToday = key == DateTime.now().year == false;
     final today = DateTime.now();
     final selectedToday = key.year == today.year && key.month == today.month && key.day == today.day;
     final hasTags = entry?.tags.isNotEmpty ?? false;
