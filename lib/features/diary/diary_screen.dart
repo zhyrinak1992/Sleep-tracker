@@ -4,6 +4,7 @@ import '../../data/sleep_database.dart';
 import '../../models/sleep_session.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
+import '../../widgets/screen_header.dart';
 import 'sleep_session_detail_screen.dart';
 import 'sleep_session_comparison_screen.dart';
 import 'sleep_session_editor_screen.dart';
