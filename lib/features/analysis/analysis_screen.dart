@@ -492,7 +492,10 @@ class _RegularityCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('Регулярность режима сна', style: TextStyle(fontWeight: FontWeight.w600)),
-        const SizedBox(height: 5),
+        const SizedBox(height: 4),
+        const Text('Расчёт по всей доступной истории, независимо от выбранной недели или месяца.',
+          style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.35)),
+        const SizedBox(height: 7),
         Text('Фактические ночи: ${result.nights.length} · исключено неполных или изменённых записей: ${result.excludedCount}',
           style: const TextStyle(color: AppTheme.muted, fontSize: 12)),
         if (!result.isReliable) ...[
