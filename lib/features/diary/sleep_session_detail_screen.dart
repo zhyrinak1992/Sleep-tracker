@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../data/sleep_database.dart';
 import '../analysis/climate_analytics.dart';
 import 'screen_time_card.dart';
+import 'weather_night_detail_card.dart';
 import '../../models/sleep_session.dart';
 import '../../models/sleep_note.dart';
 import '../../theme/app_theme.dart';
@@ -382,6 +383,8 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                         ]);
                       },
                     )),
+                    const SizedBox(height: 12),
+                    WeatherNightDetailCard(database: widget.database, session: session),
                   ],
                 ),
               ),
