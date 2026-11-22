@@ -112,6 +112,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() { _yandexConnected = false; _yandexHome = null; _selectedYandexDeviceId = null; _yandexTokenController.clear(); });
   }
 
+  @override
+  void dispose() {
+    _yandexTokenController.dispose();
+    super.dispose();
+  }
+
   Future<void> _changeAppLock(bool value) async {
     final service = AppLockService.instance;
     if (value) {
