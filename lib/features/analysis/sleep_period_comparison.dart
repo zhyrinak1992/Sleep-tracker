@@ -1,4 +1,5 @@
 import '../../models/sleep_session.dart';
+import 'sleep_analytics.dart';
 
 class SleepRangeSummary {
   const SleepRangeSummary({
@@ -9,6 +10,9 @@ class SleepRangeSummary {
     required this.rated,
     required this.averageDurationMinutes,
     required this.averageRating,
+    required this.bedtimeDeviationMinutes,
+    required this.wakeTimeDeviationMinutes,
+    required this.regularitySampleCount,
   });
 
   final DateTime start;
@@ -18,6 +22,9 @@ class SleepRangeSummary {
   final int rated;
   final double? averageDurationMinutes;
   final double? averageRating;
+  final double? bedtimeDeviationMinutes;
+  final double? wakeTimeDeviationMinutes;
+  final int regularitySampleCount;
 }
 
 class SleepPeriodComparison {
@@ -39,6 +46,7 @@ class SleepPeriodComparison {
     final completed = selected.where((session) =>
       session.duration != null && session.duration!.inMinutes > 0).toList();
     final rated = selected.where((session) => session.morningRating != null).toList();
+    final regularity = SleepAnalytics.regularity(completed);
     return SleepRangeSummary(
       start: from,
       endExclusive: until,
@@ -49,6 +57,9 @@ class SleepPeriodComparison {
         completed.fold<int>(0, (sum, item) => sum + item.duration!.inMinutes) / completed.length,
       averageRating: rated.isEmpty ? null :
         rated.fold<int>(0, (sum, item) => sum + item.morningRating!) / rated.length,
+      bedtimeDeviationMinutes: regularity.bedtimeDeviationMinutes,
+      wakeTimeDeviationMinutes: regularity.wakeTimeDeviationMinutes,
+      regularitySampleCount: regularity.sampleCount,
     );
   }
 
