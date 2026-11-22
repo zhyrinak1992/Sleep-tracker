@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:timezone/timezone.dart' as tz;
 
 import '../models/sleep_session.dart';
 import 'sleep_database.dart';
@@ -61,6 +62,7 @@ class NightEnvironmentSummary {
     required this.locationName,
     required this.sampleCount,
     required this.utcOffsetSeconds,
+    this.timezoneName = 'UTC',
     this.temperatureMin,
     this.temperatureAverage,
     this.temperatureMax,
@@ -75,6 +77,7 @@ class NightEnvironmentSummary {
   final String locationName;
   final int sampleCount;
   final int utcOffsetSeconds;
+  final String timezoneName;
   final double? temperatureMin;
   final double? temperatureAverage;
   final double? temperatureMax;
@@ -89,19 +92,24 @@ class NightEnvironmentSummary {
       (temperatureAverage != null || humidityAverage != null ||
        precipitationMm != null || windMaxKmh != null || weatherCode != null);
 
-  DateTime? get sunriseLocalWallTime => sunriseEpoch == null
-      ? null
-      : DateTime.fromMillisecondsSinceEpoch(
-          (sunriseEpoch! + utcOffsetSeconds) * 1000, isUtc: true);
-  DateTime? get sunsetLocalWallTime => sunsetEpoch == null
-      ? null
-      : DateTime.fromMillisecondsSinceEpoch(
-          (sunsetEpoch! + utcOffsetSeconds) * 1000, isUtc: true);
+  DateTime? _localTime(int? epoch) {
+    if (epoch == null) return null;
+    final instant = DateTime.fromMillisecondsSinceEpoch(epoch * 1000, isUtc: true);
+    try {
+      return tz.TZDateTime.from(instant, tz.getLocation(timezoneName));
+    } catch (_) {
+      return DateTime.fromMillisecondsSinceEpoch((epoch + utcOffsetSeconds) * 1000, isUtc: true);
+    }
+  }
+
+  DateTime? get sunriseLocalWallTime => _localTime(sunriseEpoch);
+  DateTime? get sunsetLocalWallTime => _localTime(sunsetEpoch);
 
   Map<String, Object?> toMap() => {
     'locationName': locationName,
     'sampleCount': sampleCount,
     'utcOffsetSeconds': utcOffsetSeconds,
+    'timezoneName': timezoneName,
     'temperatureMin': temperatureMin,
     'temperatureAverage': temperatureAverage,
     'temperatureMax': temperatureMax,
@@ -119,6 +127,7 @@ class NightEnvironmentSummary {
       locationName: value['locationName'] as String? ?? '',
       sampleCount: (number('sampleCount') ?? 0).toInt(),
       utcOffsetSeconds: (number('utcOffsetSeconds') ?? 0).toInt(),
+      timezoneName: value['timezoneName'] as String? ?? 'UTC',
       temperatureMin: number('temperatureMin')?.toDouble(),
       temperatureAverage: number('temperatureAverage')?.toDouble(),
       temperatureMax: number('temperatureMax')?.toDouble(),
@@ -268,6 +277,7 @@ class NightEnvironmentService {
     final sunrises = _intList(daily['sunrise']);
     final sunsets = _intList(daily['sunset']);
     final offset = (decoded['utc_offset_seconds'] as num?)?.toInt() ?? 0;
+    final timezoneName = decoded['timezone'] as String? ?? 'UTC';
 
     for (final session in missing) {
       final start = (session.actualSleepStartedAt ?? session.startedAt).toUtc().millisecondsSinceEpoch ~/ 1000;
@@ -285,6 +295,7 @@ class NightEnvironmentService {
         locationName: location.displayName,
         sampleCount: indices.length,
         utcOffsetSeconds: offset,
+        timezoneName: timezoneName,
         temperatureMin: temp.isEmpty ? null : temp.reduce((a, b) => a < b ? a : b),
         temperatureAverage: temp.isEmpty ? null : temp.reduce((a, b) => a + b) / temp.length,
         temperatureMax: temp.isEmpty ? null : temp.reduce((a, b) => a > b ? a : b),
