@@ -59,6 +59,7 @@ class _WeatherHistoryCardState extends State<WeatherHistoryCard> {
                     } catch (e) {
                       error = e.toString();
                     }
+                    if (!dialogContext.mounted) return;
                     setDialogState(() => searching = false);
                   },
                   decoration: const InputDecoration(labelText: 'Город', hintText: 'Например, Дубна'),
@@ -75,6 +76,7 @@ class _WeatherHistoryCardState extends State<WeatherHistoryCard> {
                       } catch (e) {
                         error = e.toString();
                       }
+                      if (!dialogContext.mounted) return;
                       setDialogState(() => searching = false);
                     },
                     icon: searching
@@ -151,7 +153,7 @@ class _WeatherHistoryCardState extends State<WeatherHistoryCard> {
       const Text('Погода во время сна', style: TextStyle(fontWeight: FontWeight.w600)),
       const SizedBox(height: 5),
       const Text(
-        'Исторические данные для выбранного города: температура, влажность, давление, осадки и ветер. Также доступны восход, закат и длительность светового дня. Текущая погода вместо исторической не подставляется.',
+        'Исторические данные для выбранного города и ночей с фактическими границами сна: температура, влажность, давление, осадки и ветер. Также доступны восход, закат и длительность светового дня. Текущая погода вместо исторической не подставляется.',
         style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
       ),
       const SizedBox(height: 10),
