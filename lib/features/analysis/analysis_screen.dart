@@ -129,7 +129,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Text('Продолжительность по дням', style: TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 4),
-              const Text('Среднее для дней с завершёнными сессиями', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
+              const Text('Среднее для дней с завершёнными сессиями · шкала 0–12 ч', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
               const SizedBox(height: 18),
               SizedBox(height: 150, child: _DurationChart(values: chart, period: _period)),
             ])),
@@ -244,12 +244,12 @@ class _DurationChart extends StatelessWidget {
     final labels = period == AnalysisPeriod.week
         ? const ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
         : List.generate(5, (i) => '${i + 1} нед.');
-    final maxValue = values.whereType<double>().fold<double>(0, (a, b) => a > b ? a : b);
+    const maxValue = 720.0; // Единая шкала 0–12 часов для сопоставимости периодов.
     return Row(crossAxisAlignment: CrossAxisAlignment.end, children: List.generate(values.length, (i) {
       final value = values[i];
-      final height = value == null || maxValue == 0 ? 0.0 : (value / maxValue * 104).clamp(4.0, 104.0).toDouble();
+      final height = value == null ? 0.0 : (value / maxValue * 104).clamp(0.0, 104.0).toDouble();
       return Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
-        if (value != null) Text('${(value / 60).toStringAsFixed(1)}', style: const TextStyle(fontSize: 9, color: AppTheme.muted)),
+        if (value != null) Text('${(value / 60).toStringAsFixed(1).replaceAll('.', ',')} ч', style: const TextStyle(fontSize: 9, color: AppTheme.muted)),
         const SizedBox(height: 5),
         Container(height: 108, alignment: Alignment.bottomCenter, child: Container(
           height: height,
