@@ -131,6 +131,7 @@ class AppleHealthService {
     }
 
     var imported = 0;
+    final sessionIdsByGroup = <String, String>{};
     for (final group in groups) {
       final sorted = [...group]..sort((a, b) => a.dateFrom.compareTo(b.dateFrom));
       final first = sorted.first;
@@ -142,29 +143,27 @@ class AppleHealthService {
           .reduce((a, b) => a.isAfter(b) ? a : b);
       final safeId = 'health_${first.uuid.replaceAll('-', '_')}';
       final sourceName = sorted.map((item) => item.sourceName).where((s) => s.isNotEmpty).toSet().join(', ');
-      final inserted = await SleepDatabase.instance.insertHealthSession(
+      final resolved = await SleepDatabase.instance.upsertHealthSession(
         id: safeId,
         startedAt: startedAt,
         endedAt: endedAt,
         sourceName: sourceName.isEmpty ? 'Apple Health' : sourceName,
       );
-      if (!inserted) {
-        // The night already exists (possibly imported during an earlier sync).
-        // Do not attach child rows to a new synthetic ID: the matching
-        // session may have a different stable ID after a changed sample order.
-        continue;
-      }
-      imported++;
+      final sessionId = resolved.$1;
+      if (sessionId == null) continue;
+      sessionIdsByGroup[first.uuid] = sessionId;
+      if (resolved.$2) imported++;
+
+      // Deterministic sample IDs make this safe to run repeatedly. Existing
+      // samples are ignored; newly available stages are added to the same night.
       for (final point in sorted) {
         final stage = _stageName(point.type);
-        if (stage != null) {
-          await SleepDatabase.instance.addSleepStage(
-            id: 'health_stage_${point.uuid.replaceAll('-', '_')}',
-            sessionId: safeId, stage: stage, startedAt: point.dateFrom,
-            endedAt: point.dateTo, source: 'Apple Health: ${point.sourceName}',
-          );
-          continue;
-        }
+        if (stage == null) continue;
+        await SleepDatabase.instance.addSleepStage(
+          id: 'health_stage_${point.uuid.replaceAll('-', '_')}',
+          sessionId: sessionId, stage: stage, startedAt: point.dateFrom,
+          endedAt: point.dateTo, source: 'Apple Health: ${point.sourceName}',
+        );
       }
     }
     for (final point in metricPoints) {
@@ -176,7 +175,8 @@ class AppleHealthService {
         final to = group.map((x) => x.dateTo).reduce((a,b) => a.isAfter(b) ? a : b);
         if (!point.dateTo.isBefore(from.subtract(const Duration(hours: 1))) && !point.dateTo.isAfter(to.add(const Duration(hours: 1)))) {
           final first = group.first;
-          final sessionId = 'health_${first.uuid.replaceAll('-', '_')}';
+          final sessionId = sessionIdsByGroup[first.uuid];
+          if (sessionId == null) continue;
           await SleepDatabase.instance.addSleepMetric(id: 'health_metric_${point.uuid.replaceAll('-', '_')}', sessionId: sessionId, type: metric.$1, value: (point.value as NumericHealthValue).numericValue.toDouble(), unit: metric.$2, measuredAt: point.dateTo, source: 'Apple Health: ${point.sourceName}');
           break;
         }
