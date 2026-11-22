@@ -46,7 +46,7 @@ class WeatherHistoryService {
     if (response.statusCode != 200) {
       throw StateError('Сервис поиска городов вернул HTTP ${response.statusCode}.');
     }
-    final decoded = httpResponseJson(response.body);
+    final decoded = jsonDecode(response.body);
     if (decoded is! Map) throw const FormatException('Некорректный ответ поиска городов.');
     final results = decoded['results'];
     if (results is! List) return const [];
@@ -59,20 +59,21 @@ class WeatherHistoryService {
       if (name is! String || country is! String || lat is! num || lon is! num || zone is! String) {
         return null;
       }
+      final latitude = lat.toDouble();
+      final longitude = lon.toDouble();
+      if (!latitude.isFinite || !longitude.isFinite ||
+          latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+        return null;
+      }
       return WeatherLocation(
         name: name,
         country: country,
         admin1: item['admin1'] is String ? item['admin1'] as String : null,
-        latitude: lat.toDouble(),
-        longitude: lon.toDouble(),
+        latitude: latitude,
+        longitude: longitude,
         timezone: zone,
       );
     }).whereType<WeatherLocation>().toList();
-  }
-
-  Object? httpResponseJson(String body) {
-    // Kept local to the service so all network responses pass one JSON parser.
-    return jsonDecode(body);
   }
 
   Future<WeatherLocation?> loadLocation({SleepDatabase? database}) async {
@@ -100,6 +101,8 @@ class WeatherHistoryService {
     if (location == null) {
       throw StateError('Сначала выбери город для исторической погоды.');
     }
+    // Weather is linked only to actual sleep intervals. Button/session
+    // boundaries are not substituted for physiological sleep boundaries.
     final completed = sessions.where((session) {
       final start = session.actualSleepStartedAt;
       final end = session.actualSleepEndedAt;
@@ -118,14 +121,12 @@ class WeatherHistoryService {
     final utcEnds = completed.map((session) => session.actualSleepEndedAt!.toUtc()).toList();
     final first = utcStarts.reduce((a, b) => a.isBefore(b) ? a : b);
     final last = utcEnds.reduce((a, b) => a.isAfter(b) ? a : b);
-    final startDate = _dateKey(first);
-    final endDate = _dateKey(last);
 
     final uri = Uri.https('archive-api.open-meteo.com', '/v1/archive', {
       'latitude': location.latitude.toString(),
       'longitude': location.longitude.toString(),
-      'start_date': startDate,
-      'end_date': endDate,
+      'start_date': _dateKey(first),
+      'end_date': _dateKey(last),
       'hourly': 'temperature_2m,relative_humidity_2m,pressure_msl,precipitation,wind_speed_10m',
       'daily': 'sunrise,sunset,daylight_duration',
       'timezone': 'UTC',
@@ -139,11 +140,12 @@ class WeatherHistoryService {
     if (response.statusCode != 200) {
       throw StateError('Исторический погодный архив вернул HTTP ${response.statusCode}.');
     }
-    final decoded = httpResponseJson(response.body);
+    final decoded = jsonDecode(response.body);
     if (decoded is! Map) throw const FormatException('Некорректный ответ исторического погодного архива.');
     if (decoded['error'] == true) {
       throw StateError(decoded['reason']?.toString() ?? 'Поставщик не вернул исторические данные.');
     }
+
     final hourly = decoded['hourly'] is Map ? decoded['hourly'] as Map : const {};
     final daily = decoded['daily'] is Map ? decoded['daily'] as Map : const {};
     final times = _stringList(hourly['time']).map(_parseArchiveTime).toList();
@@ -173,10 +175,10 @@ class WeatherHistoryService {
       }
 
       List<double> selected(List<double?> source) => indices
-        .where((index) => index < source.length && source[index] != null)
-        .map((index) => source[index]!)
-        .where((value) => value.isFinite)
-        .toList();
+          .where((index) => index < source.length && source[index] != null)
+          .map((index) => source[index]!)
+          .where((value) => value.isFinite)
+          .toList();
 
       final temperature = WeatherMetricSummary.fromValues(selected(temp), '°C');
       final humiditySummary = WeatherMetricSummary.fromValues(selected(humidity), '%');
@@ -187,23 +189,33 @@ class WeatherHistoryService {
           ? null
           : precipitationValues.reduce((a, b) => a + b);
 
+      // Daily solar times are returned in UTC; convert the actual instants
+      // to the selected location's IANA time zone for display.
       final dayIndex = dailyTimes.indexOf(_dateKey(end));
       final sunriseValue = dayIndex >= 0 && dayIndex < sunrise.length
-          ? _toLocalIso(sunrise[dayIndex], zone) : null;
+          ? _toLocalIso(sunrise[dayIndex], zone)
+          : null;
       final sunsetValue = dayIndex >= 0 && dayIndex < sunset.length
-          ? _toLocalIso(sunset[dayIndex], zone) : null;
-      final daylightSeconds = dayIndex >= 0 && dayIndex < daylight.length ? daylight[dayIndex] : null;
+          ? _toLocalIso(sunset[dayIndex], zone)
+          : null;
+      final daylightSeconds = dayIndex >= 0 && dayIndex < daylight.length
+          ? daylight[dayIndex]
+          : null;
       final sampleCount = indices.where((index) =>
-        (index < temp.length && temp[index] != null) ||
-        (index < humidity.length && humidity[index] != null) ||
-        (index < pressure.length && pressure[index] != null) ||
-        (index < wind.length && wind[index] != null) ||
-        (index < precipitation.length && precipitation[index] != null)
+          (index < temp.length && temp[index] != null) ||
+          (index < humidity.length && humidity[index] != null) ||
+          (index < pressure.length && pressure[index] != null) ||
+          (index < wind.length && wind[index] != null) ||
+          (index < precipitation.length && precipitation[index] != null)
       ).length;
-      final available = temperature != null || humiditySummary != null ||
-          pressureSummary != null || windSummary != null ||
-          precipitationTotal != null || sunriseValue != null ||
-          sunsetValue != null || daylightSeconds != null;
+      final available = temperature != null ||
+          humiditySummary != null ||
+          pressureSummary != null ||
+          windSummary != null ||
+          precipitationTotal != null ||
+          sunriseValue != null ||
+          sunsetValue != null ||
+          daylightSeconds != null;
       if (available) nightsWithData++;
       totalSamples += sampleCount;
 
@@ -245,22 +257,18 @@ class WeatherHistoryService {
       '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
   static DateTime _parseArchiveTime(String value) {
-    final hasOffset = RegExp(r'(Z|[+-]\\d{2}:\\d{2})
-  static List<String> _stringList(Object? value) =>
-      value is List ? value.whereType<String>().toList() : const [];
-
-  static List<String?> _nullableStringList(Object? value) =>
-      value is List ? value.map((item) => item is String ? item : null).toList() : const [];
-
-  static List<double?> _numberList(Object? value) => value is List
-      ? value.map((item) => item is num && item.toDouble().isFinite ? item.toDouble() : null).toList()
-      : const [];
-}
-).hasMatch(value);
+    final hasOffset = RegExp(r'(Z|[+-]\d{2}:\d{2})$').hasMatch(value);
     if (hasOffset) return DateTime.parse(value).toUtc();
     final parsed = DateTime.parse(value);
-    return DateTime.utc(parsed.year, parsed.month, parsed.day, parsed.hour,
-      parsed.minute, parsed.second, parsed.millisecond);
+    return DateTime.utc(
+      parsed.year,
+      parsed.month,
+      parsed.day,
+      parsed.hour,
+      parsed.minute,
+      parsed.second,
+      parsed.millisecond,
+    );
   }
 
   static String? _toLocalIso(String? value, tz.Location zone) {
