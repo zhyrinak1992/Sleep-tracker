@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../data/sleep_database.dart';
 import '../../models/sleep_session.dart';
 import '../../theme/app_theme.dart';
@@ -52,6 +53,22 @@ class _MoonPhaseScreenState extends State<MoonPhaseScreen> {
             ])),
           )),
           if(usable==0) const SectionCard(child:Text('Пока нет завершённых ночей для сопоставления.')),
+          if(sessions.where(MoonPhaseAnalytics.phaseChangedDuring).isNotEmpty) ...[
+            const SizedBox(height:12),
+            SectionCard(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              const Text('Смена фазы в течение ночи',style:TextStyle(fontWeight:FontWeight.w700)),
+              const SizedBox(height:8),
+              ...sessions.where(MoonPhaseAnalytics.phaseChangedDuring).map((session){
+                final end=session.actualSleepEndedAt??session.endedAt!;
+                final startPhase=MoonPhaseAnalytics.at(session.startedAt).label;
+                final endPhase=MoonPhaseAnalytics.at(end).label;
+                return Padding(padding:const EdgeInsets.symmetric(vertical:5),child:Row(children:[
+                  Expanded(child:Text(DateFormat('d MMM yyyy','ru').format(session.startedAt))),
+                  Flexible(child:Text('$startPhase → $endPhase',textAlign:TextAlign.end,style:const TextStyle(color:AppTheme.muted,fontSize:12))),
+                ]));
+              }),
+            ])),
+          ],
           const SizedBox(height:8),
           const Text('Фаза Луны и процент освещённости — расчётная астрономическая оценка, а не измерение яркости в спальне. Облачность, здания и освещение помещения не учитываются. Наблюдаемые совпадения не означают, что Луна влияет на сон; при малой выборке выводы делать нельзя.',style:TextStyle(color:AppTheme.muted,fontSize:12,height:1.45)),
         ]);
