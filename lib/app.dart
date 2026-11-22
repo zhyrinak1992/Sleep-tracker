@@ -87,6 +87,20 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     _cleanupTimer = Timer.periodic(const Duration(minutes: 30), (_) => _cleanupAudio());
     _climateTimer = Timer.periodic(const Duration(minutes: 15), (_) => _refreshClimate());
     _refreshClimate();
+    _ensureNightReminders();
+  }
+
+  Future<void> _ensureNightReminders() async {
+    try {
+      final openSession = await _database.getOpenSession();
+      if (openSession == null) {
+        await NotificationService.instance.scheduleNightReminders();
+      } else {
+        await NotificationService.instance.cancelNightReminders();
+      }
+    } catch (error, stackTrace) {
+      debugPrint('Night reminder scheduling failed: $error\\n$stackTrace');
+    }
   }
 
   @override
@@ -122,6 +136,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       _cleanupAudio();
       _refreshClimate();
+      _ensureNightReminders();
     }
   }
 
