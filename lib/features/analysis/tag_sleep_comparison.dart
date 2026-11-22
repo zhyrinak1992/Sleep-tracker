@@ -113,7 +113,10 @@ class TagComparisonTemplate {
 
   factory TagComparisonTemplate.fromJson(Map<String, dynamic> json) {
     final metricName = json['metric'];
-    final metric = TagSleepMetric.values.where((item) => item.name == metricName).firstOrNull;
+    TagSleepMetric? metric;
+    for (final item in TagSleepMetric.values) {
+      if (item.name == metricName) { metric = item; break; }
+    }
     final id = json['id'];
     final name = json['name'];
     final tagKey = json['tagKey'];
