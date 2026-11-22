@@ -326,6 +326,7 @@ class SleepDatabase {
     }
     if (metricType == 'temperature' && unit != '°C') throw ArgumentError('Температура должна быть сохранена в °C.');
     if (metricType == 'humidity' && unit != '%') throw ArgumentError('Влажность должна быть сохранена в процентах.');
+    if (metricType == 'humidity' && (value < 0 || value > 100)) throw ArgumentError('Влажность должна быть в диапазоне от 0 до 100%.');
     final db = await database;
     await db.insert('climate_samples', {
       'id': id, 'session_id': sessionId, 'device_id': deviceId,
