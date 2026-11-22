@@ -245,7 +245,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               const Text('Сравнение рассчитывается отдельно для каждого показателя. Нет данных — нет процента изменения. Длительность учитывается только для завершённых сессий, оценка — только там, где она действительно сохранена.', style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.45)),
             ])),
             const SizedBox(height: 14),
-            _RegularityCard(sessions: current.sessions, database: widget.database),
+            // Регулярность оценивается по всей доступной истории, а не по выбранной неделе/месяцу:
+            // иначе порог в 7 ночей недостижим для большинства недельных срезов.
+            _RegularityCard(sessions: all, database: widget.database),
             const SizedBox(height: 14),
             TagSleepComparisonCard(
               database: widget.database,
