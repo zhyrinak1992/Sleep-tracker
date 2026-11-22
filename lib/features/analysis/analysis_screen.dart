@@ -17,6 +17,8 @@ import 'activity_analysis_card.dart';
 import 'screen_time_analysis_card.dart';
 import 'weather_analysis_card.dart';
 import 'sleep_period_comparison_screen.dart';
+import 'sleep_regularity_analysis.dart';
+import '../diary/sleep_session_detail_screen.dart';
 
 class AnalysisScreen extends StatefulWidget {
   const AnalysisScreen({super.key, required this.database});
@@ -241,7 +243,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               const Text('Сравнение рассчитывается отдельно для каждого показателя. Нет данных — нет процента изменения. Длительность учитывается только для завершённых сессий, оценка — только там, где она действительно сохранена.', style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.45)),
             ])),
             const SizedBox(height: 14),
-            _RegularityCard(summary: SleepAnalytics.regularity(current.sessions)),
+            _RegularityCard(sessions: current.sessions, database: widget.database),
             const SizedBox(height: 14),
             IndividualSleepNeedCard(database: widget.database),
             const SizedBox(height: 14),
@@ -448,37 +450,76 @@ class _ClimateMetricLine extends StatelessWidget {
 
 
 class _RegularityCard extends StatelessWidget {
-  const _RegularityCard({required this.summary});
-  final SleepRegularitySummary summary;
+  const _RegularityCard({required this.sessions, required this.database});
+  final List<SleepSession> sessions;
+  final SleepDatabase database;
 
-  String _variation(double? minutes) {
-    if (minutes == null) return 'Недостаточно данных';
-    final rounded = minutes.round();
-    if (rounded == 0) return 'Почти одинаковое время';
-    return '±$rounded мин';
+  String _clock(int? minute) {
+    if (minute == null) return 'Недостаточно данных';
+    final hour = (minute ~/ 60).toString().padLeft(2, '0');
+    final valueMinute = (minute % 60).toString().padLeft(2, '0');
+    return '$hour:$valueMinute';
+  }
+
+  String _spread(double? value) =>
+      value == null ? '—' : '±${value.round()} мин';
+
+  String _duration(int? value) {
+    if (value == null) return '—';
+    return '${value ~/ 60} ч ${value % 60} мин';
   }
 
   @override
-  Widget build(BuildContext context) => SectionCard(child: Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const Text('Регулярность режима сна', style: TextStyle(fontWeight: FontWeight.w600)),
-      const SizedBox(height: 5),
-      Text('Завершённых ночей в выбранном периоде: ${summary.sampleCount}',
-        style: const TextStyle(color: AppTheme.muted, fontSize: 12)),
-      const SizedBox(height: 12),
-      _RegularityValueRow(label: 'Время засыпания', value: _variation(summary.bedtimeDeviationMinutes)),
-      const Divider(height: 18, color: AppTheme.surfaceLight),
-      _RegularityValueRow(label: 'Время пробуждения', value: _variation(summary.wakeTimeDeviationMinutes)),
-      const SizedBox(height: 8),
-      const Text(
-        'Показывается среднее абсолютное отклонение от типичного времени. Расчёт учитывает переход через полночь и только завершённые ночи с реальным интервалом сна. Это описательная статистика, а не медицинская оценка.',
-        style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
-      ),
-    ],
-  ));
+  Widget build(BuildContext context) {
+    final result = SleepRegularityAnalysis.calculate(sessions);
+    final outliers = result.nights.where((night) => night.isOutlier).toList()
+      ..sort((a, b) => (b.bedtimeDeviation + b.wakeDeviation)
+          .compareTo(a.bedtimeDeviation + a.wakeDeviation));
+    return SectionCard(child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Регулярность режима сна', style: TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 5),
+        Text('Фактические ночи: ${result.nights.length} · исключено неполных или изменённых записей: ${result.excludedCount}',
+          style: const TextStyle(color: AppTheme.muted, fontSize: 12)),
+        if (!result.isReliable) ...[
+          const SizedBox(height: 9),
+          const Text('Пока недостаточно сопоставимых ночей для надёжной оценки. Нужно не менее 7 фактических записей.',
+            style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4)),
+        ],
+        const SizedBox(height: 12),
+        _RegularityValueRow(label: 'Типичное засыпание', value: _clock(result.typicalBedtimeMinute)),
+        _RegularityValueRow(label: 'Разброс засыпания', value: _spread(result.bedtimeMad)),
+        const Divider(height: 18, color: AppTheme.surfaceLight),
+        _RegularityValueRow(label: 'Типичное пробуждение', value: _clock(result.typicalWakeMinute)),
+        _RegularityValueRow(label: 'Разброс пробуждения', value: _spread(result.wakeMad)),
+        const Divider(height: 18, color: AppTheme.surfaceLight),
+        _RegularityValueRow(label: 'Типичная длительность', value: _duration(result.typicalDurationMinutes)),
+        _RegularityValueRow(label: 'Разброс длительности', value: _spread(result.durationMad)),
+        if (result.isReliable && outliers.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          const Text('Ночи с заметными отклонениями', style: TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          ...outliers.take(5).map((night) => ListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            title: Text(DateFormat('d MMMM yyyy', 'ru').format(night.session.startedAt)),
+            subtitle: Text('Засыпание: ${night.bedtimeDeviation} мин · пробуждение: ${night.wakeDeviation} мин'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => SleepSessionDetailScreen(database: database, session: night.session),
+            )),
+          )),
+        ],
+        const SizedBox(height: 8),
+        const Text(
+          'Типичное время рассчитывается по медиане, разброс — по медианному абсолютному отклонению. Используются только завершённые фактические интервалы; ручные, изменённые и неполные записи не включаются в статистику. Время суток учитывает переход через полночь. При смене часового пояса историческое локальное время может быть ограничено текущими данными устройства.',
+          style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
+        ),
+      ],
+    ));
+  }
 }
-
 
 class _RegularityValueRow extends StatelessWidget {
   const _RegularityValueRow({required this.label, required this.value});
@@ -486,9 +527,12 @@ class _RegularityValueRow extends StatelessWidget {
   final String value;
 
   @override
-  Widget build(BuildContext context) => Row(children: [
-    Expanded(child: Text(label, style: const TextStyle(color: AppTheme.muted))),
-    const SizedBox(width: 12),
-    Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
-  ]);
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(children: [
+      Expanded(child: Text(label, style: const TextStyle(color: AppTheme.muted))),
+      const SizedBox(width: 12),
+      Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+    ]),
+  );
 }
