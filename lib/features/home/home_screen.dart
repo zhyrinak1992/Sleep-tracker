@@ -353,47 +353,84 @@ class _HomeScreenState extends State<HomeScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
         children: [
-          const Text('ТРЕКЕР СНА', style: TextStyle(
-            color: AppTheme.teal, letterSpacing: 2.4, fontSize: 12, fontWeight: FontWeight.bold,
-          )),
-          const SizedBox(height: 8),
-          Text('Добрый вечер', style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-          )),
-          const SizedBox(height: 4),
-          Text(DateFormat('EEEE, d MMMM', 'ru').format(now),
-            style: const TextStyle(color: AppTheme.muted)),
-          const SizedBox(height: 26),
-          Center(
-            child: InkWell(
-              borderRadius: BorderRadius.circular(120),
-              onTap: _loading ? null : _toggleSession,
-              child: Container(
-                width: 218, height: 218,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF1B526B), Color(0xFF10243B), Color(0xFF0A1A2D)],
-                  ),
-                  border: Border.all(color: AppTheme.teal.withValues(alpha: .55), width: 1.5),
-                  boxShadow: [BoxShadow(
-                    color: AppTheme.teal.withValues(alpha: .12),
-                    blurRadius: 38, spreadRadius: 4,
-                  )],
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+          Padding(
+            padding: const EdgeInsets.only(bottom: 22),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(30),
+              child: SizedBox(
+                height: 390,
+                child: Stack(
+                  fit: StackFit.expand,
                   children: [
-                    Icon(_open == null ? Icons.nightlight_round : Icons.wb_sunny_outlined,
-                      size: 38, color: AppTheme.teal),
-                    const SizedBox(height: 12),
-                    Text(_open == null ? 'ЛОЖУСЬ СПАТЬ' : 'ЗАВЕРШИТЬ',
-                      style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                    const SizedBox(height: 6),
-                    Text(_open == null ? 'Начать запись' : 'Сохранить сессию',
-                      style: const TextStyle(color: AppTheme.muted, fontSize: 12)),
+                    Image.asset('assets/images/dreamy_night_scene.webp', fit: BoxFit.cover),
+                    const DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Color(0x160A102A), Color(0x1A0A102A), Color(0xF20A102A)],
+                          stops: [0, .42, 1],
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 18, left: 20, right: 20,
+                      child: Row(
+                        children: [
+                          const Icon(Icons.auto_awesome, color: Color(0xFFFFD7B0), size: 17),
+                          const SizedBox(width: 8),
+                          Text(DateFormat('EEEE, d MMMM', 'ru').format(now).toUpperCase(),
+                            style: const TextStyle(color: Color(0xFFE5D7FF), letterSpacing: 1.5, fontSize: 10, fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ),
+                    Positioned(
+                      left: 22, right: 22, bottom: 22,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Text(_open == null ? 'Пора отдыхать?' : 'Сладких снов',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 27, height: 1.15, fontWeight: FontWeight.w700,
+                              color: Colors.white, shadows: [Shadow(color: Color(0xAA120D2C), blurRadius: 18)])),
+                          const SizedBox(height: 7),
+                          Text(_open == null ? 'Начните ночное наблюдение и позвольте себе отдохнуть' : 'Ночная сессия уже идёт',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Color(0xFFE0D8F4), fontSize: 12, height: 1.4)),
+                          const SizedBox(height: 17),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              onPressed: _loading ? null : _toggleSession,
+                              icon: Icon(_open == null ? Icons.play_arrow_rounded : Icons.stop_rounded, size: 23),
+                              label: Text(_open == null ? 'Начать сон' : 'Завершить запись'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFFE4B8F7),
+                                foregroundColor: const Color(0xFF21143D),
+                                elevation: 10,
+                                shadowColor: const Color(0xFFFFB8E8).withValues(alpha: .35),
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                                shape: const StadiumBorder(),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Positioned(
+                      top: 18, right: 18,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                        decoration: BoxDecoration(color: const Color(0x66201A42), borderRadius: BorderRadius.circular(30),
+                          border: Border.all(color: const Color(0x88E7C5FF))),
+                        child: const Row(children: [
+                          Icon(Icons.nightlight_round, color: Color(0xFFFFD9A9), size: 14),
+                          SizedBox(width: 5),
+                          Text('SLEEP MODE', style: TextStyle(color: Colors.white, fontSize: 9, letterSpacing: 1.1, fontWeight: FontWeight.w700)),
+                        ]),
+                      ),
+                    ),
                   ],
                 ),
               ),
