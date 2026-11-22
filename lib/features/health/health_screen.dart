@@ -712,6 +712,7 @@ class _MetricCard extends StatelessWidget {
   }
 
   void _showHistory(BuildContext context) {
+    final pageContext = context;
     final rows = [...samples]..sort((a, b) => b.measuredAt.compareTo(a.measuredAt));
     showDialog<void>(
       context: context,
@@ -742,7 +743,7 @@ class _MetricCard extends StatelessWidget {
                 enabled: session != null,
                 onTap: session == null ? null : () {
                   Navigator.pop(dialogContext);
-                  Navigator.of(context).push(MaterialPageRoute(
+                  Navigator.of(pageContext).push(MaterialPageRoute(
                     builder: (_) => SleepSessionDetailScreen(database: database, session: session),
                   ));
                 },
