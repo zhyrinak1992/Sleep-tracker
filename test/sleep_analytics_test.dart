@@ -42,4 +42,26 @@ void main() {
     expect(values[1], 480);
     expect(values[3], isNull);
   });
+
+  test('regularity handles bedtimes across midnight using circular distance', () {
+    final sessions = [
+      SleepSession(id: 'late', startedAt: DateTime(2026, 11, 17, 23, 50), endedAt: DateTime(2026, 11, 18, 7, 0)),
+      SleepSession(id: 'early', startedAt: DateTime(2026, 11, 18, 0, 10), endedAt: DateTime(2026, 11, 18, 7, 10)),
+    ];
+    final result = SleepAnalytics.regularity(sessions);
+    expect(result.sampleCount, 2);
+    expect(result.bedtimeDeviationMinutes, closeTo(10, 0.01));
+    expect(result.wakeTimeDeviationMinutes, closeTo(5, 0.01));
+  });
+
+  test('regularity excludes open and zero-duration sessions and needs two samples', () {
+    final result = SleepAnalytics.regularity([
+      SleepSession(id: 'open', startedAt: DateTime(2026, 11, 17, 23)),
+      SleepSession(id: 'zero', startedAt: DateTime(2026, 11, 18, 7), endedAt: DateTime(2026, 11, 18, 7)),
+      SleepSession(id: 'valid', startedAt: DateTime(2026, 11, 19, 23), endedAt: DateTime(2026, 11, 20, 7)),
+    ]);
+    expect(result.sampleCount, 1);
+    expect(result.bedtimeDeviationMinutes, isNull);
+    expect(result.wakeTimeDeviationMinutes, isNull);
+  });
 }
