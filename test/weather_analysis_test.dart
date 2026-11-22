@@ -91,6 +91,7 @@ void main() {
         date: '2026-11-22',
         sunsetUtc: DateTime.utc(2026, 11, 22, 15),
         sunriseUtc: DateTime.utc(2026, 11, 22, 6, 30),
+        daylightDurationSeconds: 36000,
       ),
       SolarEvent(
         date: '2026-11-23',
@@ -106,6 +107,7 @@ void main() {
     );
     expect(summary.sunsetUtc, DateTime.utc(2026, 11, 21, 15));
     expect(summary.sunriseUtc, DateTime.utc(2026, 11, 22, 6, 30));
+    expect(summary.daylightDurationSeconds, 36000);
   });
 
   test('keeps solar events absent when no matching events are returned', () {
@@ -116,6 +118,7 @@ void main() {
     );
     expect(summary.sunsetUtc, isNull);
     expect(summary.sunriseUtc, isNull);
+    expect(summary.daylightDurationSeconds, isNull);
   });
 
 }
