@@ -188,6 +188,8 @@ void main() {
   });
 
     test('compares only nights with registered awake-stage intervals', () {
+      final start = DateTime(2026, 11, 1);
+      final end = DateTime(2026, 12, 1);
       final sessions = <SleepSession>[
         for (var i = 0; i < 4; i++)
           _session(id: 'tag-awake-$i', start: start.add(Duration(days: i))),
