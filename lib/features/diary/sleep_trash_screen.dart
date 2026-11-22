@@ -15,6 +15,8 @@ class SleepTrashScreen extends StatefulWidget {
 
 class _SleepTrashScreenState extends State<SleepTrashScreen> {
   late Future<List<SleepSession>> _items;
+  final Set<String> _selectedIds = <String>{};
+  bool _selectionMode = false;
   @override
   void initState() { super.initState(); _items = widget.database.getTrashedSessions(); }
   Future<void> _reload() async {
@@ -28,6 +30,31 @@ class _SleepTrashScreenState extends State<SleepTrashScreen> {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Запись восстановлена в дневнике')));
   }
 
+  void _toggleSelection(String id) {
+    setState(() {
+      _selectionMode = true;
+      if (!_selectedIds.add(id)) _selectedIds.remove(id);
+      if (_selectedIds.isEmpty) _selectionMode = false;
+    });
+  }
+
+  Future<void> _deleteSelectedForever() async {
+    if (_selectedIds.isEmpty) return;
+    final confirm = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('Удалить выбранные записи?'),
+      content: Text('Будут безвозвратно удалены ночи: ' + _selectedIds.length.toString() + '. Связанные заметки, показатели и аудиофайлы также будут удалены.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Удалить навсегда')),
+      ],
+    ));
+    if (confirm != true) return;
+    final ids = _selectedIds.toList();
+    await widget.database.permanentlyDeleteSessions(ids);
+    if (!mounted) return;
+    setState(() { _selectedIds.clear(); _selectionMode = false; });
+    await _reload();
+  }
   Future<void> _deleteForever(SleepSession session) async {
     final confirm = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
       title: const Text('Удалить безвозвратно?'),
@@ -65,6 +92,10 @@ class _SleepTrashScreenState extends State<SleepTrashScreen> {
             style: TextStyle(color: AppTheme.muted, height: 1.4)),
           const SizedBox(height: 12),
           Wrap(spacing: 8, runSpacing: 8, children: [
+            if (_selectionMode) ...[
+              FilledButton.icon(onPressed: _selectedIds.isEmpty ? null : _deleteSelectedForever, icon: const Icon(Icons.delete_forever), label: Text('Удалить выбранные (' + _selectedIds.length.toString() + ')')),
+              TextButton(onPressed: () => setState(() { _selectedIds.clear(); _selectionMode = false; }), child: const Text('Отмена выбора')),
+            ] else OutlinedButton.icon(onPressed: () => setState(() => _selectionMode = true), icon: const Icon(Icons.checklist), label: const Text('Выбрать записи')),
             OutlinedButton.icon(
               onPressed: () async {
                 await widget.database.restoreAllTrashedSessions();
@@ -94,7 +125,10 @@ class _SleepTrashScreenState extends State<SleepTrashScreen> {
           ...sessions.map((session) => Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(DateFormat('d MMMM yyyy', 'ru').format(session.startedAt), style: const TextStyle(fontWeight: FontWeight.w600)),
+              Row(children: [
+                if (_selectionMode) Checkbox(value: _selectedIds.contains(session.id), onChanged: (_) => _toggleSelection(session.id)),
+                Expanded(child: Text(DateFormat('d MMMM yyyy', 'ru').format(session.startedAt), style: const TextStyle(fontWeight: FontWeight.w600))),
+              ]),
               const SizedBox(height: 4),
               if (session.deletedAt != null) Text(
                 'Удалено: ' + DateFormat('d MMM yyyy, HH:mm', 'ru').format(session.deletedAt!) +
@@ -106,7 +140,7 @@ class _SleepTrashScreenState extends State<SleepTrashScreen> {
               Row(children: [
                 Expanded(child: OutlinedButton.icon(onPressed: () => _restore(session), icon: const Icon(Icons.restore), label: const Text('Восстановить'))),
                 const SizedBox(width: 8),
-                IconButton(onPressed: () => _deleteForever(session), tooltip: 'Удалить навсегда',
+                if (!_selectionMode) IconButton(onPressed: () => _deleteForever(session), tooltip: 'Удалить навсегда',
                   icon: const Icon(Icons.delete_forever_outlined, color: Colors.redAccent)),
               ]),
             ])),
