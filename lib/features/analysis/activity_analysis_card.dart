@@ -15,6 +15,7 @@ class _ActivityNight {
     this.energyKcal,
     this.exerciseMinutes,
     this.workoutCount,
+    this.workoutDurationMinutes,
   });
 
   final double sleepMinutes;
@@ -22,6 +23,7 @@ class _ActivityNight {
   final double? energyKcal;
   final double? exerciseMinutes;
   final double? workoutCount;
+  final double? workoutDurationMinutes;
 }
 
 class ActivityAnalysisCard extends StatelessWidget {
@@ -58,6 +60,7 @@ class ActivityAnalysisCard extends StatelessWidget {
           energyKcal: number('activeEnergyKcal'),
           exerciseMinutes: number('exerciseMinutes'),
           workoutCount: number('workoutCount'),
+          workoutDurationMinutes: number('workoutDurationMinutes'),
         ));
       } catch (_) {
         // Ignore malformed optional activity metadata without affecting sleep history.
@@ -128,6 +131,11 @@ class ActivityAnalysisCard extends StatelessWidget {
           _ActivityMetricRow(
             label: 'Тренировки',
             value: _average(nights.where((n) => n.workoutCount != null).map((n) => n.workoutCount!).toList(), unit: 'за период'),
+          ),
+          const SizedBox(height: 8),
+          _ActivityMetricRow(
+            label: 'Длительность тренировок',
+            value: _average(nights.where((n) => n.workoutDurationMinutes != null).map((n) => n.workoutDurationMinutes!).toList(), unit: 'мин', decimals: 1),
           ),
           const Divider(height: 20, color: AppTheme.surfaceLight),
           const Text('Шаги и продолжительность последующего сна',
