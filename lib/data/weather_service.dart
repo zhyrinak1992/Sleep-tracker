@@ -177,6 +177,21 @@ SolarEvent? _nextSunriseDay(
   );
 }
 
+String _utcDateKey(DateTime value) {
+  final utc = value.toUtc();
+  return '${utc.year.toString().padLeft(4, '0')}-${utc.month.toString().padLeft(2, '0')}-${utc.day.toString().padLeft(2, '0')}';
+}
+
+double? _daylightForWakeDate(List<SolarEvent> events, DateTime wake) {
+  final date = _utcDateKey(wake);
+  for (final event in events) {
+    if (event.date == date && event.daylightDurationSeconds != null) {
+      return event.daylightDurationSeconds;
+    }
+  }
+  return _nextSunriseDay(events, wake)?.daylightDurationSeconds;
+}
+
 class WeatherNightSummary {
   const WeatherNightSummary({
     required this.sampleCount,
@@ -236,7 +251,7 @@ class WeatherNightSummary {
         end.toUtc(),
         before: false,
       ),
-      daylightDurationSeconds: _nextSunriseDay(solarEvents, end.toUtc())?.daylightDurationSeconds,
+      daylightDurationSeconds: _daylightForWakeDate(solar, end.toUtc()),
     );
   }
 }
@@ -412,7 +427,8 @@ class WeatherService {
       final cachedStart = cached['startDate'];
       final cachedEnd = cached['endDate'];
       if (cachedStart is String && cachedEnd is String &&
-          cachedStart.compareTo(startDate) <= 0 && cachedEnd.compareTo(endDate) >= 0) {
+          cachedStart.compareTo(startDate) <= 0 && cachedEnd.compareTo(endDate) >= 0 &&
+          cached['schemaVersion'] == 2) {
         return cachedEvents;
       }
     }
@@ -473,17 +489,26 @@ class WeatherService {
       if (cachedEvents.isNotEmpty) return cachedEvents;
       return const [];
     }
-    final merged = <String, SolarEvent>{
+    final mergedByDate = <String, SolarEvent>{
       for (final event in cachedEvents) event.date: event,
-      for (final event in fetched) event.date: event,
-    }.values.toList()
+    };
+    for (final event in fetched) {
+      final previous = mergedByDate[event.date];
+      mergedByDate[event.date] = SolarEvent(
+        date: event.date,
+        sunriseUtc: event.sunriseUtc ?? previous?.sunriseUtc,
+        sunsetUtc: event.sunsetUtc ?? previous?.sunsetUtc,
+        daylightDurationSeconds: event.daylightDurationSeconds ?? previous?.daylightDurationSeconds,
+      );
+    }
+    final merged = mergedByDate.values.toList()
       ..sort((a, b) => a.date.compareTo(b.date));
     final oldStart = cached?['startDate'];
     final oldEnd = cached?['endDate'];
     final mergedStart = oldStart is String && oldStart.compareTo(startDate) < 0 ? oldStart : startDate;
     final mergedEnd = oldEnd is String && oldEnd.compareTo(endDate) > 0 ? oldEnd : endDate;
     await database.setAppMetadata(cacheKey, jsonEncode({
-      'schemaVersion': 1,
+      'schemaVersion': 2,
       'locationId': location.id,
       'startDate': mergedStart,
       'endDate': mergedEnd,
