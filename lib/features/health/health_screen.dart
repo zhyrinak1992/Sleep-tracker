@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../data/sleep_database.dart';
+import '../diary/sleep_session_detail_screen.dart';
 import '../../models/sleep_session.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
@@ -293,7 +294,7 @@ class _HealthScreenState extends State<HealthScreen> {
               for (final entry in visible.entries)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
-                  child: _MetricCard(type: entry.key, samples: entry.value, sessions: {for (final session in data.sessions) session.id: session}),
+                  child: _MetricCard(type: entry.key, samples: entry.value, sessions: {for (final session in data.sessions) session.id: session}, database: widget.database),
                 ),
             ],
             const Text(
@@ -749,10 +750,11 @@ class _CoverageCard extends StatelessWidget {
 }
 
 class _MetricCard extends StatelessWidget {
-  const _MetricCard({required this.type, required this.samples, required this.sessions});
+  const _MetricCard({required this.type, required this.samples, required this.sessions, required this.database});
   final String type;
   final List<_MetricSample> samples;
   final Map<String, SleepSession> sessions;
+  final SleepDatabase database;
 
   String get title => switch (type) {
     'Пульс' => 'Пульс',
@@ -822,14 +824,31 @@ class _MetricCard extends StatelessWidget {
               final sample = rows[index];
               final session = sessions[sample.sessionId];
               final nightLabel = session == null ? 'Ночная запись не найдена' : 'Ночь от ' + _date(session.startedAt);
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(_number(sample.value) + ' ' + sample.unit, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 2),
-                  Text(_date(sample.measuredAt) + ' · ' + nightLabel, style: const TextStyle(fontSize: 12, color: AppTheme.muted)),
-                  Text(sample.source, style: const TextStyle(fontSize: 11, color: AppTheme.muted)),
-                ],
+              final canOpenNight = session != null;
+              return InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: canOpenNight
+                    ? () => Navigator.of(context).push(MaterialPageRoute<void>(
+                          builder: (_) => SleepSessionDetailScreen(database: database, session: session),
+                        ))
+                    : null,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                  child: Row(
+                    children: [
+                      Expanded(child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(_number(sample.value) + ' ' + sample.unit, style: const TextStyle(fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 2),
+                          Text(_date(sample.measuredAt) + ' · ' + nightLabel, style: const TextStyle(fontSize: 12, color: AppTheme.muted)),
+                          Text(sample.source, style: const TextStyle(fontSize: 11, color: AppTheme.muted)),
+                        ],
+                      )),
+                      if (canOpenNight) const Icon(Icons.chevron_right_rounded, size: 20, color: AppTheme.muted),
+                    ],
+                  ),
+                ),
               );
             },
           ),
