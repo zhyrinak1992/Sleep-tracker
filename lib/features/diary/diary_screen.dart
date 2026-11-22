@@ -203,10 +203,12 @@ class _DiaryScreenState extends State<DiaryScreen> {
       return RefreshIndicator(
         onRefresh: _reload,
         child: ListView(padding: const EdgeInsets.all(20), children: [
-          Text('Дневник сна', style: Theme.of(context).textTheme.headlineMedium),
-          const SizedBox(height: 6),
-          const Text('Календарь и история ночных сессий', style: TextStyle(color: AppTheme.muted)),
-          const SizedBox(height: 12),
+          const ScreenHeader(
+            title: 'Дневник сна',
+            subtitle: 'Календарь и история ночных сессий',
+            icon: Icons.calendar_month_rounded,
+          ),
+          const SizedBox(height: 0),
           Row(children: [
             Expanded(child: OutlinedButton.icon(
               onPressed: () async {
