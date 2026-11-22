@@ -5,15 +5,18 @@ import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../data/sleep_database.dart';
+import 'daytime_sleep_analytics.dart';
 import '../../models/daytime_sleep_entry.dart';
+import '../../models/sleep_session.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 
 /// Manual daytime-rest log. Stored in app_metadata so it is included in the
 /// existing transactional backup without requiring a destructive DB migration.
 class DaytimeSleepCard extends StatefulWidget {
-  const DaytimeSleepCard({super.key, required this.database});
+  const DaytimeSleepCard({super.key, required this.database, required this.sessions});
   final SleepDatabase database;
+  final List<SleepSession> sessions;
 
   @override
   State<DaytimeSleepCard> createState() => _DaytimeSleepCardState();
@@ -143,6 +146,13 @@ class _DaytimeSleepCardState extends State<DaytimeSleepCard> {
                 Text(
                   'За последние 30 дней: ${recent.length} записей · ${_duration(Duration(minutes: totalMinutes))}',
                   style: const TextStyle(color: AppTheme.teal, fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                _FollowingNightSummary(
+                  summary: DaytimeSleepAnalytics.summarizeFollowingNights(
+                    entries: entries,
+                    sessions: widget.sessions,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 ...entries.map((entry) {
@@ -311,5 +321,40 @@ class _DaytimeSleepEditorState extends State<_DaytimeSleepEditor> {
       TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
       FilledButton(onPressed: _save, child: const Text('Сохранить')),
     ],
+  );
+}
+
+
+class _FollowingNightSummary extends StatelessWidget {
+  const _FollowingNightSummary({required this.summary});
+  final DaytimeSleepCorrelation summary;
+
+  String _duration(double? minutes) {
+    if (minutes == null) return 'Нет совпавших ночных записей';
+    final rounded = minutes.round();
+    return '${rounded ~/ 60} ч ${rounded % 60} мин';
+  }
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      color: AppTheme.surfaceLight.withValues(alpha: 0.45),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('Следующий ночной сон', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+      const SizedBox(height: 3),
+      Text(
+        '${summary.followingNightCount} ночей · средняя длительность: ${_duration(summary.averageFollowingNightMinutes)}',
+        style: const TextStyle(fontSize: 12, color: AppTheme.teal),
+      ),
+      const SizedBox(height: 3),
+      const Text(
+        'Учитываются завершённые ночи, начавшиеся не позднее 18 часов после дневного отдыха. Это описательное сопоставление, оно само по себе не доказывает влияние дневного сна.',
+        style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.35),
+      ),
+    ]),
   );
 }
