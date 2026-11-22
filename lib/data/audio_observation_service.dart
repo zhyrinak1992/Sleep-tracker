@@ -83,6 +83,12 @@ class AudioObservationService {
       observing.value = false;
       await _subscription?.cancel();
       _subscription = null;
+      // Clear a possibly half-alive native recorder before opening a new stream.
+      try {
+        await _recorder.stop();
+      } catch (error) {
+        debugPrint('Stopping interrupted native recorder failed: $error');
+      }
       await _saveCurrentEvent();
       _preRoll.clear();
     }
@@ -223,8 +229,15 @@ class AudioObservationService {
     if (!_observing || _paused) return;
     _paused = true;
     paused.value = true;
-    await _recorder.pause();
-    if (_eventBytes != null) await _saveCurrentEvent();
+    try {
+      await _recorder.pause();
+      if (_eventBytes != null) await _saveCurrentEvent();
+    } catch (error) {
+      // Keep UI and service state aligned if the native pause request fails.
+      _paused = false;
+      paused.value = false;
+      rethrow;
+    }
   }
 
   Future<void> resumeObservation() async {
