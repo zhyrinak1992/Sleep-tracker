@@ -19,7 +19,7 @@ class SleepDatabase {
     final dbPath = p.join(directory.path, 'sleep_tracker.sqlite');
     _db = await openDatabase(
       dbPath,
-      version: 6,
+      version: 7,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: (db, version) async {
         await db.execute('''
@@ -74,6 +74,7 @@ class SleepDatabase {
         await _createV4Tables(db);
         await _createV5Columns(db);
         await _createV6Tables(db);
+        await _createV7Columns(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // Добавочная миграция: существующие ночи и их ID не изменяются.
@@ -121,6 +122,7 @@ class SleepDatabase {
         if (oldVersion < 4) await _createV4Tables(db);
         if (oldVersion < 5) await _createV5Columns(db);
         if (oldVersion < 6) await _createV6Tables(db);
+        if (oldVersion < 7) await _createV7Columns(db);
       },
     );
     return _db!;
@@ -131,7 +133,7 @@ class SleepDatabase {
   Future<Map<String, Object?>> exportSnapshot() async {
     final db = await database;
     return {
-      'schemaVersion': 6,
+      'schemaVersion': 7,
       'sleep_sessions': await db.query('sleep_sessions', orderBy: 'started_at ASC'),
       'sleep_session_tags': await db.query('sleep_session_tags', orderBy: 'session_id ASC, tag_key ASC'),
       'sleep_notes': await db.query('sleep_notes', orderBy: 'created_at ASC'),
@@ -147,7 +149,7 @@ class SleepDatabase {
   /// Полное восстановление с проверкой структуры и атомарной заменой данных.
   /// При любой ошибке SQLite откатывает транзакцию и оставляет исходную базу.
   Future<void> restoreSnapshot(Map<String, dynamic> snapshot, {bool merge = false}) async {
-    if (snapshot['schemaVersion'] != 3 && snapshot['schemaVersion'] != 4 && snapshot['schemaVersion'] != 5 && snapshot['schemaVersion'] != 6) {
+    if (snapshot['schemaVersion'] != 3 && snapshot['schemaVersion'] != 4 && snapshot['schemaVersion'] != 5 && snapshot['schemaVersion'] != 6 && snapshot['schemaVersion'] != 7) {
       throw const FormatException('Версия структуры резервной копии не поддерживается.');
     }
     const tables = ['sleep_sessions', 'sleep_session_tags', 'sleep_notes', 'app_metadata', 'sleep_stages', 'sleep_metrics', 'audio_events', 'morning_reports', 'climate_samples'];
@@ -306,6 +308,64 @@ class SleepDatabase {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_climate_samples_device ON climate_samples(device_id, metric_type, measured_at)');
   }
 
+  Future<void> _createV7Columns(DatabaseExecutor db) async {
+    final columns = (await db.rawQuery('PRAGMA table_info(sleep_sessions)'))
+        .map((row) => row['name'] as String).toSet();
+    if (!columns.contains('deleted_at')) {
+      await db.execute('ALTER TABLE sleep_sessions ADD COLUMN deleted_at TEXT');
+    }
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_sleep_sessions_deleted_at ON sleep_sessions(deleted_at)');
+  }
+
+  /// Перемещает ночь в корзину, не удаляя связанные данные и аудиофайлы.
+  Future<void> moveSessionToTrash(String sessionId) async {
+    final db = await database;
+    final rows = await db.query('sleep_sessions', columns: ['id', 'ended_at', 'deleted_at'],
+      where: 'id = ?', whereArgs: [sessionId], limit: 1);
+    if (rows.isEmpty) throw StateError('Ночная запись не найдена.');
+    if (rows.single['ended_at'] == null) throw StateError('Нельзя переместить активную сессию в корзину.');
+    if (rows.single['deleted_at'] != null) return;
+    await db.update('sleep_sessions', {
+      'deleted_at': DateTime.now().toUtc().toIso8601String(),
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }, where: 'id = ?', whereArgs: [sessionId]);
+  }
+
+  Future<void> restoreSessionFromTrash(String sessionId) async {
+    final count = await (await database).update('sleep_sessions', {
+      'deleted_at': null,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }, where: 'id = ? AND deleted_at IS NOT NULL', whereArgs: [sessionId]);
+    if (count == 0) throw StateError('Запись не найдена в корзине.');
+  }
+
+  Future<void> permanentlyDeleteSession(String sessionId) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      final rows = await txn.query('sleep_sessions', columns: ['id', 'deleted_at'],
+        where: 'id = ?', whereArgs: [sessionId], limit: 1);
+      if (rows.isEmpty) return;
+      if (rows.single['deleted_at'] == null) {
+        throw StateError('Сначала переместите запись в корзину.');
+      }
+      final audio = await txn.query('audio_events', columns: ['file_path'],
+        where: 'session_id = ?', whereArgs: [sessionId]);
+      for (final row in audio) {
+        final path = row['file_path'];
+        if (path is String) {
+          try { await File(path).delete(); } catch (_) {}
+        }
+      }
+      await txn.delete('sleep_sessions', where: 'id = ?', whereArgs: [sessionId]);
+    });
+  }
+
+  Future<List<SleepSession>> getTrashedSessions() async {
+    final rows = await (await database).query('sleep_sessions',
+      where: 'deleted_at IS NOT NULL', orderBy: 'deleted_at DESC');
+    return rows.map(SleepSession.fromMap).toList();
+  }
+
   /// Записывает только фактически полученное измерение; одинаковые ID не дублируются.
   Future<void> saveClimateSample({
     required String id,
@@ -434,7 +494,7 @@ class SleepDatabase {
     final db = await database;
     final rows = await db.query(
       'sleep_sessions',
-      where: 'ended_at IS NULL',
+      where: 'ended_at IS NULL AND deleted_at IS NULL',
       orderBy: 'started_at DESC',
       limit: 1,
     );
@@ -445,6 +505,7 @@ class SleepDatabase {
     final db = await database;
     final rows = await db.query(
       'sleep_sessions',
+      where: 'deleted_at IS NULL',
       orderBy: 'started_at DESC',
       limit: limit,
     );
