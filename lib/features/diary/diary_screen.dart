@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import 'sleep_session_detail_screen.dart';
 import 'sleep_session_comparison_screen.dart';
+import 'sleep_session_editor_screen.dart';
 
 class DiaryScreen extends StatefulWidget {
   const DiaryScreen({super.key, required this.database});
@@ -159,6 +160,16 @@ class _DiaryScreenState extends State<DiaryScreen> {
               Row(children: [
                 Expanded(child: Text(session.isOpen ? 'Сессия продолжается' : 'Ночная сессия',
                   style: const TextStyle(color: AppTheme.muted))),
+                IconButton(
+                  tooltip: 'Изменить запись',
+                  onPressed: () async {
+                    final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
+                      builder: (_) => SleepSessionEditorScreen(database: widget.database, session: session),
+                    ));
+                    if (saved == true) await _reload();
+                  },
+                  icon: const Icon(Icons.edit_outlined, color: AppTheme.teal),
+                ),
                 const Icon(Icons.chevron_right, color: AppTheme.muted),
               ]),
               const SizedBox(height: 7),
@@ -195,13 +206,24 @@ class _DiaryScreenState extends State<DiaryScreen> {
           const SizedBox(height: 6),
           const Text('Календарь и история ночных сессий', style: TextStyle(color: AppTheme.muted)),
           const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => SleepSessionComparisonScreen(database: widget.database),
+          Row(children: [
+            Expanded(child: OutlinedButton.icon(
+              onPressed: () async {
+                final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
+                  builder: (_) => SleepSessionEditorScreen(database: widget.database),
+                ));
+                if (saved == true) await _reload();
+              },
+              icon: const Icon(Icons.add), label: const Text('Добавить ночь'),
             )),
-            icon: const Icon(Icons.compare_arrows),
-            label: const Text('Сравнить две ночи'),
-          ),
+            const SizedBox(width: 10),
+            Expanded(child: OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => SleepSessionComparisonScreen(database: widget.database),
+              )),
+              icon: const Icon(Icons.compare_arrows), label: const Text('Сравнить'),
+            )),
+          ]),
           const SizedBox(height: 18),
           if (snapshot.connectionState == ConnectionState.waiting)
             const Center(child: Padding(padding: EdgeInsets.all(28), child: CircularProgressIndicator()))
