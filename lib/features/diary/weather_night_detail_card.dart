@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../../data/sleep_database.dart';
 import '../../data/weather_service.dart';
