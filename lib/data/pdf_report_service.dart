@@ -31,6 +31,8 @@ class PdfReportService {
       return parsed == null ? 'Нет данных' : parsed.toStringAsFixed(1) + suffix;
     }
 
+    final score = snapshot['score'] is Map ? Map<String, Object?>.from(snapshot['score'] as Map) : <String, Object?>{};
+    final scoreComponents = score['components'] is Map ? Map<String, Object?>.from(score['components'] as Map) : <String, Object?>{};
     final previous = snapshot['previous'] is Map
         ? Map<String, Object?>.from(snapshot['previous'] as Map)
         : <String, Object?>{};
@@ -59,6 +61,15 @@ class PdfReportService {
       pw.Text('Сохранённый периодический отчёт'),
       pw.SizedBox(height: 12),
       pw.Text('Завершённых ночей: ${snapshot['nights'] ?? 0}'),
+      pw.Text('Средняя оценка сна: ${score['average'] is num ? (score['average'] as num).toStringAsFixed(0) + ' / 100' : 'Недостаточно данных'} · ночей с оценкой ${score['samples'] ?? 0}'),
+      if (scoreComponents.isNotEmpty) ...[
+        pw.Header(level: 1, child: pw.Text('Состав оценки сна')),
+        ...scoreComponents.entries.map((entry) {
+          final component = entry.value is Map ? Map<String, Object?>.from(entry.value as Map) : <String, Object?>{};
+          final value = component['average'];
+          return pw.Text('${component['label'] ?? entry.key}: ${value is num ? value.toStringAsFixed(0) + ' / 100' : 'Нет данных'} · выборка ${component['samples'] ?? 0}');
+        }),
+      ],
       if (snapshot['kind'] == 'year')
         pw.Text('Суммарная продолжительность сна: ${duration(snapshot['totalSleepMinutes'])}'),
       pw.Text('Средняя продолжительность сна: ${duration(snapshot['averageSleepMinutes'])} · выборка ${snapshot['sleepDurationSamples'] ?? 0}'),
@@ -74,6 +85,8 @@ class PdfReportService {
       content.add(pw.SizedBox(height: 14));
       content.add(pw.Header(level: 1, child: pw.Text('Сравнение с предыдущим периодом')));
       content.add(pw.Text('Завершённых ночей: ${previous['nights'] ?? 0}'));
+      final previousScore = previous['score'] is Map ? Map<String, Object?>.from(previous['score'] as Map) : <String, Object?>{};
+      content.add(pw.Text('Средняя оценка сна: ${previousScore['average'] is num ? (previousScore['average'] as num).toStringAsFixed(0) + ' / 100' : 'Недостаточно данных'} · ночей с оценкой ${previousScore['samples'] ?? 0}'));
       content.add(pw.Text('Средняя продолжительность сна: ${duration(previous['averageSleepMinutes'])}'));
       content.add(pw.Text('Среднее время в постели: ${duration(previous['averageTimeInBedMinutes'])}'));
       content.add(pw.Text('Эффективность: ${average(previous['averageEfficiency'], suffix: '%')}'));
@@ -152,6 +165,9 @@ class PdfReportService {
     }
     content.add(pw.SizedBox(height: 12));
     content.add(pw.Text(
+      'Оценка 0–100 использует веса 40/30/20/10: личная продолжительность, эффективность, пробуждения, субъективное качество. ' 
+      'Отсутствующие компоненты исключаются, оставшиеся веса нормализуются; оценка показывается минимум при двух компонентах и доступном исходном весе 50%. ' 
+      'Индивидуальный диапазон берётся из предыдущих 90 дней. Оценка не является медицинским заключением. ' 
       'Отчёт воспроизводит сохранённый снимок данных на момент формирования. '
       'Отсутствующие измерения не заменяются нулями. Унифицированный балл 0–100 '
       'не рассчитывается до отдельного согласования формулы.',
