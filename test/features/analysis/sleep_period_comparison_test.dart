@@ -2,8 +2,23 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sleep_tracker/features/analysis/sleep_period_comparison.dart';
 import 'package:sleep_tracker/models/sleep_session.dart';
 
-SleepSession session(String id, DateTime start, {DateTime? end, int? rating}) =>
-    SleepSession(id: id, startedAt: start, endedAt: end, morningRating: rating);
+SleepSession session(
+  String id,
+  DateTime start, {
+  DateTime? end,
+  int? rating,
+  String source = 'manual',
+  DateTime? actualStart,
+  DateTime? actualEnd,
+}) => SleepSession(
+  id: id,
+  startedAt: start,
+  endedAt: end,
+  morningRating: rating,
+  source: source,
+  actualSleepStartedAt: actualStart,
+  actualSleepEndedAt: actualEnd,
+);
 
 void main() {
   group('SleepPeriodComparison', () {
@@ -39,8 +54,10 @@ void main() {
 
     test('compares bedtime and wake-time regularity across midnight', () {
       final data = [
-        session('a', DateTime(2026, 11, 1, 22), end: DateTime(2026, 11, 2, 6)),
-        session('b', DateTime(2026, 11, 2, 22, 10), end: DateTime(2026, 11, 3, 6, 10)),
+        session('a', DateTime(2026, 11, 1, 22), end: DateTime(2026, 11, 2, 6), source: 'health',
+          actualStart: DateTime(2026, 11, 1, 23, 55), actualEnd: DateTime(2026, 11, 2, 6, 55)),
+        session('b', DateTime(2026, 11, 2, 22, 10), end: DateTime(2026, 11, 3, 6, 10), source: 'health',
+          actualStart: DateTime(2026, 11, 3, 0, 5), actualEnd: DateTime(2026, 11, 3, 7, 5)),
         session('open', DateTime(2026, 11, 3, 22)),
       ];
       final result = SleepPeriodComparison.summarize(
@@ -52,11 +69,80 @@ void main() {
 
     test('does not invent regularity with fewer than two completed nights', () {
       final result = SleepPeriodComparison.summarize(
-        [session('only', DateTime(2026, 11, 1, 23), end: DateTime(2026, 11, 2, 7))],
+        [session('only', DateTime(2026, 11, 1, 23), end: DateTime(2026, 11, 2, 7), source: 'health', actualStart: DateTime(2026, 11, 1, 23, 30), actualEnd: DateTime(2026, 11, 2, 6, 30))],
         DateTime(2026, 11, 1), DateTime(2026, 11, 1));
       expect(result.regularitySampleCount, 1);
       expect(result.bedtimeDeviationMinutes, isNull);
       expect(result.wakeTimeDeviationMinutes, isNull);
+    });
+
+
+    test('compares efficiency, awakenings, morning answers and audio events by selected sessions', () {
+      final night = SleepSession(
+        id: 'night-a',
+        startedAt: DateTime(2026, 11, 1, 23),
+        endedAt: DateTime(2026, 11, 2, 7),
+        source: 'health',
+        actualSleepStartedAt: DateTime(2026, 11, 1, 23, 10),
+        actualSleepEndedAt: DateTime(2026, 11, 2, 6, 10),
+      );
+      final range = SleepPeriodComparison.summarize(
+        [night], DateTime(2026, 11, 1), DateTime(2026, 11, 1));
+      final details = SleepPeriodDetailSummary.summarize(
+        range: range,
+        stagesBySession: {
+          'night-a': [
+            {
+              'stage': 'core',
+              'started_at': DateTime(2026, 11, 1, 23, 10).toIso8601String(),
+              'ended_at': DateTime(2026, 11, 2, 6).toIso8601String(),
+            },
+            {
+              'stage': 'awake',
+              'started_at': DateTime(2026, 11, 2, 6).toIso8601String(),
+              'ended_at': DateTime(2026, 11, 2, 6, 10).toIso8601String(),
+            },
+          ],
+        },
+        morningReports: {
+          'night-a': {'sleep_quality': 4, 'wellbeing': 5},
+        },
+        audioEvents: [
+          {'session_id': 'night-a', 'category': 'snore', 'duration_ms': 1200},
+          {'session_id': 'not-selected', 'category': 'noise', 'duration_ms': 800},
+        ],
+      );
+      expect(details.efficiencySamples, 1);
+      expect(details.averageEfficiency, closeTo(85.4, 0.2));
+      expect(details.awakeningSamples, 1);
+      expect(details.averageAwakenings, 1);
+      expect(details.averageQuality, 4);
+      expect(details.averageWellbeing, 5);
+      expect(details.typicalBedtimeMinute, isNull);
+      expect(details.typicalWakeMinute, isNull);
+      expect(details.audio.eventCount, 1);
+      expect(details.audio.nightsWithEvents, 1);
+      expect(details.audio.categoryCounts, {'snore': 1});
+    });
+
+    test('keeps unavailable period metrics null when there is no stage or morning data', () {
+      final night = session(
+        'night-no-data', DateTime(2026, 11, 1, 23), end: DateTime(2026, 11, 2, 7));
+      final range = SleepPeriodComparison.summarize(
+        [night], DateTime(2026, 11, 1), DateTime(2026, 11, 1));
+      final details = SleepPeriodDetailSummary.summarize(
+        range: range,
+        stagesBySession: const {},
+        morningReports: const {},
+        audioEvents: const [],
+      );
+      expect(details.averageEfficiency, isNull);
+      expect(details.efficiencySamples, 0);
+      expect(details.averageAwakenings, isNull);
+      expect(details.awakeningSamples, 0);
+      expect(details.averageQuality, isNull);
+      expect(details.averageWellbeing, isNull);
+      expect(details.audio.eventCount, 0);
     });
 
     test('rejects reversed ranges', () {

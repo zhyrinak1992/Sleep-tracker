@@ -6,6 +6,14 @@ import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import 'sleep_period_comparison.dart';
 
+class _PeriodComparisonData {
+  const _PeriodComparisonData({required this.sessions, required this.stages, required this.morning, required this.audio});
+  final List<SleepSession> sessions;
+  final Map<String, List<Map<String, Object?>>> stages;
+  final Map<String, Map<String, Object?>> morning;
+  final List<Map<String, Object?>> audio;
+}
+
 class SleepPeriodComparisonScreen extends StatefulWidget {
   const SleepPeriodComparisonScreen({super.key, required this.database});
   final SleepDatabase database;
@@ -15,7 +23,7 @@ class SleepPeriodComparisonScreen extends StatefulWidget {
 }
 
 class _SleepPeriodComparisonScreenState extends State<SleepPeriodComparisonScreen> {
-  late Future<List<SleepSession>> _future;
+  late Future<_PeriodComparisonData> _future;
   late DateTime _currentStart;
   late DateTime _currentEnd;
   late DateTime _previousStart;
@@ -29,7 +37,17 @@ class _SleepPeriodComparisonScreenState extends State<SleepPeriodComparisonScree
     _currentStart = _currentEnd.subtract(const Duration(days: 29));
     _previousEnd = _currentStart.subtract(const Duration(days: 1));
     _previousStart = _previousEnd.subtract(const Duration(days: 29));
-    _future = widget.database.getSessions(limit: 10000);
+    _future = _load();
+  }
+
+  Future<_PeriodComparisonData> _load() async {
+    final sessions = await widget.database.getSessions(limit: 10000);
+    final ids = sessions.where((s) => s.endedAt != null && s.duration != null && s.duration!.inMinutes > 0)
+      .map((s) => s.id).toList();
+    final stages = await widget.database.getStagesForSessions(ids);
+    final morning = await widget.database.getMorningReportsForSessions(ids);
+    final audio = await widget.database.getAudioEvents();
+    return _PeriodComparisonData(sessions: sessions, stages: stages, morning: morning, audio: audio);
   }
 
   Future<void> _chooseRange(bool current) async {
@@ -76,10 +94,37 @@ class _SleepPeriodComparisonScreenState extends State<SleepPeriodComparisonScree
     final delta = a - b;
     if (delta.abs() < 0.5) return 'Разброс практически не изменился';
     final amount = delta.abs().round();
-    return delta > 0
+    return delta < 0
         ? 'В периоде A разброс меньше на $amount мин'
         : 'В периоде B разброс меньше на $amount мин';
   }
+
+  String _clock(int? minute) {
+    if (minute == null) return 'Нет данных';
+    return (minute ~/ 60).toString().padLeft(2, '0') + ':' + (minute % 60).toString().padLeft(2, '0');
+  }
+
+  String _clockChange(int? a, int? b) {
+    if (a == null || b == null) return 'Недостаточно данных';
+    var delta = a - b;
+    if (delta > 720) delta -= 1440;
+    if (delta < -720) delta += 1440;
+    if (delta == 0) return 'Без изменения';
+    return delta > 0 ? delta.toString() + ' мин позже' : delta.abs().toString() + ' мин раньше';
+  }
+
+  String _metric(double? value, String suffix, int samples, {int decimals = 1}) =>
+    value == null ? 'Нет данных' : value.toStringAsFixed(decimals) + suffix + ' · n=' + samples.toString();
+
+  String _delta(double? value, String suffix, {int decimals = 1}) {
+    if (value == null) return 'Недостаточно данных';
+    final sign = value > 0 ? '+' : '';
+    return sign + value.toStringAsFixed(decimals) + suffix;
+  }
+
+  String _categories(Map<String, int> values) => values.isEmpty
+    ? 'Нет событий'
+    : values.entries.map((entry) => entry.key + ': ' + entry.value.toString()).join(' · ');
 
   String _change(double? value, {bool percentage = false}) {
     if (value == null) return 'Недостаточно данных для сравнения';
@@ -90,7 +135,7 @@ class _SleepPeriodComparisonScreenState extends State<SleepPeriodComparisonScree
   }
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<List<SleepSession>>(
+  Widget build(BuildContext context) => FutureBuilder<_PeriodComparisonData>(
     future: _future,
     builder: (context, snapshot) {
       if (snapshot.connectionState == ConnectionState.waiting) {
@@ -102,9 +147,16 @@ class _SleepPeriodComparisonScreenState extends State<SleepPeriodComparisonScree
           child: Text('Не удалось загрузить записи сна: ${snapshot.error}'),
         ));
       }
-      final sessions = snapshot.data ?? const <SleepSession>[];
+      final data = snapshot.data!;
+      final sessions = data.sessions;
       final current = SleepPeriodComparison.summarize(sessions, _currentStart, _currentEnd);
       final previous = SleepPeriodComparison.summarize(sessions, _previousStart, _previousEnd);
+      final currentDetails = SleepPeriodDetailSummary.summarize(
+        range: current, stagesBySession: data.stages, morningReports: data.morning, audioEvents: data.audio,
+      );
+      final previousDetails = SleepPeriodDetailSummary.summarize(
+        range: previous, stagesBySession: data.stages, morningReports: data.morning, audioEvents: data.audio,
+      );
       final durationDelta = current.averageDurationMinutes == null || previous.averageDurationMinutes == null
         ? null : current.averageDurationMinutes! - previous.averageDurationMinutes!;
       final durationPercent = SleepPeriodComparison.percentageChange(
@@ -117,7 +169,7 @@ class _SleepPeriodComparisonScreenState extends State<SleepPeriodComparisonScree
           const Text('Сравнение произвольных периодов',
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
-          const Text('Выберите любые два диапазона дат. Помимо длительности и оценки, сравнивается стабильность времени засыпания и пробуждения. Для этих показателей используется круговая статистика, корректно учитывающая переход через полночь.',
+          const Text('Выберите любые два диапазона дат. Сравниваются длительность, эффективность, пробуждения, утренние оценки, звуковые события и регулярность фактического времени сна. Для каждого показателя отображается собственный размер выборки; время сравнивается с учётом перехода через полночь.',
             style: TextStyle(color: AppTheme.muted, height: 1.4)),
           const SizedBox(height: 18),
           SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -140,24 +192,89 @@ class _SleepPeriodComparisonScreenState extends State<SleepPeriodComparisonScree
             )),
           ])),
           const SizedBox(height: 14),
-          _ComparisonCard(title: 'Средняя длительность', a: _duration(current.averageDurationMinutes),
-            b: _duration(previous.averageDurationMinutes),
+          _ComparisonCard(title: 'Средняя длительность', a: _duration(current.averageDurationMinutes) + ' · n=' + current.completed.toString(),
+            b: _duration(previous.averageDurationMinutes) + ' · n=' + previous.completed.toString(),
             change: durationDelta == null ? 'Недостаточно данных' :
               '${durationDelta > 0 ? '+' : ''}${_duration(durationDelta.abs())} · ${_change(durationPercent, percentage: true)}'),
           const SizedBox(height: 10),
           _ComparisonCard(title: 'Средняя оценка самочувствия',
-            a: current.averageRating == null ? 'Нет оценок' : '${current.averageRating!.toStringAsFixed(1)} / 5',
-            b: previous.averageRating == null ? 'Нет оценок' : '${previous.averageRating!.toStringAsFixed(1)} / 5',
+            a: current.averageRating == null ? 'Нет оценок' : '${current.averageRating!.toStringAsFixed(1)} / 5 · n=${current.rated}',
+            b: previous.averageRating == null ? 'Нет оценок' : '${previous.averageRating!.toStringAsFixed(1)} / 5 · n=${previous.rated}',
             change: _change(ratingDelta)),
+          _ComparisonCard(
+            title: 'Эффективность сна',
+            a: _metric(currentDetails.averageEfficiency, '%', currentDetails.efficiencySamples),
+            b: _metric(previousDetails.averageEfficiency, '%', previousDetails.efficiencySamples),
+            change: currentDetails.averageEfficiency == null || previousDetails.averageEfficiency == null
+              ? 'Недостаточно сопоставимых данных'
+              : _delta(currentDetails.averageEfficiency! - previousDetails.averageEfficiency!, ' п. п.'),
+          ),
+          const SizedBox(height: 10),
+          _ComparisonCard(
+            title: 'Среднее число пробуждений',
+            a: _metric(currentDetails.averageAwakenings, '', currentDetails.awakeningSamples),
+            b: _metric(previousDetails.averageAwakenings, '', previousDetails.awakeningSamples),
+            change: currentDetails.averageAwakenings == null || previousDetails.averageAwakenings == null
+              ? 'Недостаточно сопоставимых данных'
+              : _delta(currentDetails.averageAwakenings! - previousDetails.averageAwakenings!, ''),
+          ),
+          const SizedBox(height: 10),
+          _ComparisonCard(
+            title: 'Субъективное качество сна',
+            a: _metric(currentDetails.averageQuality, ' / 5', currentDetails.qualitySamples),
+            b: _metric(previousDetails.averageQuality, ' / 5', previousDetails.qualitySamples),
+            change: currentDetails.averageQuality == null || previousDetails.averageQuality == null
+              ? 'Недостаточно сопоставимых данных'
+              : _delta(currentDetails.averageQuality! - previousDetails.averageQuality!, ' балла'),
+          ),
+          const SizedBox(height: 10),
+          _ComparisonCard(
+            title: 'Утреннее самочувствие',
+            a: _metric(currentDetails.averageWellbeing, ' / 5', currentDetails.wellbeingSamples),
+            b: _metric(previousDetails.averageWellbeing, ' / 5', previousDetails.wellbeingSamples),
+            change: currentDetails.averageWellbeing == null || previousDetails.averageWellbeing == null
+              ? 'Недостаточно сопоставимых данных'
+              : _delta(currentDetails.averageWellbeing! - previousDetails.averageWellbeing!, ' балла'),
+          ),
+          const SizedBox(height: 10),
+          _ComparisonCard(
+            title: 'Типичное время засыпания',
+            a: _clock(currentDetails.typicalBedtimeMinute) + ' · n=' + currentDetails.regularitySamples.toString(),
+            b: _clock(previousDetails.typicalBedtimeMinute) + ' · n=' + previousDetails.regularitySamples.toString(),
+            change: _clockChange(currentDetails.typicalBedtimeMinute, previousDetails.typicalBedtimeMinute),
+          ),
+          const SizedBox(height: 10),
+          _ComparisonCard(
+            title: 'Типичное время пробуждения',
+            a: _clock(currentDetails.typicalWakeMinute) + ' · n=' + currentDetails.regularitySamples.toString(),
+            b: _clock(previousDetails.typicalWakeMinute) + ' · n=' + previousDetails.regularitySamples.toString(),
+            change: _clockChange(currentDetails.typicalWakeMinute, previousDetails.typicalWakeMinute),
+          ),
+          const SizedBox(height: 10),
+          _ComparisonCard(
+            title: 'Звуковые события',
+            a: currentDetails.audio.eventCount.toString() + ' событий · ' + currentDetails.audio.nightsWithEvents.toString() + ' ночей',
+            b: previousDetails.audio.eventCount.toString() + ' событий · ' + previousDetails.audio.nightsWithEvents.toString() + ' ночей',
+            change: 'События учитываются по завершённым ночным сессиям',
+          ),
+          if (currentDetails.audio.categoryCounts.isNotEmpty || previousDetails.audio.categoryCounts.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _ComparisonCard(
+              title: 'Категории звуковых событий',
+              a: _categories(currentDetails.audio.categoryCounts),
+              b: _categories(previousDetails.audio.categoryCounts),
+              change: 'Используется сохранённая классификация событий',
+            ),
+          ],
           const SizedBox(height: 10),
           _ComparisonCard(title: 'Стабильность времени засыпания',
-            a: _minutes(current.bedtimeDeviationMinutes),
-            b: _minutes(previous.bedtimeDeviationMinutes),
+            a: _minutes(current.bedtimeDeviationMinutes) + ' · n=' + current.regularitySampleCount.toString(),
+            b: _minutes(previous.bedtimeDeviationMinutes) + ' · n=' + previous.regularitySampleCount.toString(),
             change: _variabilityChange(current.bedtimeDeviationMinutes, previous.bedtimeDeviationMinutes)),
           const SizedBox(height: 10),
           _ComparisonCard(title: 'Стабильность времени пробуждения',
-            a: _minutes(current.wakeTimeDeviationMinutes),
-            b: _minutes(previous.wakeTimeDeviationMinutes),
+            a: _minutes(current.wakeTimeDeviationMinutes) + ' · n=' + current.regularitySampleCount.toString(),
+            b: _minutes(previous.wakeTimeDeviationMinutes) + ' · n=' + previous.regularitySampleCount.toString(),
             change: _variabilityChange(current.wakeTimeDeviationMinutes, previous.wakeTimeDeviationMinutes)),
           const SizedBox(height: 10),
           _ComparisonCard(title: 'Записи сна',
@@ -165,7 +282,7 @@ class _SleepPeriodComparisonScreenState extends State<SleepPeriodComparisonScree
             b: '${previous.sessions.length} всего · ${previous.completed} завершено · ${previous.rated} с оценкой',
             change: 'Количество записей сравнивается напрямую'),
           const SizedBox(height: 12),
-          const Text('Стабильность — среднее абсолютное отклонение фактического времени засыпания и пробуждения от кругового среднего; меньшее значение означает более ровный режим. Для расчёта нужно не менее двух завершённых ночей. Сравнение не устанавливает причины изменений, отсутствующие измерения не заменяются нулями.',
+          const Text('Стабильность — медианное абсолютное отклонение фактического времени засыпания и пробуждения от круговой медианы. В выборку регулярности входят только записи с фактическими границами сна, не отмеченные как ручные или изменённые; нужно не менее двух таких ночей. Длительность в карточке отражает сохранённый интервал ночной сессии. Отсутствующие измерения не заменяются нулями. Сравнение не устанавливает причины изменений, отсутствующие измерения не заменяются нулями.',
             style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.45)),
         ],
       );

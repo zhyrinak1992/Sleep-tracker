@@ -1,5 +1,7 @@
 import '../../models/sleep_session.dart';
-import 'sleep_analytics.dart';
+import 'audio_event_analysis.dart';
+import '../diary/sleep_session_metrics.dart';
+import 'sleep_regularity_analysis.dart';
 
 class SleepRangeSummary {
   const SleepRangeSummary({
@@ -46,7 +48,7 @@ class SleepPeriodComparison {
     final completed = selected.where((session) =>
       session.duration != null && session.duration!.inMinutes > 0).toList();
     final rated = selected.where((session) => session.morningRating != null).toList();
-    final regularity = SleepAnalytics.regularity(completed);
+    final regularity = SleepRegularityAnalysis.calculate(completed);
     return SleepRangeSummary(
       start: from,
       endExclusive: until,
@@ -57,14 +59,98 @@ class SleepPeriodComparison {
         completed.fold<int>(0, (sum, item) => sum + item.duration!.inMinutes) / completed.length,
       averageRating: rated.isEmpty ? null :
         rated.fold<int>(0, (sum, item) => sum + item.morningRating!) / rated.length,
-      bedtimeDeviationMinutes: regularity.bedtimeDeviationMinutes,
-      wakeTimeDeviationMinutes: regularity.wakeTimeDeviationMinutes,
-      regularitySampleCount: regularity.sampleCount,
+      bedtimeDeviationMinutes: regularity.nights.length < 2 ? null : regularity.bedtimeMad,
+      wakeTimeDeviationMinutes: regularity.nights.length < 2 ? null : regularity.wakeMad,
+      regularitySampleCount: regularity.nights.length,
     );
   }
 
   static double? percentageChange(double? current, double? previous) {
     if (current == null || previous == null || previous == 0) return null;
     return (current - previous) / previous * 100;
+  }
+}
+
+
+class SleepPeriodDetailSummary {
+  const SleepPeriodDetailSummary({
+    required this.averageEfficiency,
+    required this.efficiencySamples,
+    required this.averageAwakenings,
+    required this.awakeningSamples,
+    required this.averageQuality,
+    required this.qualitySamples,
+    required this.averageWellbeing,
+    required this.wellbeingSamples,
+    required this.typicalBedtimeMinute,
+    required this.typicalWakeMinute,
+    required this.regularitySamples,
+    required this.audio,
+  });
+
+  final double? averageEfficiency;
+  final int efficiencySamples;
+  final double? averageAwakenings;
+  final int awakeningSamples;
+  final double? averageQuality;
+  final int qualitySamples;
+  final double? averageWellbeing;
+  final int wellbeingSamples;
+  final int? typicalBedtimeMinute;
+  final int? typicalWakeMinute;
+  final int regularitySamples;
+  final AudioEventPeriodSummary audio;
+
+  static SleepPeriodDetailSummary summarize({
+    required SleepRangeSummary range,
+    required Map<String, List<Map<String, Object?>>> stagesBySession,
+    required Map<String, Map<String, Object?>> morningReports,
+    required Iterable<Map<String, Object?>> audioEvents,
+  }) {
+    final efficiency = <double>[];
+    final awakenings = <double>[];
+    final quality = <double>[];
+    final wellbeing = <double>[];
+    final completed = range.sessions.where((session) =>
+      session.endedAt != null && session.duration != null && session.duration!.inMinutes > 0).toList();
+
+    for (final session in completed) {
+      final stages = stagesBySession[session.id] ?? const <Map<String, Object?>>[];
+      final metrics = SleepSessionMetrics.calculate(session: session, stages: stages);
+      final efficiencyValue = metrics.sleepEfficiencyPercent;
+      if (efficiencyValue != null && efficiencyValue.isFinite) efficiency.add(efficiencyValue);
+      if (stages.isNotEmpty && metrics.stageCoveragePercent != null) {
+        awakenings.add(metrics.awakeningCount.toDouble());
+      }
+      final report = morningReports[session.id];
+      final qualityValue = report?['sleep_quality'];
+      final wellbeingValue = report?['wellbeing'];
+      if (qualityValue is num && qualityValue.toDouble().isFinite) quality.add(qualityValue.toDouble());
+      if (wellbeingValue is num && wellbeingValue.toDouble().isFinite) wellbeing.add(wellbeingValue.toDouble());
+    }
+
+    double? average(List<double> values) => values.isEmpty
+      ? null
+      : values.reduce((a, b) => a + b) / values.length;
+    final regularity = SleepRegularityAnalysis.calculate(completed);
+    final audio = AudioEventPeriodSummary.summarize(
+      events: audioEvents,
+      sessionIds: completed.map((session) => session.id).toSet(),
+    );
+
+    return SleepPeriodDetailSummary(
+      averageEfficiency: average(efficiency),
+      efficiencySamples: efficiency.length,
+      averageAwakenings: average(awakenings),
+      awakeningSamples: awakenings.length,
+      averageQuality: average(quality),
+      qualitySamples: quality.length,
+      averageWellbeing: average(wellbeing),
+      wellbeingSamples: wellbeing.length,
+      typicalBedtimeMinute: regularity.nights.length < 2 ? null : regularity.typicalBedtimeMinute,
+      typicalWakeMinute: regularity.nights.length < 2 ? null : regularity.typicalWakeMinute,
+      regularitySamples: regularity.nights.length,
+      audio: audio,
+    );
   }
 }
