@@ -67,6 +67,12 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
       session.startedAt.isBefore(ranges.currentEndExclusive)).toList()
       ..sort((a, b) => a.id.compareTo(b.id));
     final ids = relevant.map((session) => session.id).toSet();
+    final sortedStages = data.stages.entries
+      .where((entry) => ids.contains(entry.key)).toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    final sortedMorning = data.morning.entries
+      .where((entry) => ids.contains(entry.key)).toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
     final source = <String, Object?>{
       'sessions': relevant.map((session) => {
         'id': session.id,
@@ -79,22 +85,14 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
         'source': session.source,
         'userEdited': session.userEdited,
       }).toList(),
-      'stages': data.stages.entries
-        .where((entry) => ids.contains(entry.key))
-        .toList()
-        ..sort((a, b) => a.key.compareTo(b.key))
-        .map((entry) => {
-          'sessionId': entry.key,
-          'rows': entry.value.map((row) => Map<String, Object?>.from(row)).toList(),
-        }).toList(),
-      'morning': data.morning.entries
-        .where((entry) => ids.contains(entry.key))
-        .toList()
-        ..sort((a, b) => a.key.compareTo(b.key))
-        .map((entry) => {
-          'sessionId': entry.key,
-          'report': Map<String, Object?>.from(entry.value),
-        }).toList(),
+      'stages': sortedStages.map((entry) => {
+        'sessionId': entry.key,
+        'rows': entry.value.map((row) => Map<String, Object?>.from(row)).toList(),
+      }).toList(),
+      'morning': sortedMorning.map((entry) => {
+        'sessionId': entry.key,
+        'report': Map<String, Object?>.from(entry.value),
+      }).toList(),
     };
     final fingerprint = _stableFingerprint(jsonEncode(source));
     final periodKey = '${now.year}-${now.month.toString().padLeft(2, '0')}';
