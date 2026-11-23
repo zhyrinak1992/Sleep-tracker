@@ -220,6 +220,27 @@ void main() {
       ), isEmpty);
     });
 
+    test('celebrates record improvements when timestamps are identical', () {
+      final previousScore = score('night-a', 90, 23);
+      final improvedScore = score('night-b', 95, 23);
+      final previousAwakenings = awakenings('night-a', 3, 23);
+      final improvedAwakenings = awakenings('night-b', 1, 23);
+
+      final newRecords = findNewSleepRecordEvents(
+        previousHistory: [previousScore, previousAwakenings],
+        currentHistory: [
+          previousScore,
+          improvedScore,
+          previousAwakenings,
+          improvedAwakenings,
+        ],
+        celebratedKeys: const {},
+        isFirstInitialization: false,
+      );
+
+      expect(newRecords, [improvedScore, improvedAwakenings]);
+    });
+
     test('does not celebrate historical baseline on first initialization', () {
       final oldNight = score('night-old', 99, 10);
       expect(findNewSleepRecordEvents(
