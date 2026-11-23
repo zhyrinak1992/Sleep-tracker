@@ -10,6 +10,7 @@ class PeriodicTagPatternAnalyzer {
     required Map<String, double> durationBySession,
     required Map<String, double> scoreBySession,
     required Map<String, double> awakeningsBySession,
+    Map<String, Map<String, double>> additionalMetrics = const <String, Map<String, double>>{},
     required Map<String, String> tagLabels,
   }) {
     final completed = sessions.where((s) =>
@@ -29,6 +30,7 @@ class PeriodicTagPatternAnalyzer {
         'duration': durationBySession,
         'score': scoreBySession,
         'awakenings': awakeningsBySession,
+        ...additionalMetrics,
       }.entries) {
         final withValues = withTag.map((s) => entry.value[s.id])
           .whereType<double>().where((v) => v.isFinite).toList();
