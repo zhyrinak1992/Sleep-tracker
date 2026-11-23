@@ -178,13 +178,13 @@ class SleepPersonalRecords {
   SleepPersonalRecords preserveBest(SleepPersonalRecords previous) {
     final keepSleep = previous.longestSleepMinutes != null &&
         (longestSleepMinutes == null ||
-            previous.longestSleepMinutes! > longestSleepMinutes!);
+            previous.longestSleepMinutes! >= longestSleepMinutes!);
     final keepEfficiency = previous.bestEfficiencyPercent != null &&
         (bestEfficiencyPercent == null ||
-            previous.bestEfficiencyPercent! > bestEfficiencyPercent!);
+            previous.bestEfficiencyPercent! >= bestEfficiencyPercent!);
     final keepLatency = previous.shortestLatencyMinutes != null &&
         (shortestLatencyMinutes == null ||
-            previous.shortestLatencyMinutes! < shortestLatencyMinutes!);
+            previous.shortestLatencyMinutes! <= shortestLatencyMinutes!);
     return SleepPersonalRecords(
       longestSleepMinutes: keepSleep ? previous.longestSleepMinutes : longestSleepMinutes,
       longestSleepSessionId: keepSleep ? previous.longestSleepSessionId : longestSleepSessionId,
