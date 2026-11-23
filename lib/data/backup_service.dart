@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:disk_usage/disk_usage.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -9,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import 'sleep_database.dart';
 import 'backup_crypto.dart';
 import 'backup_manifest.dart';
+import 'backup_restore_planner.dart';
 
 /// Ручной перенос локальной базы Sleep Tracker в переносимый JSON-файл.
 /// Восстановление полностью заменяет текущие данные и выполняется транзакционно.
@@ -102,10 +104,16 @@ class BackupService {
     _validateAudioArchive(data, decoded['formatVersion'] as int);
     _validateSleepChangeHistory(data);
     _validateComparisonSuggestionHistory(data);
+    final availableBytes = await _availableStorageBytes();
+    final impact = await SleepDatabase.instance.previewRestoreImpact(
+      data,
+      availableBytes: availableBytes,
+    );
     return BackupImportDraft._(
       document: Map<String, dynamic>.from(decoded),
       data: data,
       preview: BackupImportPreview.fromDocument(decoded, data),
+      impact: impact,
     );
   }
 
@@ -182,8 +190,29 @@ class BackupService {
   }
 
   /// Применяет уже проверенный архив. До этого вызова база и аудиофайлы не меняются.
+  Future<int?> _availableStorageBytes() async {
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      return await DiskUsage.freeSpace(docs.path);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<BackupImportResult> restorePreparedBackup({required BackupImportDraft draft, required bool merge}) async {
     final data = jsonDecode(jsonEncode(draft.data)) as Map<String, dynamic>;
+    final freshImpact = await SleepDatabase.instance.previewRestoreImpact(
+      data,
+      availableBytes: await _availableStorageBytes(),
+    );
+    final selectedPlan = merge ? freshImpact.merge : freshImpact.replace;
+    final previewPlan = merge ? draft.impact.merge : draft.impact.replace;
+    if (selectedPlan.stateFingerprint != previewPlan.stateFingerprint) {
+      throw StateError('Данные приложения изменились после предпросмотра. Выберите резервную копию ещё раз, чтобы пересчитать последствия восстановления.');
+    }
+    if (!selectedPlan.hasEnoughSpace) {
+      throw StateError('Недостаточно свободного места для безопасного восстановления. Освободите место и повторите предпросмотр.');
+    }
     final previousAudio = await SleepDatabase.instance.getAudioEvents();
     final existingAudioIds = previousAudio.map((row) => row['id'] as String).toSet();
     final audioRows = ((data['audio_events'] as List?) ?? const [])
@@ -229,7 +258,7 @@ class BackupService {
           }
         }
       }
-      return BackupImportResult.imported;
+      return BackupImportResult.completed(merge: merge, plan: selectedPlan);
     } catch (_) {
       for (final file in createdFiles) { try { await file.delete(); } catch (_) {} }
       rethrow;
@@ -245,10 +274,11 @@ class BackupService {
 }
 
 class BackupImportDraft {
-  BackupImportDraft._({required this.document, required this.data, required this.preview});
+  BackupImportDraft._({required this.document, required this.data, required this.preview, required this.impact});
   final Map<String, dynamic> document;
   final Map<String, dynamic> data;
   final BackupImportPreview preview;
+  final BackupRestoreImpact impact;
 }
 
 class BackupImportPreview {
@@ -299,4 +329,15 @@ class BackupImportPreview {
   }
 }
 
-enum BackupImportResult { cancelled, imported }
+class BackupImportResult {
+  const BackupImportResult._({required this.cancelled, this.merge, this.plan});
+
+  static const cancelled = BackupImportResult._(cancelled: true);
+
+  factory BackupImportResult.completed({required bool merge, required BackupRestorePlan plan}) =>
+      BackupImportResult._(cancelled: false, merge: merge, plan: plan);
+
+  final bool cancelled;
+  final bool? merge;
+  final BackupRestorePlan? plan;
+}
