@@ -190,8 +190,8 @@ class _ReportCard extends StatelessWidget {
                       ('respiratoryRate', 'Частота дыхания', ' вдох/мин'),
                       ('bloodOxygen', 'Насыщение кислородом', '%'),
                       ('hrv', 'Вариабельность пульса SDNN', ' мс'),
-                      ('roomTemperature', 'Температура спальни', ' °C'),
-                      ('roomHumidity', 'Влажность спальни', '%'),
+                      ('roomTemperature', 'Температура датчика', ' °C'),
+                      ('roomHumidity', 'Влажность датчика', '%'),
                     ])
                       if (metrics.containsKey(item.$1))
                         Text(item.$2 + ': ' + formatMetric(item.$1, item.$3),
