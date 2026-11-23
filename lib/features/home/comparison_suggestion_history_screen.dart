@@ -8,7 +8,6 @@ import '../../theme/app_theme.dart';
 import '../../widgets/screen_header.dart';
 import '../../widgets/section_card.dart';
 import '../analysis/tag_sleep_comparison.dart';
-import 'comparison_suggestion_analyzer.dart';
 import 'suggested_tag_comparison_screen.dart';
 
 class ComparisonSuggestionHistoryScreen extends StatefulWidget {
@@ -44,12 +43,6 @@ class _ComparisonSuggestionHistoryScreenState extends State<ComparisonSuggestion
     history.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return _SuggestionHistoryData(history: history, labels: labels);
   }
-
-  String _differenceUnit(TagSleepMetric metric) => switch (metric) {
-    TagSleepMetric.sleepDuration => 'мин',
-    TagSleepMetric.morningRating => 'балла',
-    TagSleepMetric.awakeningCount => 'эпизода',
-  };
 
   String _status(ComparisonSuggestionStatus status) => switch (status) {
     ComparisonSuggestionStatus.pending => 'Ожидает обработки',
@@ -143,6 +136,12 @@ class ComparisonSuggestionHistoryDetailScreen extends StatelessWidget {
     ComparisonSuggestionStatus.notViewed => 'Не просмотрено',
   };
 
+  String _differenceUnit(TagSleepMetric metric) => switch (metric) {
+    TagSleepMetric.sleepDuration => 'мин',
+    TagSleepMetric.morningRating => 'балла',
+    TagSleepMetric.awakeningCount => 'эпизода',
+  };
+
   @override
   Widget build(BuildContext context) {
     final candidate = record.candidate;
@@ -162,7 +161,7 @@ class ComparisonSuggestionHistoryDetailScreen extends StatelessWidget {
               const SizedBox(height: 8),
               Text('Ночи с отметками: ${candidate.withNights}; без комбинации: ${candidate.withoutNights}.'),
               Text('Средние значения: ${candidate.withAverage.toStringAsFixed(1)} и ${candidate.withoutAverage.toStringAsFixed(1)} ${candidate.metric.unit}.'),
-              Text('Разница: ${candidate.difference > 0 ? '+' : ''}${candidate.difference.toStringAsFixed(1)} ${candidate.metric.unit}.'),
+              Text('Разница: ${candidate.difference > 0 ? '+' : ''}${candidate.difference.toStringAsFixed(1)} ${_differenceUnit(candidate.metric)}.'),
               const SizedBox(height: 8),
               Text('Текущий статус: ${_status(record.status)}',
                 style: const TextStyle(color: AppTheme.teal, fontWeight: FontWeight.w700)),
