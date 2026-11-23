@@ -8,6 +8,7 @@ import '../models/sleep_session.dart';
 import '../models/sleep_tag.dart';
 import '../models/sleep_note.dart';
 import 'sleep_change_history.dart';
+import 'comparison_suggestion_history_merge.dart';
 
 class SleepDatabase {
   SleepDatabase._();
@@ -332,44 +333,18 @@ class SleepDatabase {
         } else if (key == 'comparison_suggestion_history_v1') {
           final localRaw = exists.isEmpty ? null : exists.first['value'] as String?;
           final importedRaw = row['value'] as String? ?? '[]';
-          List<dynamic> decodeHistory(String? raw, String source) {
+          List<Map<String, Object?>> decodeHistory(String? raw, String source) {
             if (raw == null || raw.isEmpty) return [];
             final decoded = jsonDecode(raw);
-            if (decoded is! List || decoded.any((item) => item is! Map || item['id'] is! String)) {
+            if (decoded is! List || decoded.any((item) => item is! Map)) {
               throw FormatException('$source: история предложений сравнений повреждена; объединение отменено.');
             }
-            return decoded;
+            return decoded.map((item) => Map<String, Object?>.from(item as Map)).toList();
           }
-          final merged = <String, Map<String, Object?>>{};
-          for (final item in decodeHistory(localRaw, 'Локальная')) {
-            merged[item['id'] as String] = Map<String, Object?>.from(item as Map);
-          }
-          for (final item in decodeHistory(importedRaw, 'Резервная копия')) {
-            final incoming = Map<String, Object?>.from(item as Map);
-            final id = incoming['id'] as String;
-            final existingRecord = merged[id];
-            if (existingRecord == null) {
-              merged[id] = incoming;
-              continue;
-            }
-            final events = <String, Map<String, Object?>>{};
-            for (final event in [
-              ...((existingRecord['statusEvents'] as List?) ?? const []),
-              ...((incoming['statusEvents'] as List?) ?? const []),
-            ]) {
-              if (event is! Map || event['status'] is! String || event['at'] is! String) continue;
-              final normalized = Map<String, Object?>.from(event);
-              events['${normalized['status']}|${normalized['at']}'] = normalized;
-            }
-            final sortedEvents = events.values.toList()
-              ..sort((a, b) => (a['at'] as String).compareTo(b['at'] as String));
-            if (sortedEvents.isNotEmpty) {
-              existingRecord['statusEvents'] = sortedEvents;
-              existingRecord['status'] = sortedEvents.last['status'];
-            }
-          }
-          final mergedHistory = merged.values.toList()
-            ..sort((a, b) => (a['createdAt'] as String? ?? '').compareTo(b['createdAt'] as String? ?? ''));
+          final mergedHistory = ComparisonSuggestionHistoryMerge.merge(
+            local: decodeHistory(localRaw, 'Локальная'),
+            imported: decodeHistory(importedRaw, 'Резервная копия'),
+          );
           await txn.insert('app_metadata', {
             'key': key,
             'value': jsonEncode(mergedHistory),
