@@ -34,7 +34,9 @@ class _AudioEventAnalysisCardState extends State<AudioEventAnalysisCard> {
   @override
   void didUpdateWidget(covariant AudioEventAnalysisCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.database != widget.database) {
+    if (oldWidget.database != widget.database ||
+        !identical(oldWidget.currentSessions, widget.currentSessions) ||
+        !identical(oldWidget.previousSessions, widget.previousSessions)) {
       _future = widget.database.getAudioEvents();
     }
   }
@@ -85,7 +87,7 @@ class _AudioEventAnalysisCardState extends State<AudioEventAnalysisCard> {
       }
       final categories = current.categoryCounts.keys.toSet().union(previous.categoryCounts.keys.toSet()).toList()
         ..sort((a, b) {
-          final byCount = (current.categoryCounts[b] ?? 0).compareTo(previous.categoryCounts[b] ?? 0);
+          final byCount = (current.categoryCounts[b] ?? 0).compareTo(current.categoryCounts[a] ?? 0);
           if (byCount != 0) return byCount;
           return a.compareTo(b);
         });
