@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../data/sleep_database.dart';
 import '../../data/notification_service.dart';
 import '../analysis/climate_analytics.dart';
+import '../analysis/sleep_score.dart';
 import 'screen_time_card.dart';
 import 'weather_night_detail_card.dart';
 import 'sleep_session_metrics_card.dart';
@@ -172,13 +173,27 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
     }
 
     final currentAnswers = parseAnswers(report);
-    final historySessions = (await widget.database.getSessions(limit: 100))
+    final scoreCutoff = session.startedAt.subtract(const Duration(days: 90));
+    final priorSessions = (await widget.database.getSessions(limit: 365))
         .where((item) => item.id != session.id && !item.isOpen &&
-            item.startedAt.isBefore(session.startedAt))
-        .take(7)
-        .toList();
+            item.startedAt.isBefore(session.startedAt) &&
+            !item.startedAt.isBefore(scoreCutoff))
+        .toList()
+      ..sort((a, b) => b.startedAt.compareTo(a.startedAt));
+    final historySessions = priorSessions.take(7).toList();
     final historyReports = await widget.database.getMorningReportsForSessions(
       historySessions.map((item) => item.id).toList(),
+    );
+    final scoreSessionIds = [...priorSessions.map((item) => item.id), session.id];
+    final scoreReports = await widget.database.getMorningReportsForSessions(scoreSessionIds);
+    final scoreStages = await widget.database.getStagesForSessions(scoreSessionIds);
+    if (report != null) scoreReports[session.id] = report;
+    scoreStages[session.id] = stages;
+    final sleepScore = SleepScoreCalculator.calculateForSession(
+      session: session,
+      historySessions: priorSessions,
+      morningReports: scoreReports,
+      stagesBySession: scoreStages,
     );
 
     final previousDurations = <double>[];
@@ -383,9 +398,41 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                 'Сравнение описывает личную историю и не устанавливает причинно-следственную связь. Отсутствующие и несопоставимые показатели исключаются.',
                 style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
               ),
+              const Divider(height: 22),
+              const Text('Оценка качества сна', style: TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 5),
+              if (sleepScore.score != null) ...[
+                Text(
+                  sleepScore.score!.round().toString() + ' / 100',
+                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: AppTheme.teal),
+                ),
+                Text(
+                  'Учтено компонентов: ${sleepScore.availableComponents} из 4 · исходный вес доступных данных: ${sleepScore.availableWeight.toStringAsFixed(0)}%. Недостающие веса пропорционально перераспределены.',
+                  style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
+                ),
+              ] else
+                Text(
+                  'Пока недостаточно данных для надёжной оценки: доступно ${sleepScore.availableComponents} из 4 компонентов и ${sleepScore.availableWeight.toStringAsFixed(0)}% исходного веса. Нужны минимум два компонента и не менее 50% исходного веса.',
+                  style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
+                ),
+              const SizedBox(height: 6),
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: const Text('Как рассчитана оценка', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                children: sleepScore.components.map((component) => Padding(
+                  padding: const EdgeInsets.only(bottom: 9),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(
+                      component.label + ' · ${component.weight.toStringAsFixed(0)}% веса · ' +
+                        (component.score == null ? 'нет данных' : component.score!.toStringAsFixed(0) + ' / 100'),
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                    Text(component.detail, style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.35)),
+                  ]),
+                )).toList(),
+              ),
               const Text(
-                'Единый балл качества сна 0–100 пока не рассчитывается: методика и веса показателей должны быть отдельно утверждены.',
+                'Оценка описывает эту ночь по сохранённым данным и не является медицинским заключением. Индивидуальная норма рассчитывается по предыдущим 90 дням; будущие ночи в расчёт не попадают.',
                 style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
               ),
             ],
