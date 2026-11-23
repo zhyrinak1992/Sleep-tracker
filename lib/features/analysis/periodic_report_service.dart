@@ -53,8 +53,9 @@ class PeriodicReportSnapshot {
 class PeriodicReportService {
   PeriodicReportService(this.database);
   final SleepDatabase database;
-  static const metadataPrefix = 'periodic_report_v3_';
-  static const previousMetadataPrefix = 'periodic_report_v2_';
+  static const metadataPrefix = 'periodic_report_v4_';
+  static const previousMetadataPrefix = 'periodic_report_v3_';
+  static const olderMetadataPrefix = 'periodic_report_v2_';
   static const legacyMetadataPrefix = 'periodic_report_v1_';
 
   Future<List<PeriodicReportSnapshot>> generateClosedReports({DateTime? now}) async {
@@ -101,6 +102,7 @@ class PeriodicReportService {
   Future<List<PeriodicReportSnapshot>> loadArchive() async {
     final legacy = await database.getAppMetadataByPrefix(legacyMetadataPrefix);
     final previous = await database.getAppMetadataByPrefix(previousMetadataPrefix);
+    final older = await database.getAppMetadataByPrefix(olderMetadataPrefix);
     final current = await database.getAppMetadataByPrefix(metadataPrefix);
     final byId = <String, PeriodicReportSnapshot>{};
     for (final value in legacy.values) {
@@ -109,7 +111,13 @@ class PeriodicReportService {
         byId[report.id] = report;
       } catch (_) {}
     }
-    // New v3 snapshots win; older v1/v2 snapshots remain readable and intact.
+    // New v4 snapshots win; older v1/v2/v3 snapshots remain readable and intact.
+    for (final value in older.values) {
+      try {
+        final report = PeriodicReportSnapshot.decode(value);
+        byId[report.id] = report;
+      } catch (_) {}
+    }
     for (final value in previous.values) {
       try {
         final report = PeriodicReportSnapshot.decode(value);
@@ -232,7 +240,7 @@ class PeriodicReportService {
     }).toList();
 
     final data = <String, Object?>{
-      'schemaVersion': 3, 'id': _id(kind, start), 'kind': kind.name,
+      'schemaVersion': 4, 'id': _id(kind, start), 'kind': kind.name,
       'start': start.toIso8601String(), 'endExclusive': end.toIso8601String(),
       'generatedAt': DateTime.now().toIso8601String(),
       ...current, 'audioEventCount': events.length, 'audioCategories': categories,
