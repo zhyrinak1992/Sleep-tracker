@@ -330,14 +330,14 @@ class BackupImportPreview {
 }
 
 class BackupImportResult {
-  const BackupImportResult._({required this.cancelled, this.merge, this.plan});
+  const BackupImportResult._({required this.isCancelled, this.merge, this.plan});
 
-  static const cancelled = BackupImportResult._(cancelled: true);
+  static const cancelled = BackupImportResult._(isCancelled: true);
 
   factory BackupImportResult.completed({required bool merge, required BackupRestorePlan plan}) =>
-      BackupImportResult._(cancelled: false, merge: merge, plan: plan);
+      BackupImportResult._(isCancelled: false, merge: merge, plan: plan);
 
-  final bool cancelled;
+  final bool isCancelled;
   final bool? merge;
   final BackupRestorePlan? plan;
 }
