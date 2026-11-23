@@ -5,6 +5,7 @@ import '../../models/sleep_session.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import 'sleep_achievement_service.dart';
+import 'sleep_record_service.dart';
 
 class SleepAchievementsCard extends StatefulWidget {
   const SleepAchievementsCard({super.key, required this.sessions});
@@ -17,11 +18,13 @@ class SleepAchievementsCard extends StatefulWidget {
 
 class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
   late Future<SleepAchievementState> _state;
+  late Future<SleepRecordState> _records;
 
   @override
   void initState() {
     super.initState();
     _state = SleepAchievementService.instance.load(widget.sessions);
+    _records = SleepRecordService.instance.load();
   }
 
   @override
@@ -29,6 +32,7 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.sessions, widget.sessions)) {
       _state = SleepAchievementService.instance.load(widget.sessions);
+      _records = SleepRecordService.instance.load();
     }
   }
 
@@ -96,6 +100,78 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
             const Text(
               'Небольшая история накопленных данных — без целей, соревнований и оценки качества сна.',
               style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4),
+            ),
+            const SizedBox(height: 18),
+            const Text(
+              'Личные рекорды',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            ),
+            const SizedBox(height: 8),
+            FutureBuilder<SleepRecordState>(
+              future: _records,
+              builder: (context, recordSnapshot) {
+                if (!recordSnapshot.hasData) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: LinearProgressIndicator(),
+                  );
+                }
+                final records = recordSnapshot.data!;
+                final score = records.bestSleepScore;
+                final awakenings = records.fewestAwakenings;
+                Widget recordLine({
+                  required IconData icon,
+                  required String title,
+                  required String value,
+                  required SleepRecordEvent? event,
+                }) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
+                      children: [
+                        Icon(icon, color: AppTheme.teal, size: 21),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                              Text(
+                                event == null
+                                    ? 'Пока нет достоверных данных'
+                                    : '$value · ${DateFormat('d MMM yyyy', 'ru').format(event.achievedAt)}',
+                                style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                return Column(
+                  children: [
+                    recordLine(
+                      icon: Icons.stars_rounded,
+                      title: 'Лучший SleepScore',
+                      value: score == null ? '—' : '${score.value.toInt()} из 100',
+                      event: score,
+                    ),
+                    recordLine(
+                      icon: Icons.nights_stay_outlined,
+                      title: 'Минимум пробуждений',
+                      value: awakenings == null
+                          ? '—'
+                          : '${awakenings.value.toInt()}',
+                      event: awakenings,
+                    ),
+                    Text(
+                      'Рекорды учитывают только завершённые ночи и достоверные измерения. История улучшений сохраняется отдельно.',
+                      style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.35),
+                    ),
+                  ],
+                );
+              },
             ),
             if (state.displayEnabled) ...[
               const SizedBox(height: 12),
