@@ -300,6 +300,11 @@ class SleepRecordService {
     }
     final decodedHistory = decodePersistedHistory(raw);
     final previousHistory = decodedHistory.events;
+    // If metadata is unreadable and yielded no usable events, treat the
+    // reconstructed timeline as a baseline rather than replaying years of
+    // historical congratulations after repairing the metadata.
+    final isBaselineInitialization = isFirstInitialization ||
+        (decodedHistory.needsRewrite && previousHistory.isEmpty);
     final candidates = <SleepRecordEvent>[];
     for (final session in sessions) {
       final stages = stagesBySession[session.id] ?? const <Map<String, Object?>>[];
@@ -349,13 +354,13 @@ class SleepRecordService {
       previousHistory: previousHistory,
       currentHistory: history,
       celebratedKeys: celebratedKeys,
-      isFirstInitialization: isFirstInitialization,
+      isFirstInitialization: isBaselineInitialization,
     );
 
     // On the first run, existing sleep history is a baseline, not a stream
     // of new achievements. Persist its acknowledgement before the history
     // marker so concurrent loads cannot mistake the baseline for new records.
-    if (isFirstInitialization && history.isNotEmpty) {
+    if (isBaselineInitialization && history.isNotEmpty) {
       celebratedKeys.addAll(history.map(_eventKey));
       await database.setAppMetadata(
         _celebratedKey,
