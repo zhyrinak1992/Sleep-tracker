@@ -56,6 +56,7 @@ void main() {
         personalUpperMinutes: null,
         sleepEfficiencyPercent: 90,
         awakeningCount: null,
+        awakeningDurationMinutes: null,
         awakeningsAvailable: false,
         subjectiveQuality: 5,
       );
