@@ -116,7 +116,7 @@ class ComparisonSuggestionAnalyzer {
     required DateTime now,
     Iterable<Iterable<String>> existingCombinations = const [],
   }) {
-    final start = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 89));
+    final start = DateTime(now.year, now.month, now.day - 89);
     final end = DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
     final existing = existingCombinations
       .map(TagCombinationSuggestionStore.signature).toSet();
