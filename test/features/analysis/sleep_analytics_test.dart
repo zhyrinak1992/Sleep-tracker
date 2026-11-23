@@ -19,6 +19,29 @@ void main() {
     });
   });
 
+    test('year boundaries handle leap years and year changes', () {
+      final start = SleepAnalytics.periodStart(DateTime(2024, 2, 29), AnalysisPeriod.year);
+      expect(start, DateTime(2024));
+      expect(SleepAnalytics.nextPeriodStart(start, AnalysisPeriod.year), DateTime(2025));
+      expect(SleepAnalytics.previousPeriodStart(start, AnalysisPeriod.year), DateTime(2023));
+    });
+
+    test('yearly chart averages sessions by calendar month and leaves missing months empty', () {
+      final sessions = [
+        SleepSession(id: 'jan', startedAt: DateTime(2026, 1, 10, 22), endedAt: DateTime(2026, 1, 11, 6)),
+        SleepSession(id: 'jan2', startedAt: DateTime(2026, 1, 20, 22), endedAt: DateTime(2026, 1, 21, 4)),
+        SleepSession(id: 'mar', startedAt: DateTime(2026, 3, 1, 22), endedAt: DateTime(2026, 3, 2, 6)),
+        SleepSession(id: 'dec', startedAt: DateTime(2026, 12, 31, 22), endedAt: DateTime(2027, 1, 1, 6)),
+      ];
+      final summary = SleepAnalytics.summarize(sessions, DateTime(2026), AnalysisPeriod.year);
+      final values = SleepAnalytics.chartValues(summary, AnalysisPeriod.year);
+      expect(values.length, 12);
+      expect(values[0], 420);
+      expect(values[1], isNull);
+      expect(values[2], 480);
+      expect(values[11], 480);
+    });
+
   group('SleepAnalytics summaries', () {
     test('counts completed sessions and ratings independently', () {
       final sessions = [
