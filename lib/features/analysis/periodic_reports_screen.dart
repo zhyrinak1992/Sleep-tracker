@@ -18,7 +18,9 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
   @override
   void initState() { super.initState(); _future = _load(); }
   Future<List<PeriodicReportSnapshot>> _load() async {
-    return PeriodicReportService(widget.database).loadArchive();
+    final service = PeriodicReportService(widget.database);
+    await service.generateClosedReports();
+    return service.loadArchive();
   }
   void _refresh() => setState(() => _future = _load());
   Future<void> _export(PeriodicReportSnapshot report) async {
@@ -115,12 +117,12 @@ class _ReportCard extends StatelessWidget {
             const Divider(height: 22),
             const Text('Сравнение с предыдущим периодом', style: TextStyle(fontWeight: FontWeight.w600)),
             _ReportLine(label: 'Ночей', value: report.nights.toString() + ' · ранее ' + (previous['nights'] ?? 0).toString()),
-            _ReportLine(label: 'Средняя продолжительность сна', value: duration + ' · ранее ' + _formatDuration(previous['averageSleepMinutes'])),
-            _ReportLine(label: 'Время в постели', value: _formatDuration(report.averageTimeInBedMinutes) + ' · ранее ' + _formatDuration(previous['averageTimeInBedMinutes'])),
-            _ReportLine(label: 'Эффективность', value: _formatPercent(report.averageEfficiency) + ' · ранее ' + _formatPercent(previous['averageEfficiency'])),
-            _ReportLine(label: 'Пробуждения', value: _formatNumber(report.averageAwakenings) + ' · ранее ' + _formatNumber(previous['averageAwakenings'])),
-            _ReportLine(label: 'Качество сна', value: _formatScale(report.averageQuality) + ' · ранее ' + _formatScale(previous['averageQuality'])),
-            _ReportLine(label: 'Самочувствие', value: _formatScale(report.averageWellbeing) + ' · ранее ' + _formatScale(previous['averageWellbeing'])),
+            _ReportLine(label: 'Средняя продолжительность сна', value: duration + ' · ранее ' + _formatDuration(previous['averageSleepMinutes']) + ' (' + (previous['sleepDurationSamples'] ?? 0).toString() + ' изм.)'),
+            _ReportLine(label: 'Время в постели', value: _formatDuration(report.averageTimeInBedMinutes) + ' · ранее ' + _formatDuration(previous['averageTimeInBedMinutes']) + ' (' + (previous['timeInBedSamples'] ?? 0).toString() + ' ночей)'),
+            _ReportLine(label: 'Эффективность', value: _formatPercent(report.averageEfficiency) + ' · ранее ' + _formatPercent(previous['averageEfficiency']) + ' (' + (previous['efficiencySamples'] ?? 0).toString() + ' ночей)'),
+            _ReportLine(label: 'Пробуждения', value: _formatNumber(report.averageAwakenings) + ' · ранее ' + _formatNumber(previous['averageAwakenings']) + ' (' + (previous['awakeningSamples'] ?? 0).toString() + ' ночей)'),
+            _ReportLine(label: 'Качество сна', value: _formatScale(report.averageQuality) + ' · ранее ' + _formatScale(previous['averageQuality']) + ' (' + (previous['qualitySamples'] ?? 0).toString() + ' оценок)'),
+            _ReportLine(label: 'Самочувствие', value: _formatScale(report.averageWellbeing) + ' · ранее ' + _formatScale(previous['averageWellbeing']) + ' (' + (previous['wellbeingSamples'] ?? 0).toString() + ' оценок)'),
           ],
           if (notes.isNotEmpty) ...[
             const Divider(height: 22),
