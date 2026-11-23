@@ -125,7 +125,7 @@ class _ReportCard extends StatelessWidget {
             const Text('Заметки за период', style: TextStyle(fontWeight: FontWeight.w600)),
             ...notes.map((note) => Padding(
               padding: const EdgeInsets.only(top: 7),
-              child: Text(DateFormat('d MMM yyyy', 'ru').format(DateTime.parse(note['sessionStartedAt'] as String)) + ': ' + (note['text'] as String? ?? ''),
+              child: Text(_formatNoteDate(DateTime.parse(note['sessionStartedAt'] as String)) + ': ' + (note['text'] as String? ?? ''),
                 style: const TextStyle(fontSize: 12, height: 1.4)),
             )),
           ],
@@ -158,6 +158,9 @@ class _ReportCard extends StatelessWidget {
       )),
     );
   }
+
+  static String _formatNoteDate(DateTime date) =>
+      date.day.toString() + ' ' + PeriodicReportSnapshot.monthName(date.month) + ' ' + date.year.toString();
 
   static String _formatDuration(Object? value) {
     if (value is! num) return 'Нет данных';
