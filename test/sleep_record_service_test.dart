@@ -36,6 +36,25 @@ void main() {
     });
   });
 
+  group('SleepRecordService celebration claims', () {
+    test('allows only one mounted card to claim the same celebration', () {
+      final service = SleepRecordService.instance;
+      final event = SleepRecordEvent(
+        type: 'sleep_score',
+        sessionId: 'claim-test',
+        value: 95,
+        achievedAt: DateTime.utc(2026, 11, 23),
+      );
+
+      expect(service.tryClaimCelebration(event), isTrue);
+      expect(service.tryClaimCelebration(event), isFalse);
+
+      service.releaseCelebration(event);
+      expect(service.tryClaimCelebration(event), isTrue);
+      service.releaseCelebration(event);
+    });
+  });
+
   group('SleepRecordState', () {
     test('returns the highest score and the lowest reliable awakening count', () {
       final state = SleepRecordState(history: [
