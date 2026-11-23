@@ -45,13 +45,21 @@ void main() {
         value: 95,
         achievedAt: DateTime.utc(2026, 11, 23),
       );
+      final otherEvent = SleepRecordEvent(
+        type: 'awakening_count',
+        sessionId: 'claim-test-2',
+        value: 0,
+        achievedAt: DateTime.utc(2026, 11, 23),
+      );
 
       expect(service.tryClaimCelebration(event), isTrue);
       expect(service.tryClaimCelebration(event), isFalse);
+      // A second card must not stack a different celebration dialog either.
+      expect(service.tryClaimCelebration(otherEvent), isFalse);
 
       service.releaseCelebration(event);
-      expect(service.tryClaimCelebration(event), isTrue);
-      service.releaseCelebration(event);
+      expect(service.tryClaimCelebration(otherEvent), isTrue);
+      service.releaseCelebration(otherEvent);
     });
   });
 
