@@ -136,6 +136,10 @@ class ComparisonSuggestionHistoryDetailScreen extends StatelessWidget {
     ComparisonSuggestionStatus.notViewed => 'Не просмотрено',
   };
 
+  String _pValue(double value) => value < 0.001
+      ? 'p < 0,001'
+      : 'p = ${value.toStringAsFixed(3).replaceAll('.', ',')}';
+
   String _differenceUnit(TagSleepMetric metric) => switch (metric) {
     TagSleepMetric.sleepDuration => 'мин',
     TagSleepMetric.morningRating => 'балла',
@@ -162,6 +166,7 @@ class ComparisonSuggestionHistoryDetailScreen extends StatelessWidget {
               Text('Ночи с отметками: ${candidate.withNights}; без комбинации: ${candidate.withoutNights}.'),
               Text('Средние значения: ${candidate.withAverage.toStringAsFixed(1)} и ${candidate.withoutAverage.toStringAsFixed(1)} ${candidate.metric.unit}.'),
               Text('Разница: ${candidate.difference > 0 ? '+' : ''}${candidate.difference.toStringAsFixed(1)} ${_differenceUnit(candidate.metric)}.'),
+              Text('U-критерий Манна — Уитни: ${_pValue(candidate.pValue)}.'),
               const SizedBox(height: 8),
               Text('Текущий статус: ${_status(record.status)}',
                 style: const TextStyle(color: AppTheme.teal, fontWeight: FontWeight.w700)),
