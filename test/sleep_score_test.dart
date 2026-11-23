@@ -14,11 +14,11 @@ void main() {
         awakeningsAvailable: true,
         subjectiveQuality: 4,
       );
-      expect(result.score, closeTo(90.1666666667, 0.001));
+      expect(result.score, closeTo(93.8333333333, 0.001));
       expect(result.availableWeight, 100);
       expect(result.availableComponents, 4);
       expect(result.components.map((x) => x.weight).toList(), [40, 30, 20, 10]);
-      expect(result.toMap()['methodVersion'], 1);
+      expect(result.toMap()['methodVersion'], 2);
     });
 
     test('redistributes only available weights when components are missing', () {
@@ -44,6 +44,7 @@ void main() {
         personalUpperMinutes: 480,
         sleepEfficiencyPercent: null,
         awakeningCount: null,
+        awakeningDurationMinutes: null,
         awakeningsAvailable: false,
         subjectiveQuality: null,
       );
