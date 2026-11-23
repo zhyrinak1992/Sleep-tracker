@@ -62,6 +62,14 @@ class SleepRecordHistoryDecode {
   final bool needsRewrite;
 }
 
+int _compareSleepRecordChronology(
+  SleepRecordEvent a,
+  SleepRecordEvent b,
+) {
+  final byDate = a.achievedAt.compareTo(b.achievedAt);
+  return byDate != 0 ? byDate : a.sessionId.compareTo(b.sessionId);
+}
+
 /// Rebuilds the sequence of personal records from the current source data.
 /// A session contributes at most one candidate per metric; corrected or
 /// deleted sessions therefore cannot leave stale record events behind.
@@ -80,11 +88,11 @@ List<SleepRecordEvent> findNewSleepRecordEvents({
 
   final previousKeys = previousHistory.map(key).toSet();
   final previousSessionMetrics = previousHistory.map(sessionMetric).toSet();
-  final previousLatestByType = <String, DateTime>{};
+  final previousLatestByType = <String, SleepRecordEvent>{};
   for (final event in previousHistory) {
     final current = previousLatestByType[event.type];
-    if (current == null || event.achievedAt.isAfter(current)) {
-      previousLatestByType[event.type] = event.achievedAt;
+    if (current == null || _compareSleepRecordChronology(event, current) > 0) {
+      previousLatestByType[event.type] = event;
     }
   }
 
@@ -99,7 +107,10 @@ List<SleepRecordEvent> findNewSleepRecordEvents({
     final isNewerRecord = !previousKeys.contains(eventKey) &&
         !previousSessionMetrics.contains(sessionMetric(event)) &&
         (previousLatestByType[event.type] == null ||
-            event.achievedAt.isAfter(previousLatestByType[event.type]!));
+            _compareSleepRecordChronology(
+              event,
+              previousLatestByType[event.type]!,
+            ) > 0);
 
     if (wasPending || isNewerRecord) result.add(event);
   }
@@ -110,10 +121,7 @@ List<SleepRecordEvent> buildSleepRecordHistory(
   Iterable<SleepRecordEvent> candidates,
 ) {
   final ordered = candidates.toList()
-    ..sort((a, b) {
-      final byDate = a.achievedAt.compareTo(b.achievedAt);
-      return byDate != 0 ? byDate : a.sessionId.compareTo(b.sessionId);
-    });
+    ..sort(_compareSleepRecordChronology);
 
   final history = <SleepRecordEvent>[];
   final seenSessions = <String>{};
