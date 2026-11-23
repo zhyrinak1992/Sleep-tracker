@@ -4,6 +4,18 @@ import 'package:sleep_tracker/data/sleep_database.dart';
 
 void main() {
   group('BackupImportPreview', () {
+    test('marks a v5 archive with a validated manifest as integrity checked', () {
+      final preview = BackupImportPreview.fromDocument({
+        'formatVersion': 5,
+        'manifest': {'manifestVersion': 1},
+      }, {
+        'sleep_sessions': [],
+        'audio_events': [],
+        'app_metadata': [],
+      });
+      expect(preview.integrityVerified, isTrue);
+    });
+
     test('counts records from archive tables, not the stored summary', () {
       final data = <String, dynamic>{
         'schemaVersion': 8,
@@ -38,6 +50,7 @@ void main() {
       expect(preview.changeHistorySnapshots, 1);
       expect(preview.suggestionHistoryEntries, 1);
       expect(preview.formatVersion, 4);
+      expect(preview.integrityVerified, isFalse);
       expect(preview.createdAt, DateTime.parse('2026-11-23T10:00:00Z'));
     });
   });

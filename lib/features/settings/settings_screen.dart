@@ -411,11 +411,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _createBackup() async {
-    final password = await _requestBackupPassword(confirm: true);
-    if (password == null || !mounted) return;
     await _run(
-      () => BackupService.instance.exportToFiles(password: password),
-      'Зашифрованная резервная копия подготовлена. Выберите «Сохранить в Файлы».',
+      () => BackupService.instance.exportToFiles(),
+      'Резервная копия подготовлена без дополнительного пароля. Выберите «Сохранить в Файлы».',
     );
   }
 
@@ -443,6 +441,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 Text('Дата создания: $date'),
                 Text('Версия архива: ${preview.formatVersion}'),
+                Text(preview.integrityVerified
+                    ? 'Целостность: манифест и контрольные суммы проверены'
+                    : 'Целостность: старый формат без манифеста контрольных сумм'),
                 const SizedBox(height: 12),
                 _backupPreviewRow('Ночи сна', preview.sessions),
                 _backupPreviewRow('Утренние отчёты', preview.reports),
