@@ -46,11 +46,17 @@ class StorageService {
   Future<StorageSnapshot> measure() async {
     final documents = await getApplicationDocumentsDirectory();
     final support = await getApplicationSupportDirectory();
+    Directory? library;
+    try {
+      library = await getLibraryDirectory();
+    } catch (_) {
+      // Some non-Apple platforms do not expose a Library directory.
+    }
     final cache = await getApplicationCacheDirectory();
     final temporary = await getTemporaryDirectory();
 
     final uniqueDirectories = <String>[];
-    final candidates = [documents.path, support.path, cache.path, temporary.path]
+    final candidates = [documents.path, support.path, if (library != null) library.path, cache.path, temporary.path]
       ..sort((a, b) => a.length.compareTo(b.length));
     for (final candidate in candidates) {
       final normalized = p.normalize(p.absolute(candidate));
