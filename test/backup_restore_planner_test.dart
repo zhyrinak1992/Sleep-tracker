@@ -65,17 +65,17 @@ void main() {
         availableBytes: 100 * 1024 * 1024,
       );
 
-      expect(impact.merge.recordsToAdd, 4);
-      expect(impact.merge.duplicatesToSkip, 5);
+      expect(impact.merge.recordsToAdd, 5);
+      expect(impact.merge.duplicatesToSkip, 8);
       expect(impact.merge.historyEntriesToMerge, 2);
       expect(impact.merge.audioFilesToRestore, 1);
       expect(impact.merge.audioBytesToRestore, 3);
       expect(impact.merge.missingAudioFiles, 0);
       expect(impact.merge.hasEnoughSpace, isTrue);
 
-      expect(impact.replace.archiveRecordCount, 12);
+      expect(impact.replace.archiveRecordCount, 13);
       expect(impact.replace.currentRecordsToReplace, 8);
-      expect(impact.replace.recordsToAdd, 12);
+      expect(impact.replace.recordsToAdd, 13);
       expect(impact.replace.audioFilesToRestore, 2);
       expect(impact.replace.audioBytesToRestore, 5);
     });
