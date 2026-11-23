@@ -1,0 +1,277 @@
+import 'dart:convert';
+
+class BackupRestorePlan {
+  const BackupRestorePlan({
+    required this.archiveRecordCount,
+    required this.currentRecordCount,
+    required this.recordsToAdd,
+    required this.duplicatesToSkip,
+    required this.currentRecordsToReplace,
+    required this.historyEntriesToMerge,
+    required this.audioFilesToRestore,
+    required this.missingAudioFiles,
+    required this.audioBytesToRestore,
+    required this.requiredBytesEstimate,
+    required this.availableBytes,
+    required this.stateFingerprint,
+    this.blockedReason,
+  });
+
+  final int archiveRecordCount;
+  final int currentRecordCount;
+  final int recordsToAdd;
+  final int duplicatesToSkip;
+  final int currentRecordsToReplace;
+  final int historyEntriesToMerge;
+  final int audioFilesToRestore;
+  final int missingAudioFiles;
+  final int audioBytesToRestore;
+  final int requiredBytesEstimate;
+  final int? availableBytes;
+  final String stateFingerprint;
+  final String? blockedReason;
+
+  bool get spaceCheckKnown => availableBytes != null;
+  bool get hasEnoughSpace => availableBytes == null || availableBytes! >= requiredBytesEstimate;
+  bool get canProceed => blockedReason == null && hasEnoughSpace;
+}
+
+class BackupRestoreImpact {
+  const BackupRestoreImpact({required this.replace, required this.merge});
+  final BackupRestorePlan replace;
+  final BackupRestorePlan merge;
+}
+
+class BackupRestorePlanner {
+  BackupRestorePlanner._();
+
+  static const tableKeys = <String, List<String>>{
+    'sleep_sessions': ['id'],
+    'sleep_session_tags': ['session_id', 'tag_key'],
+    'sleep_notes': ['id'],
+    'app_metadata': ['key'],
+    'sleep_stages': ['id'],
+    'sleep_metrics': ['id'],
+    'audio_events': ['id'],
+    'morning_reports': ['session_id'],
+    'climate_samples': ['id'],
+  };
+
+  static String _key(Map<String, Object?> row, List<String> columns) =>
+      jsonEncode(columns.map((column) => row[column]).toList());
+
+  static Set<String> _keys(
+    List<Map<String, Object?>> rows,
+    List<String> columns,
+  ) => rows.map((row) => _key(row, columns)).toSet();
+
+  static List<Map<String, Object?>> _historyRows(
+    List<Map<String, Object?>> metadata,
+    String key,
+  ) {
+    Map<String, Object?>? row;
+    for (final item in metadata) {
+      if (item['key'] == key) { row = item; break; }
+    }
+    if (row == null) return [];
+    if (row['value'] is! String) throw FormatException('Повреждено значение истории $key.');
+    final decoded = jsonDecode(row['value'] as String);
+    if (decoded is! List || decoded.any((item) => item is! Map)) {
+      throw FormatException('Повреждён раздел истории $key в резервной копии.');
+    }
+    return decoded.map((item) => Map<String, Object?>.from(item as Map)).toList();
+  }
+
+  static Set<String> _historyIdentities(
+    List<Map<String, Object?>> rows,
+    String key,
+  ) {
+    if (key == 'sleep_change_history_v1') {
+      return rows.map((row) => '${row['periodKey']}|${row['fingerprint']}').toSet();
+    }
+    return rows.map((row) => row['id'] as String? ?? '').where((id) => id.isNotEmpty).toSet();
+  }
+
+  static int _rowBytes(Map<String, Object?> row) {
+    final copy = Map<String, Object?>.from(row)..remove('audioDataB64');
+    return utf8.encode(jsonEncode(copy)).length;
+  }
+
+  static int _audioBytes(Map<String, Object?> row) {
+    final encoded = row['audioDataB64'];
+    if (encoded is! String || encoded.isEmpty) return 0;
+    return base64Decode(encoded).length;
+  }
+
+  static BackupRestoreImpact calculate({
+    required Map<String, List<Map<String, Object?>>> archiveRows,
+    required Map<String, List<Map<String, Object?>>> currentRows,
+    required int? availableBytes,
+  }) {
+    final archiveRecordCount = archiveRows.values.fold<int>(0, (sum, rows) => sum + rows.length);
+    final currentRecordCount = currentRows.values.fold<int>(0, (sum, rows) => sum + rows.length);
+
+    final archiveAudio = archiveRows['audio_events'] ?? const <Map<String, Object?>>[];
+    final currentAudioIds = _keys(
+      currentRows['audio_events'] ?? const [],
+      const ['id'],
+    );
+
+    final replaceAudioRows = archiveAudio;
+    final mergeAudioRows = archiveAudio.where((row) =>
+      !currentAudioIds.contains(_key(row, const ['id']))).toList();
+
+    final replaceMissingAudio = replaceAudioRows.where((row) =>
+      row['file_path'] != null && row['audioDataB64'] == null).length;
+    final mergeMissingAudio = mergeAudioRows.where((row) =>
+      row['file_path'] != null && row['audioDataB64'] == null).length;
+
+    final replaceAudioBytes = replaceAudioRows.fold<int>(0, (sum, row) => sum + _audioBytes(row));
+    final mergeAudioBytes = mergeAudioRows.fold<int>(0, (sum, row) => sum + _audioBytes(row));
+
+    var recordsToAdd = 0;
+    var duplicatesToSkip = 0;
+    var historyEntriesToMerge = 0;
+    var mergeDatabaseBytes = 0;
+    String? mergeBlockedReason;
+
+    final fingerprintBasis = <String, Object?>{
+      'archive': <String, Object?>{},
+      'current': <String, Object?>{},
+    };
+
+    for (final table in tableKeys.keys) {
+      final archive = archiveRows[table] ?? const <Map<String, Object?>>[];
+      final current = currentRows[table] ?? const <Map<String, Object?>>[];
+      final keys = tableKeys[table]!;
+      final currentKeys = _keys(current, keys);
+      if (table == 'app_metadata') {
+        Map<String, Object?> metadataFingerprint(Map<String, Object?> row) {
+          final key = row['key'];
+          return {
+            'key': key,
+            if (key == 'sleep_change_history_v1' || key == 'comparison_suggestion_history_v1')
+              'value': row['value'],
+          };
+        }
+        final archiveState = archive.map(metadataFingerprint).toList()
+          ..sort((a, b) => (a['key'] as String).compareTo(b['key'] as String));
+        final currentState = current.map(metadataFingerprint).toList()
+          ..sort((a, b) => (a['key'] as String).compareTo(b['key'] as String));
+        (fingerprintBasis['archive'] as Map<String, Object?>)[table] = archiveState;
+        (fingerprintBasis['current'] as Map<String, Object?>)[table] = currentState;
+      } else {
+        final archiveKeys = archive.map((row) => _key(row, keys)).toList()..sort();
+        final currentKeysList = current.map((row) => _key(row, keys)).toList()..sort();
+        (fingerprintBasis['archive'] as Map<String, Object?>)[table] = archiveKeys;
+        (fingerprintBasis['current'] as Map<String, Object?>)[table] = currentKeysList;
+      }
+
+      if (table == 'app_metadata') {
+        final currentByKey = {
+          for (final row in current)
+            if (row['key'] is String) row['key'] as String: row,
+        };
+        for (final row in archive) {
+          final metadataKey = row['key'];
+          if (metadataKey == 'sleep_change_history_v1' ||
+              metadataKey == 'comparison_suggestion_history_v1') {
+            final historyKey = metadataKey as String;
+            final importedHistory = _historyRows(archive, historyKey);
+            List<Map<String, Object?>> localHistory;
+            try {
+              localHistory = _historyRows(current, historyKey);
+            } catch (_) {
+              mergeBlockedReason ??= 'Локальная история $historyKey повреждена. Для безопасного восстановления выберите полную замену.';
+              localHistory = [];
+            }
+            final localIds = _historyIdentities(localHistory, historyKey);
+            final importedIds = _historyIdentities(importedHistory, historyKey);
+            final newCount = importedIds.difference(localIds).length;
+            historyEntriesToMerge += newCount;
+            duplicatesToSkip += importedIds.length - newCount;
+            mergeDatabaseBytes += importedHistory
+              .where((item) => !localIds.contains(
+                historyKey == 'sleep_change_history_v1'
+                  ? '${item['periodKey']}|${item['fingerprint']}'
+                  : item['id'] as String? ?? '',
+              ))
+              .fold<int>(0, (sum, item) => sum + _rowBytes(item));
+            continue;
+          }
+          if (metadataKey is String && currentByKey.containsKey(metadataKey)) {
+            duplicatesToSkip++;
+          } else {
+            recordsToAdd++;
+            mergeDatabaseBytes += _rowBytes(row);
+          }
+        }
+        continue;
+      }
+
+      for (final row in archive) {
+        if (currentKeys.contains(_key(row, keys))) {
+          duplicatesToSkip++;
+        } else {
+          recordsToAdd++;
+          mergeDatabaseBytes += _rowBytes(row);
+        }
+      }
+    }
+
+    final replaceDatabaseBytes = archiveRows.values
+      .expand((rows) => rows)
+      .fold<int>(0, (sum, row) => sum + _rowBytes(row));
+    final replaceRequired = _withSafetyReserve(replaceDatabaseBytes + replaceAudioBytes);
+    final mergeRequired = _withSafetyReserve(mergeDatabaseBytes + mergeAudioBytes);
+
+    final replaceFingerprint = jsonEncode({
+      'mode': 'replace',
+      'archive': fingerprintBasis['archive'],
+      'current': fingerprintBasis['current'],
+    });
+    final mergeFingerprint = jsonEncode({
+      'mode': 'merge',
+      'archive': fingerprintBasis['archive'],
+      'current': fingerprintBasis['current'],
+    });
+
+    return BackupRestoreImpact(
+      replace: BackupRestorePlan(
+        archiveRecordCount: archiveRecordCount,
+        currentRecordCount: currentRecordCount,
+        recordsToAdd: archiveRecordCount,
+        duplicatesToSkip: 0,
+        currentRecordsToReplace: currentRecordCount,
+        historyEntriesToMerge: 0,
+        audioFilesToRestore: replaceAudioRows.where((row) => row['audioDataB64'] is String).length,
+        missingAudioFiles: replaceMissingAudio,
+        audioBytesToRestore: replaceAudioBytes,
+        requiredBytesEstimate: replaceRequired,
+        availableBytes: availableBytes,
+        stateFingerprint: replaceFingerprint,
+        blockedReason: null,
+      ),
+      merge: BackupRestorePlan(
+        archiveRecordCount: archiveRecordCount,
+        currentRecordCount: currentRecordCount,
+        recordsToAdd: recordsToAdd,
+        duplicatesToSkip: duplicatesToSkip,
+        currentRecordsToReplace: 0,
+        historyEntriesToMerge: historyEntriesToMerge,
+        audioFilesToRestore: mergeAudioRows.where((row) => row['audioDataB64'] is String).length,
+        missingAudioFiles: mergeMissingAudio,
+        audioBytesToRestore: mergeAudioBytes,
+        requiredBytesEstimate: mergeRequired,
+        availableBytes: availableBytes,
+        stateFingerprint: mergeFingerprint,
+        blockedReason: mergeBlockedReason,
+      ),
+    );
+  }
+
+  static int _withSafetyReserve(int estimatedBytes) {
+    final reserve = (estimatedBytes * 0.15).ceil();
+    return estimatedBytes + (reserve > 10 * 1024 * 1024 ? reserve : 10 * 1024 * 1024);
+  }
+}
