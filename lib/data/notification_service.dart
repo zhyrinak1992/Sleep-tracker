@@ -100,6 +100,8 @@ class NotificationService {
   /// приложению, где пользователь подтверждает запуск.
   Future<void> deferSleepStart() async {
     await initialize();
+    // Replace the next half-hourly reminder with one clear deferred offer.
+    await cancelNextMidnightAttempt();
     await _plugin.cancel(_deferredSleepOfferId);
     final scheduled = tz.TZDateTime.now(tz.local).add(const Duration(minutes: 30));
     await _plugin.zonedSchedule(
