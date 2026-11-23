@@ -164,6 +164,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
           'metric': title,
           'interval': label,
           'value': value == null ? 'Нет данных' : asDuration ? _duration(value) : value.toStringAsFixed(decimals) + suffix,
+          'rawValue': value,
         });
       }
     }
