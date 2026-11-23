@@ -122,6 +122,115 @@ void main() {
     });
   });
 
+  group('Sleep record history rebuild', () {
+    SleepRecordEvent score(String id, int value, int day) => SleepRecordEvent(
+      type: 'sleep_score',
+      sessionId: id,
+      value: value,
+      achievedAt: DateTime.utc(2026, 11, day, 7),
+    );
+
+    SleepRecordEvent awakenings(String id, int value, int day) =>
+        SleepRecordEvent(
+          type: 'awakening_count',
+          sessionId: id,
+          value: value,
+          achievedAt: DateTime.utc(2026, 11, day, 7),
+        );
+
+    test('rebuilds only current record-setting sessions', () {
+      final history = buildSleepRecordHistory([
+        score('night-1', 80, 20),
+        score('night-2', 96, 21),
+        score('night-3', 90, 22),
+        awakenings('night-1', 4, 20),
+        awakenings('night-2', 2, 21),
+        awakenings('night-3', 3, 22),
+      ]);
+
+      expect(
+        history.where((event) => event.type == 'sleep_score')
+            .map((event) => event.sessionId),
+        ['night-1', 'night-2'],
+      );
+      expect(
+        history.where((event) => event.type == 'awakening_count')
+            .map((event) => event.sessionId),
+        ['night-1', 'night-2'],
+      );
+    });
+
+    test('corrected and deleted sessions do not leave stale personal records', () {
+      final corrected = buildSleepRecordHistory([
+        score('night-1', 80, 20),
+        score('night-2', 85, 21), // Was previously 96.
+      ]);
+      final afterDeletion = buildSleepRecordHistory([
+        score('night-1', 80, 20),
+      ]);
+
+      expect(corrected.last.value, 85);
+      expect(corrected.last.sessionId, 'night-2');
+      expect(afterDeletion, hasLength(1));
+      expect(afterDeletion.single.sessionId, 'night-1');
+      expect(afterDeletion.single.value, 80);
+    });
+
+    test('does not celebrate corrected or promoted historical records', () {
+      final previous = [score('night-newest', 96, 22)];
+      final corrected = [score('night-newest', 90, 22)];
+      final promotedOlder = [score('night-older', 85, 20)];
+
+      expect(findNewSleepRecordEvents(
+        previousHistory: previous,
+        currentHistory: corrected,
+        celebratedKeys: const {},
+        isFirstInitialization: false,
+      ), isEmpty);
+      expect(findNewSleepRecordEvents(
+        previousHistory: previous,
+        currentHistory: promotedOlder,
+        celebratedKeys: const {},
+        isFirstInitialization: false,
+      ), isEmpty);
+    });
+
+    test('celebrates a genuinely newer record and recovers pending events', () {
+      final previous = [score('night-old', 90, 20)];
+      final newRecord = score('night-new', 95, 23);
+      final pending = score('night-pending', 97, 24);
+
+      expect(findNewSleepRecordEvents(
+        previousHistory: previous,
+        currentHistory: [previous.single, newRecord],
+        celebratedKeys: const {},
+        isFirstInitialization: false,
+      ), [newRecord]);
+      expect(findNewSleepRecordEvents(
+        previousHistory: [pending],
+        currentHistory: [pending],
+        celebratedKeys: const {},
+        isFirstInitialization: false,
+      ), [pending]);
+      expect(findNewSleepRecordEvents(
+        previousHistory: [pending],
+        currentHistory: [pending],
+        celebratedKeys: {'sleep_score|night-pending|97'},
+        isFirstInitialization: false,
+      ), isEmpty);
+    });
+
+    test('does not celebrate historical baseline on first initialization', () {
+      final oldNight = score('night-old', 99, 10);
+      expect(findNewSleepRecordEvents(
+        previousHistory: const [],
+        currentHistory: [oldNight],
+        celebratedKeys: const {},
+        isFirstInitialization: true,
+      ), isEmpty);
+    });
+  });
+
   group('SleepRecordService celebration claims', () {
     test('allows only one mounted card to claim the same celebration', () {
       final service = SleepRecordService.instance;
