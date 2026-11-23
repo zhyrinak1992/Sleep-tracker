@@ -236,7 +236,55 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    NotificationService.instance.sleepStartRequested.addListener(_onSleepStartRequested);
     _refresh();
+    if (NotificationService.instance.sleepStartRequested.value) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _showSleepStartPrompt());
+    }
+  }
+
+  void _onSleepStartRequested() {
+    if (!mounted || !NotificationService.instance.sleepStartRequested.value) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showSleepStartPrompt());
+  }
+
+  Future<void> _showSleepStartPrompt() async {
+    if (!mounted || !NotificationService.instance.sleepStartRequested.value) return;
+    NotificationService.instance.sleepStartRequested.value = false;
+    if (_open != null) return;
+
+    final choice = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Начинаем ночное наблюдение?'),
+        content: const Text(
+          'Пора подготовиться ко сну. Включить наблюдение сейчас или отложить напоминание?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, 'later'),
+            child: const Text('Отложить'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, 'start'),
+            child: const Text('Включаем'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+    if (choice == 'start') {
+      await _toggleSession();
+    } else if (choice == 'later') {
+      await NotificationService.instance.deferSleepStart();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Напомним ещё раз через 30 минут.')),
+        );
+      }
+    }
   }
 
   Future<void> _refresh() async {
@@ -379,6 +427,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final hours = duration.inHours;
     final minutes = duration.inMinutes.remainder(60);
     return '$hours ч ${minutes.toString().padLeft(2, '0')} мин';
+  }
+
+  @override
+  void dispose() {
+    NotificationService.instance.sleepStartRequested.removeListener(_onSleepStartRequested);
+    super.dispose();
   }
 
   @override
