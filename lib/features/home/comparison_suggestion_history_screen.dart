@@ -44,6 +44,12 @@ class _ComparisonSuggestionHistoryScreenState extends State<ComparisonSuggestion
     return _SuggestionHistoryData(history: history, labels: labels);
   }
 
+  String _differenceUnit(TagSleepMetric metric) => switch (metric) {
+    TagSleepMetric.sleepDuration => 'мин',
+    TagSleepMetric.morningRating => 'балла',
+    TagSleepMetric.awakeningCount => 'эпизода',
+  };
+
   String _status(ComparisonSuggestionStatus status) => switch (status) {
     ComparisonSuggestionStatus.pending => 'Ожидает обработки',
     ComparisonSuggestionStatus.opened => 'Открыто',
