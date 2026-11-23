@@ -13,6 +13,7 @@ import '../../widgets/section_card.dart';
 import 'sleep_dynamics_analysis.dart';
 import 'sleep_change_insights.dart';
 import 'sleep_change_insights_card.dart';
+import 'sleep_change_history_screens.dart';
 import 'sleep_score.dart';
 
 class SleepDynamicsScreen extends StatefulWidget {
@@ -507,6 +508,21 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
                 ),
               ),
             ],
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => SleepChangeHistoryScreen(database: widget.database),
+              )),
+              icon: const Icon(Icons.history_rounded),
+              label: const Text('История главных изменений'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => SleepChangeHistoryChartScreen(database: widget.database),
+              )),
+              icon: const Icon(Icons.timeline_rounded),
+              label: const Text('График изменений по месяцам'),
+            ),
             const SizedBox(height: 18),
             const Text('Показатели аналитики', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
