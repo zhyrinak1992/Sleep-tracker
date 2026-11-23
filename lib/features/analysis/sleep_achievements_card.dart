@@ -111,9 +111,10 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
         ),
       );
 
-      // Persist acknowledgement only after the dialog has actually been
-      // dismissed. If the process stops while it is visible, it can be shown
-      // again on the next launch instead of silently losing the achievement.
+      // If this card was removed while its dialog was open, do not mark the
+      // event as acknowledged. The next mounted card can safely offer it again.
+      // Otherwise persist acknowledgement only after the dialog is dismissed.
+      if (!mounted) return;
       await recordService.markCelebrated(event);
       if (openNight == true && mounted) {
         final database = SleepDatabase.instance;
