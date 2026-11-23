@@ -454,6 +454,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _backupPreviewRow('Измерения микроклимата', preview.climateSamples),
                 _backupPreviewRow('Теги', preview.tags),
                 _backupPreviewRow('Исторические снимки главных изменений', preview.changeHistorySnapshots),
+                _backupPreviewRow('История предложений сравнений', preview.suggestionHistoryEntries),
                 const SizedBox(height: 12),
                 const Text('Архив проверен. До выбора действия текущие данные не изменялись.'),
                 const SizedBox(height: 8),
