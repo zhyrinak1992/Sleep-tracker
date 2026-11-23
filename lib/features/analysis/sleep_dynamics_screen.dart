@@ -197,8 +197,12 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
         )).score;
       final duration = calculated.sleepDurationMinutes ?? session.duration!.inMinutes.toDouble();
       final date = DateFormat('dd.MM.yyyy', 'ru').format(session.startedAt);
-      final bedtime = DateFormat('HH:mm').format(session.startedAt);
-      final wake = session.endedAt == null ? '—' : DateFormat('HH:mm').format(session.endedAt!);
+      // Use explicit boundaries or boundaries derived from actual asleep stages.
+      // Never label time-in-bed start/end as sleep onset/wake.
+      final bedtime = calculated.sleepOnsetAt == null
+        ? '—' : DateFormat('HH:mm').format(calculated.sleepOnsetAt!);
+      final wake = calculated.sleepEndAt == null
+        ? '—' : DateFormat('HH:mm').format(calculated.sleepEndAt!);
       final rawQuality = report?['sleep_quality'];
       final rawWellbeing = report?['wellbeing'];
       nights.add({

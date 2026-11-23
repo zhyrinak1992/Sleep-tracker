@@ -28,6 +28,8 @@ void main() {
     expect(result.stageBreakdownMinutes['REM'], 320);
     expect(result.stageBreakdownMinutes['Бодрствование'], 10);
     expect(result.finalWakeAt, DateTime(2026, 11, 22, 6, 30));
+    expect(result.sleepOnsetAt, DateTime(2026, 11, 21, 23));
+    expect(result.sleepEndAt, DateTime(2026, 11, 22, 6, 30));
     expect(result.stageCoveragePercent, closeTo(450 / 510 * 100, 0.01));
     expect(result.sleepEfficiencyPercent, closeTo(440 / 510 * 100, 0.01));
   });
@@ -44,6 +46,8 @@ void main() {
     ]);
     expect(result.sleepEfficiencyPercent, isNull);
     expect(result.stageCoveragePercent, 100);
+    expect(result.sleepOnsetAt, start);
+    expect(result.sleepEndAt, DateTime(2026, 11, 22, 7));
   });
 
   test('clips stages to time in bed and merges overlapping intervals', () {

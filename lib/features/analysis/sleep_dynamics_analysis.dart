@@ -82,9 +82,11 @@ class SleepDynamicsAnalysis {
   static SleepDynamicsRollingRanges rollingRanges(DateTime now, int days) {
     if (days <= 0) throw ArgumentError.value(days, 'days', 'Длительность должна быть положительной.');
     final today = DateTime(now.year, now.month, now.day);
-    final currentStart = today.subtract(Duration(days: days - 1));
-    final currentEnd = today.add(const Duration(days: 1));
-    final previousStart = currentStart.subtract(Duration(days: days));
+    // Use calendar construction instead of Duration(days: ...): a fixed
+    // 24-hour subtraction can land at 23:00/01:00 across DST transitions.
+    final currentStart = DateTime(today.year, today.month, today.day - days + 1);
+    final currentEnd = DateTime(today.year, today.month, today.day + 1);
+    final previousStart = DateTime(currentStart.year, currentStart.month, currentStart.day - days);
     return SleepDynamicsRollingRanges(
       currentStart: currentStart,
       currentEndExclusive: currentEnd,
@@ -98,20 +100,20 @@ class SleepDynamicsAnalysis {
   static DateTime periodStart(DateTime value, SleepDynamicsPeriod period) {
     final day = DateTime(value.year, value.month, value.day);
     if (period == SleepDynamicsPeriod.week) {
-      return day.subtract(Duration(days: day.weekday - DateTime.monday));
+      return DateTime(day.year, day.month, day.day - (day.weekday - DateTime.monday));
     }
     if (period == SleepDynamicsPeriod.month) return DateTime(value.year, value.month);
     return DateTime(value.year);
   }
 
   static DateTime nextPeriodStart(DateTime start, SleepDynamicsPeriod period) {
-    if (period == SleepDynamicsPeriod.week) return start.add(const Duration(days: 7));
+    if (period == SleepDynamicsPeriod.week) return DateTime(start.year, start.month, start.day + 7);
     if (period == SleepDynamicsPeriod.month) return DateTime(start.year, start.month + 1);
     return DateTime(start.year + 1);
   }
 
   static DateTime previousPeriodStart(DateTime start, SleepDynamicsPeriod period) {
-    if (period == SleepDynamicsPeriod.week) return start.subtract(const Duration(days: 7));
+    if (period == SleepDynamicsPeriod.week) return DateTime(start.year, start.month, start.day - 7);
     if (period == SleepDynamicsPeriod.month) return DateTime(start.year, start.month - 1);
     return DateTime(start.year - 1);
   }
@@ -122,12 +124,12 @@ class SleepDynamicsAnalysis {
     int index,
   ) {
     final start = switch (period) {
-      SleepDynamicsPeriod.week => periodStart.add(Duration(days: index)),
+      SleepDynamicsPeriod.week => DateTime(periodStart.year, periodStart.month, periodStart.day + index),
       SleepDynamicsPeriod.month => DateTime(periodStart.year, periodStart.month, index * 7 + 1),
       SleepDynamicsPeriod.year => DateTime(periodStart.year, index + 1),
     };
     final end = switch (period) {
-      SleepDynamicsPeriod.week => start.add(const Duration(days: 1)),
+      SleepDynamicsPeriod.week => DateTime(start.year, start.month, start.day + 1),
       SleepDynamicsPeriod.month => DateTime(periodStart.year, periodStart.month, (index + 1) * 7 + 1).isBefore(DateTime(periodStart.year, periodStart.month + 1))
         ? DateTime(periodStart.year, periodStart.month, (index + 1) * 7 + 1)
         : DateTime(periodStart.year, periodStart.month + 1),

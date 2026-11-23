@@ -24,5 +24,9 @@ jobs:
         run: flutter pub get
       - name: Analyze Dart source
         run: flutter analyze --no-fatal-infos
+      - name: Verify calendar analytics across DST
+        env:
+          TZ: Europe/Berlin
+        run: flutter test test/sleep_dynamics_analysis_test.dart --reporter expanded
       - name: Run tests
         run: flutter test --reporter expanded
