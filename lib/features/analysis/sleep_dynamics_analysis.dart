@@ -58,7 +58,32 @@ class SleepDynamicsSummary {
   final List<double?> chartWellbeingValues;
 }
 
+class SleepDynamicsRollingRanges {
+  const SleepDynamicsRollingRanges({
+    required this.currentStart,
+    required this.currentEndExclusive,
+    required this.previousStart,
+    required this.previousEndExclusive,
+  });
+  final DateTime currentStart;
+  final DateTime currentEndExclusive;
+  final DateTime previousStart;
+  final DateTime previousEndExclusive;
+}
+
 class SleepDynamicsAnalysis {
+  static SleepDynamicsRollingRanges rollingThirtyDayRanges(DateTime now) {
+    final today = DateTime(now.year, now.month, now.day);
+    final currentStart = today.subtract(const Duration(days: 29));
+    final currentEnd = today.add(const Duration(days: 1));
+    final previousStart = currentStart.subtract(const Duration(days: 30));
+    return SleepDynamicsRollingRanges(
+      currentStart: currentStart,
+      currentEndExclusive: currentEnd,
+      previousStart: previousStart,
+      previousEndExclusive: currentStart,
+    );
+  }
   static DateTime periodStart(DateTime value, SleepDynamicsPeriod period) {
     final day = DateTime(value.year, value.month, value.day);
     if (period == SleepDynamicsPeriod.week) {
