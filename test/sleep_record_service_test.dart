@@ -35,6 +35,31 @@ void main() {
         'value': double.nan,
         'achievedAt': '2026-11-20T07:00:00Z',
       }), isNull);
+      expect(SleepRecordEvent.fromMap({
+        'type': 'sleep_score',
+        'sessionId': 'night-1',
+        'value': 101,
+        'achievedAt': '2026-11-20T07:00:00Z',
+      }), isNull);
+      expect(SleepRecordEvent.fromMap({
+        'type': 'awakening_count',
+        'sessionId': 'night-1',
+        'value': 1.5,
+        'achievedAt': '2026-11-20T07:00:00Z',
+      }), isNull);
+      expect(SleepRecordEvent.fromMap({
+        'type': 'awakening_count',
+        'sessionId': 'night-1',
+        'value': -1,
+        'achievedAt': '2026-11-20T07:00:00Z',
+      }), isNull);
+      final normalized = SleepRecordEvent.fromMap({
+        'type': 'sleep_score',
+        'sessionId': 'night-1',
+        'value': 95.0,
+        'achievedAt': '2026-11-20T07:00:00Z',
+      });
+      expect(normalized!.value, 95);
     });
 
     test('keeps valid persisted history unchanged', () {
