@@ -1,3 +1,7 @@
+import '../../models/sleep_session.dart';
+import '../diary/sleep_session_metrics.dart';
+import 'individual_sleep_need.dart';
+
 /// Transparent 0–100 descriptive sleep-quality score.
 /// The score is not a medical assessment. Missing components are excluded
 /// and the remaining weights are proportionally normalized.
@@ -65,6 +69,46 @@ class SleepScoreCalculator {
   static const double minimumAvailableWeight = 50;
   static const int minimumAvailableComponents = 2;
   static const int durationGraceMinutes = 180;
+
+  /// Calculates one night's score using only the 90 days of personal
+  /// history preceding that night. Future nights never influence its target.
+  static SleepScoreResult calculateForSession({
+    required SleepSession session,
+    required Iterable<SleepSession> historySessions,
+    required Map<String, Map<String, Object?>> morningReports,
+    required Map<String, List<Map<String, Object?>>> stagesBySession,
+  }) {
+    final cutoff = session.startedAt.subtract(const Duration(days: 90));
+    final history = historySessions.where((item) =>
+      item.id != session.id &&
+      item.startedAt.isBefore(session.startedAt) &&
+      !item.startedAt.isBefore(cutoff) &&
+      item.endedAt != null
+    ).toList();
+    final need = IndividualSleepNeedAnalysis.evaluate(
+      sessions: history,
+      morningReports: morningReports,
+      stagesBySession: stagesBySession,
+      calculatedAt: session.startedAt,
+    );
+    final stages = stagesBySession[session.id] ?? const <Map<String, Object?>>[];
+    final metrics = SleepSessionMetrics.calculate(session: session, stages: stages);
+    final report = morningReports[session.id];
+    final qualityValue = report?['sleep_quality'];
+    final quality = qualityValue is num ? qualityValue.toInt() : null;
+    final hasAwakeningCoverage = stages.isNotEmpty &&
+      metrics.stageCoveragePercent != null &&
+      metrics.stageCoveragePercent! >= 80;
+    return calculate(
+      sleepDurationMinutes: metrics.sleepDurationMinutes,
+      personalLowerMinutes: need.isSufficient ? need.lowerMinutes : null,
+      personalUpperMinutes: need.isSufficient ? need.upperMinutes : null,
+      sleepEfficiencyPercent: metrics.sleepEfficiencyPercent,
+      awakeningCount: metrics.awakeningCount,
+      awakeningsAvailable: hasAwakeningCoverage,
+      subjectiveQuality: quality,
+    );
+  }
 
   static SleepScoreResult calculate({
     required int? sleepDurationMinutes,
