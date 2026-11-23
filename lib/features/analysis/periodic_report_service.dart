@@ -55,10 +55,11 @@ class PeriodicReportSnapshot {
 class PeriodicReportService {
   PeriodicReportService(this.database);
   final SleepDatabase database;
-  static const metadataPrefix = 'periodic_report_v5_';
-  static const previousMetadataPrefix = 'periodic_report_v4_';
-  static const olderMetadataPrefix = 'periodic_report_v3_';
-  static const olderMetadataPrefixV2 = 'periodic_report_v2_';
+  static const metadataPrefix = 'periodic_report_v6_';
+  static const previousMetadataPrefix = 'periodic_report_v5_';
+  static const olderMetadataPrefix = 'periodic_report_v4_';
+  static const olderMetadataPrefixV2 = 'periodic_report_v3_';
+  static const olderMetadataPrefixV3 = 'periodic_report_v2_';
   static const legacyMetadataPrefix = 'periodic_report_v1_';
 
   Future<List<PeriodicReportSnapshot>> generateClosedReports({DateTime? now}) async {
@@ -73,6 +74,8 @@ class PeriodicReportService {
     final audio = await database.getAudioEvents();
     final notes = await database.getNotes();
     final tagsBySession = await database.getTagsForSessions(completed.map((s) => s.id).toList());
+    final allSleepMetrics = await database.getAllMetrics();
+    final allClimateSamples = await database.getClimateSamples();
     final tagLabels = <String, String>{
       for (final tag in SleepTag.catalog) tag.key: tag.label,
     };
@@ -106,6 +109,7 @@ class PeriodicReportService {
               kind: kind, start: cursor, end: end, sessions: selected,
               previousSessions: previous, stages: stages, morning: morning,
               audio: audio, notes: notes, allSessions: completed,
+              allSleepMetrics: allSleepMetrics, allClimateSamples: allClimateSamples,
               scoreCache: scoreCache, tagsBySession: tagsBySession, tagLabels: tagLabels,
             );
             await database.setAppMetadata(metadataPrefix + id, jsonEncode(snapshot));
@@ -122,6 +126,7 @@ class PeriodicReportService {
     final previous = await database.getAppMetadataByPrefix(previousMetadataPrefix);
     final older = await database.getAppMetadataByPrefix(olderMetadataPrefix);
     final olderV2 = await database.getAppMetadataByPrefix(olderMetadataPrefixV2);
+    final olderV3 = await database.getAppMetadataByPrefix(olderMetadataPrefixV3);
     final current = await database.getAppMetadataByPrefix(metadataPrefix);
     final byId = <String, PeriodicReportSnapshot>{};
     for (final value in legacy.values) {
@@ -130,7 +135,13 @@ class PeriodicReportService {
         byId[report.id] = report;
       } catch (_) {}
     }
-    // New v5 snapshots win; older v1/v2/v3/v4 snapshots remain readable and intact.
+    // New v6 snapshots win; older v1/v2/v3/v4/v5 snapshots remain readable and intact.
+    for (final value in olderV3.values) {
+      try {
+        final report = PeriodicReportSnapshot.decode(value);
+        byId[report.id] = report;
+      } catch (_) {}
+    }
     for (final value in olderV2.values) {
       try {
         final report = PeriodicReportSnapshot.decode(value);
@@ -167,6 +178,8 @@ class PeriodicReportService {
     required Map<String, Map<String, Object?>> morning,
     required List<Map<String, Object?>> audio, required List<SleepNote> notes,
     required List<SleepSession> allSessions,
+    required List<Map<String, Object?>> allSleepMetrics,
+    required List<Map<String, Object?>> allClimateSamples,
     required Map<String, SleepScoreResult> scoreCache,
     required Map<String, Set<String>> tagsBySession,
     required Map<String, String> tagLabels,
@@ -250,6 +263,21 @@ class PeriodicReportService {
       final durations = <String, double>{};
       final scores = <String, double>{};
       final awakeningsBySession = <String, double>{};
+      final efficiencyBySession = <String, double>{};
+      final latencyBySession = <String, double>{};
+      final qualityBySession = <String, double>{};
+      final wellbeingBySession = <String, double>{};
+      final physiology = <String, Map<String, List<double>>>{
+        'heartRate': <String, List<double>>{},
+        'respiratoryRate': <String, List<double>>{},
+        'bloodOxygen': <String, List<double>>{},
+        'hrv': <String, List<double>>{},
+      };
+      final climate = <String, Map<String, List<double>>>{
+        'roomTemperature': <String, List<double>>{},
+        'roomHumidity': <String, List<double>>{},
+      };
+      final selectedIds = selected.map((session) => session.id).toSet();
       for (final session in selected) {
         final metric = SleepSessionMetrics.calculate(
           session: session,
@@ -257,6 +285,13 @@ class PeriodicReportService {
         );
         final duration = metric.sleepDurationMinutes;
         if (duration != null && duration > 0) durations[session.id] = duration.toDouble();
+        final efficiency = metric.sleepEfficiencyPercent;
+        if (efficiency != null && efficiency.isFinite) efficiencyBySession[session.id] = efficiency;
+        final latency = metric.sleepLatencyMinutes;
+        if (latency != null && latency >= 0) latencyBySession[session.id] = latency.toDouble();
+        final report = morning[session.id];
+        if (report?['sleep_quality'] is num) qualityBySession[session.id] = (report!['sleep_quality'] as num).toDouble();
+        if (report?['wellbeing'] is num) wellbeingBySession[session.id] = (report!['wellbeing'] as num).toDouble();
         final score = scoreCache.putIfAbsent(session.id, () =>
           SleepScoreCalculator.calculateForSession(
             session: session,
@@ -271,12 +306,57 @@ class PeriodicReportService {
           awakeningsBySession[session.id] = metric.awakeningCount.toDouble();
         }
       }
+      final metricTypeToPattern = <String, String>{
+        'Пульс': 'heartRate',
+        'Частота дыхания': 'respiratoryRate',
+        'Насыщение кислородом': 'bloodOxygen',
+        'Вариабельность пульса SDNN': 'hrv',
+      };
+      for (final row in allSleepMetrics) {
+        final sessionId = row['session_id'];
+        final patternKey = metricTypeToPattern[row['metric_type']];
+        final value = row['value'];
+        if (sessionId is String && selectedIds.contains(sessionId) &&
+            patternKey != null && value is num && value.toDouble().isFinite) {
+          physiology[patternKey]!.putIfAbsent(sessionId, () => <double>[]).add(value.toDouble());
+        }
+      }
+      for (final row in allClimateSamples) {
+        final sessionId = row['session_id'];
+        final metricType = row['metric_type'];
+        final value = row['value'];
+        final patternKey = metricType == 'temperature' ? 'roomTemperature'
+          : metricType == 'humidity' ? 'roomHumidity' : null;
+        if (sessionId is String && selectedIds.contains(sessionId) &&
+            patternKey != null && value is num && value.toDouble().isFinite) {
+          climate[patternKey]!.putIfAbsent(sessionId, () => <double>[]).add(value.toDouble());
+        }
+      }
+      Map<String, double> perNightAverage(Map<String, List<double>> values) => {
+        for (final entry in values.entries)
+          if (entry.value.isNotEmpty)
+            entry.key: entry.value.reduce((a, b) => a + b) / entry.value.length,
+      };
+      final additionalMetrics = <String, Map<String, double>>{};
+      if (efficiencyBySession.isNotEmpty) additionalMetrics['efficiency'] = efficiencyBySession;
+      if (latencyBySession.isNotEmpty) additionalMetrics['sleepLatency'] = latencyBySession;
+      if (qualityBySession.isNotEmpty) additionalMetrics['subjectiveQuality'] = qualityBySession;
+      if (wellbeingBySession.isNotEmpty) additionalMetrics['wellbeing'] = wellbeingBySession;
+      for (final entry in physiology.entries) {
+        final values = perNightAverage(entry.value);
+        if (values.isNotEmpty) additionalMetrics[entry.key] = values;
+      }
+      for (final entry in climate.entries) {
+        final values = perNightAverage(entry.value);
+        if (values.isNotEmpty) additionalMetrics[entry.key] = values;
+      }
       return PeriodicTagPatternAnalyzer.analyze(
         sessions: selected,
         tagsBySession: tagsBySession,
         durationBySession: durations,
         scoreBySession: scores,
         awakeningsBySession: awakeningsBySession,
+        additionalMetrics: additionalMetrics,
         tagLabels: tagLabels,
       );
     }
@@ -302,7 +382,7 @@ class PeriodicReportService {
     }).toList();
 
     final data = <String, Object?>{
-      'schemaVersion': 4, 'id': _id(kind, start), 'kind': kind.name,
+      'schemaVersion': 5, 'id': _id(kind, start), 'kind': kind.name,
       'start': start.toIso8601String(), 'endExclusive': end.toIso8601String(),
       'generatedAt': DateTime.now().toIso8601String(),
       ...current, 'audioEventCount': events.length, 'audioCategories': categories,

@@ -120,15 +120,31 @@ class PdfReportService {
         content.add(pw.SizedBox(height: 7));
         content.add(pw.Text('${pattern['label'] ?? key} · с отметкой: ${pattern['withTagNights'] ?? 0} ночей; без отметки: ${pattern['withoutTagNights'] ?? 0} ночей',
           style: pw.TextStyle(fontWeight: pw.FontWeight.bold)));
-        for (final metric in ['duration', 'score', 'awakenings']) {
-          final current = metrics[metric] is Map
-              ? Map<String, Object?>.from(metrics[metric] as Map)
+        const metricLabels = <String, (String, String)>{
+          'duration': ('Продолжительность', ' мин'),
+          'score': ('Оценка сна', ' балла'),
+          'awakenings': ('Пробуждения', ' эпиз.'),
+          'efficiency': ('Эффективность сна', '%'),
+          'sleepLatency': ('Задержка засыпания', ' мин'),
+          'subjectiveQuality': ('Субъективное качество', ' / 5'),
+          'wellbeing': ('Утреннее самочувствие', ' / 5'),
+          'heartRate': ('Пульс', ' уд/мин'),
+          'respiratoryRate': ('Частота дыхания', ' вдох/мин'),
+          'bloodOxygen': ('Насыщение кислородом', '%'),
+          'hrv': ('Вариабельность пульса SDNN', ' мс'),
+          'roomTemperature': ('Температура датчика', ' °C'),
+          'roomHumidity': ('Влажность датчика', '%'),
+        };
+        for (final metric in metricLabels.entries) {
+          if (!metrics.containsKey(metric.key)) continue;
+          final current = metrics[metric.key] is Map
+              ? Map<String, Object?>.from(metrics[metric.key] as Map)
               : <String, Object?>{};
-          final old = oldMetrics[metric] is Map
-              ? Map<String, Object?>.from(oldMetrics[metric] as Map)
+          final old = oldMetrics[metric.key] is Map
+              ? Map<String, Object?>.from(oldMetrics[metric.key] as Map)
               : <String, Object?>{};
-          final suffix = metric == 'duration' ? ' мин' : metric == 'score' ? ' балла' : ' эпиз.';
-          final label = metric == 'duration' ? 'Продолжительность' : metric == 'score' ? 'Оценка сна' : 'Пробуждения';
+          final suffix = metric.value.$2;
+          final label = metric.value.$1;
           final withValue = average(current['withTagAverage'], suffix: suffix);
           final withoutValue = average(current['withoutTagAverage'], suffix: suffix);
           final oldWith = average(old['withTagAverage'], suffix: suffix);
