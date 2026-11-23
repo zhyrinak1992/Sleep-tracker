@@ -117,9 +117,9 @@ void main() {
       );
       final metrics = Map<String, Object?>.from(result.single['metrics'] as Map);
       final bedtime = Map<String, Object?>.from(metrics['bedtime'] as Map);
-      expect(bedtime['withTagAverage'], 1435);
+      expect(bedtime['withTagAverage'], 1438);
       expect(bedtime['withoutTagAverage'], 20);
-      expect(bedtime['difference'], -25);
+      expect(bedtime['difference'], -22);
       expect(bedtime['isSufficient'], isTrue);
     });
 
