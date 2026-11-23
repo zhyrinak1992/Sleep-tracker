@@ -199,7 +199,9 @@ class SleepRecordService {
             achievedAt: session.endedAt!,
           );
           history.add(event);
-          newRecords.add(event);
+          if (!isFirstInitialization && !celebratedKeys.contains(eventKey)) {
+            newRecords.add(event);
+          }
           knownEvents.add(eventKey);
           fewestAwakenings = value;
         }
