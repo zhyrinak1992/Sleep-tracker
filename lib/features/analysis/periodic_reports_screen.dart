@@ -160,11 +160,7 @@ class _ReportCard extends StatelessWidget {
                     if (raw is! num) return 'нет данных';
                     if (metricKey == 'bedtime' || metricKey == 'wakeTime') {
                       final minute = raw.round().remainder(1440);
-                      return minute.toString().padLeft(2, '0').replaceRange(
-                        minute.toString().padLeft(2, '0').length - 2,
-                        minute.toString().padLeft(2, '0').length,
-                        (minute % 60).toString().padLeft(2, '0'),
-                      );
+                      return '${(minute ~/ 60).toString().padLeft(2, '0')}:${(minute % 60).toString().padLeft(2, '0')}';
                     }
                     return raw.toStringAsFixed(1) + suffix;
                   }
