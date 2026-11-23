@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:intl/intl.dart';
 import '../../data/sleep_database.dart';
 import '../../models/sleep_session.dart';
 import '../../models/sleep_note.dart';
@@ -21,12 +20,23 @@ class PeriodicReportSnapshot {
   double? get averageQuality => (data['averageQuality'] as num?)?.toDouble();
   double? get averageWellbeing => (data['averageWellbeing'] as num?)?.toDouble();
 
+  static const _monthNames = [
+    'январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
+    'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь',
+  ];
+  static const _monthGenitive = [
+    'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+    'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+  ];
+  static String monthName(int month) => _monthNames[month - 1];
+
   String get title {
     if (kind == 'week') {
       final last = endExclusive.subtract(const Duration(days: 1));
-      return 'Неделя ' + DateFormat('d MMM', 'ru').format(start) + ' — ' + DateFormat('d MMM yyyy', 'ru').format(last);
+      return 'Неделя ' + start.day.toString() + ' ' + _monthGenitive[start.month - 1] +
+        ' — ' + last.day.toString() + ' ' + _monthGenitive[last.month - 1] + ' ' + last.year.toString();
     }
-    if (kind == 'month') return DateFormat('LLLL yyyy', 'ru').format(start);
+    if (kind == 'month') return _monthNames[start.month - 1] + ' ' + start.year.toString();
     return 'Год ' + start.year.toString();
   }
 
@@ -204,5 +214,5 @@ class PeriodicReportService {
     return DateTime(value.year - 1);
   }
   static String _id(PeriodicReportKind kind, DateTime start) =>
-    kind.name + '_' + DateFormat('yyyy-MM-dd').format(start);
+    kind.name + '_' + start.year.toString().padLeft(4, '0') + '-' + start.month.toString().padLeft(2, '0') + '-' + start.day.toString().padLeft(2, '0');
 }
