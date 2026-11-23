@@ -41,76 +41,84 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
   }
 
   Future<void> _showRecordCelebration(SleepRecordEvent event) async {
-    if (!mounted) return;
-    final isScore = event.type == 'sleep_score';
-    final title = isScore ? 'Новый рекорд SleepScore!' : 'Новый рекорд пробуждений!';
-    final value = isScore ? '${event.value.toInt()} из 100' : '${event.value.toInt()} за ночь';
-    final date = DateFormat('d MMMM yyyy', 'ru').format(event.achievedAt);
-    await SleepRecordService.instance.markCelebrated(event);
-    if (!mounted) return;
-    final openNight = await showDialog<bool>(
-      context: context,
-      barrierDismissible: true,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF202746),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0.65, end: 1),
-              duration: const Duration(milliseconds: 650),
-              curve: Curves.elasticOut,
-              builder: (context, scale, child) => Transform.scale(scale: scale, child: child),
-              child: Container(
-                width: 88,
-                height: 88,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [AppTheme.teal.withOpacity(0.95), const Color(0xFF5368C8)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+    final recordService = SleepRecordService.instance;
+    if (!mounted || !recordService.tryClaimCelebration(event)) return;
+    try {
+      final isScore = event.type == 'sleep_score';
+      final title = isScore ? 'Новый рекорд SleepScore!' : 'Новый рекорд пробуждений!';
+      final value = isScore ? '${event.value.toInt()} из 100' : '${event.value.toInt()} за ночь';
+      final date = DateFormat('d MMMM yyyy', 'ru').format(event.achievedAt);
+      final openNight = await showDialog<bool>(
+        context: context,
+        barrierDismissible: true,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: const Color(0xFF202746),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.65, end: 1),
+                duration: const Duration(milliseconds: 650),
+                curve: Curves.elasticOut,
+                builder: (context, scale, child) => Transform.scale(scale: scale, child: child),
+                child: Container(
+                  width: 88,
+                  height: 88,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [AppTheme.teal.withOpacity(0.95), const Color(0xFF5368C8)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    boxShadow: [BoxShadow(color: AppTheme.teal.withOpacity(0.25), blurRadius: 24)],
                   ),
-                  boxShadow: [BoxShadow(color: AppTheme.teal.withOpacity(0.25), blurRadius: 24)],
+                  child: Icon(isScore ? Icons.stars_rounded : Icons.nights_stay_rounded, size: 48, color: Colors.white),
                 ),
-                child: Icon(isScore ? Icons.stars_rounded : Icons.nights_stay_rounded, size: 48, color: Colors.white),
               ),
+              const SizedBox(height: 20),
+              Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text(value, textAlign: TextAlign.center, style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700, color: AppTheme.teal)),
+              const SizedBox(height: 8),
+              Text(date, style: const TextStyle(color: AppTheme.muted)),
+              const SizedBox(height: 12),
+              const Text('Отличный результат! Эта ночь теперь отмечена в вашей истории достижений.', textAlign: TextAlign.center, style: TextStyle(height: 1.4)),
+            ],
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Позже')),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              icon: const Icon(Icons.nightlight_round),
+              label: const Text('Открыть эту ночь'),
             ),
-            const SizedBox(height: 20),
-            Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text(value, textAlign: TextAlign.center, style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700, color: AppTheme.teal)),
-            const SizedBox(height: 8),
-            Text(date, style: const TextStyle(color: AppTheme.muted)),
-            const SizedBox(height: 12),
-            const Text('Отличный результат! Эта ночь теперь отмечена в вашей истории достижений.', textAlign: TextAlign.center, style: TextStyle(height: 1.4)),
           ],
         ),
-        actionsAlignment: MainAxisAlignment.center,
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Позже')),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            icon: const Icon(Icons.nightlight_round),
-            label: const Text('Открыть эту ночь'),
-          ),
-        ],
-      ),
-    );
-    if (openNight == true && mounted) {
-      final database = SleepDatabase.instance;
-      final session = await database.getSessionById(event.sessionId);
-      if (!mounted) return;
-      if (session == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Запись этой ночи больше недоступна.')),
-        );
-        return;
+      );
+
+      // Persist acknowledgement only after the dialog has actually been
+      // dismissed. If the process stops while it is visible, it can be shown
+      // again on the next launch instead of silently losing the achievement.
+      await recordService.markCelebrated(event);
+      if (openNight == true && mounted) {
+        final database = SleepDatabase.instance;
+        final session = await database.getSessionById(event.sessionId);
+        if (!mounted) return;
+        if (session == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Запись этой ночи больше недоступна.')),
+          );
+          return;
+        }
+        await Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => SleepSessionDetailScreen(database: database, session: session),
+        ));
       }
-      await Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => SleepSessionDetailScreen(database: database, session: session),
-      ));
+    } finally {
+      recordService.releaseCelebration(event);
     }
   }
 
