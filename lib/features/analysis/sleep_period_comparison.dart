@@ -59,8 +59,8 @@ class SleepPeriodComparison {
         completed.fold<int>(0, (sum, item) => sum + item.duration!.inMinutes) / completed.length,
       averageRating: rated.isEmpty ? null :
         rated.fold<int>(0, (sum, item) => sum + item.morningRating!) / rated.length,
-      bedtimeDeviationMinutes: regularity.bedtimeMad,
-      wakeTimeDeviationMinutes: regularity.wakeMad,
+      bedtimeDeviationMinutes: regularity.nights.length < 2 ? null : regularity.bedtimeMad,
+      wakeTimeDeviationMinutes: regularity.nights.length < 2 ? null : regularity.wakeMad,
       regularitySampleCount: regularity.nights.length,
     );
   }
@@ -147,8 +147,8 @@ class SleepPeriodDetailSummary {
       qualitySamples: quality.length,
       averageWellbeing: average(wellbeing),
       wellbeingSamples: wellbeing.length,
-      typicalBedtimeMinute: regularity.typicalBedtimeMinute,
-      typicalWakeMinute: regularity.typicalWakeMinute,
+      typicalBedtimeMinute: regularity.nights.length < 2 ? null : regularity.typicalBedtimeMinute,
+      typicalWakeMinute: regularity.nights.length < 2 ? null : regularity.typicalWakeMinute,
       regularitySamples: regularity.nights.length,
       audio: audio,
     );
