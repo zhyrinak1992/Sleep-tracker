@@ -112,6 +112,37 @@ class SleepDynamicsAnalysis {
     return DateTime(start.year - 1);
   }
 
+  static ({DateTime start, DateTime endExclusive}) bucketRange(
+    DateTime periodStart,
+    SleepDynamicsPeriod period,
+    int index,
+  ) {
+    final start = switch (period) {
+      SleepDynamicsPeriod.week => periodStart.add(Duration(days: index)),
+      SleepDynamicsPeriod.month => DateTime(periodStart.year, periodStart.month, index * 7 + 1),
+      SleepDynamicsPeriod.year => DateTime(periodStart.year, index + 1),
+    };
+    final end = switch (period) {
+      SleepDynamicsPeriod.week => start.add(const Duration(days: 1)),
+      SleepDynamicsPeriod.month => DateTime(periodStart.year, periodStart.month, (index + 1) * 7 + 1).isBefore(DateTime(periodStart.year, periodStart.month + 1))
+        ? DateTime(periodStart.year, periodStart.month, (index + 1) * 7 + 1)
+        : DateTime(periodStart.year, periodStart.month + 1),
+      SleepDynamicsPeriod.year => DateTime(periodStart.year, index + 2),
+    };
+    if (index < 0 || index >= switch (period) {
+      SleepDynamicsPeriod.week => 7,
+      SleepDynamicsPeriod.month => 5,
+      SleepDynamicsPeriod.year => 12,
+    }) {
+      throw RangeError.index(index, List<int>.generate(switch (period) {
+        SleepDynamicsPeriod.week => 7,
+        SleepDynamicsPeriod.month => 5,
+        SleepDynamicsPeriod.year => 12,
+      }, (i) => i));
+    }
+    return (start: start, endExclusive: end);
+  }
+
   static SleepDynamicsSummary summarize({
     required Iterable<SleepSession> sessions,
     required Map<String, List<Map<String, Object?>>> stagesBySession,

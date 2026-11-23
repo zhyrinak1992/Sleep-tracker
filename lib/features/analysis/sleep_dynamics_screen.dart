@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../data/sleep_database.dart';
 import '../../models/sleep_session.dart';
+import '../diary/sleep_session_metrics.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/screen_header.dart';
 import '../../widgets/section_card.dart';
@@ -102,6 +103,116 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
     DateFormat('d MMM', 'ru').format(start) + ' — ' +
     DateFormat('d MMM yyyy', 'ru').format(endExclusive.subtract(const Duration(days: 1)));
 
+  Future<void> _showBucketDetails(
+    _DynamicsData data,
+    DateTime periodStart,
+    DateTime previousPeriodStart,
+    int index,
+    String metricKey,
+    String metricTitle,
+  ) async {
+    List<({SleepSession session, double value})> observations(DateTime start) {
+      final range = SleepDynamicsAnalysis.bucketRange(start, _period, index);
+      final selected = data.sessions.where((session) =>
+        !session.startedAt.isBefore(range.start) &&
+        session.startedAt.isBefore(range.endExclusive) &&
+        session.endedAt != null && session.duration != null &&
+        session.duration!.inMinutes > 0).toList()
+        ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
+      final result = <({SleepSession session, double value})>[];
+      for (final session in selected) {
+        final stages = data.stages[session.id] ?? const <Map<String, Object?>>[];
+        final metrics = SleepSessionMetrics.calculate(session: session, stages: stages);
+        double? value;
+        switch (metricKey) {
+          case 'duration':
+            final minutes = metrics.sleepDurationMinutes ?? session.duration!.inMinutes;
+            if (minutes > 0) value = minutes.toDouble();
+            break;
+          case 'score':
+            value = data.scoreCache.putIfAbsent(session.id, () =>
+              SleepScoreCalculator.calculateForSession(
+                session: session,
+                historySessions: data.sessions,
+                morningReports: data.morning,
+                stagesBySession: data.stages,
+              ),
+            ).score;
+            break;
+          case 'efficiency':
+            value = metrics.sleepEfficiencyPercent;
+            break;
+          case 'awakenings':
+            if (stages.isNotEmpty && metrics.stageCoveragePercent != null) {
+              value = metrics.awakeningCount.toDouble();
+            }
+            break;
+          case 'quality':
+            final raw = data.morning[session.id]?['sleep_quality'];
+            if (raw is num && raw.toDouble().isFinite) value = raw.toDouble();
+            break;
+          case 'wellbeing':
+            final raw = data.morning[session.id]?['wellbeing'];
+            if (raw is num && raw.toDouble().isFinite) value = raw.toDouble();
+            break;
+        }
+        if (value != null && value.isFinite) result.add((session: session, value: value));
+      }
+      return result;
+    }
+
+    final current = observations(periodStart);
+    final previous = observations(previousPeriodStart);
+    double? average(List<({SleepSession session, double value})> values) =>
+      values.isEmpty ? null : values.fold<double>(0, (sum, item) => sum + item.value) / values.length;
+    String shown(double? value) {
+      if (value == null) return 'Нет данных';
+      if (metricKey == 'duration') return _duration(value);
+      if (metricKey == 'efficiency') return value.toStringAsFixed(1) + '%';
+      if (metricKey == 'score') return value.toStringAsFixed(0) + ' / 100';
+      if (metricKey == 'quality' || metricKey == 'wellbeing') return value.toStringAsFixed(1) + ' / 5';
+      return value.toStringAsFixed(1);
+    }
+    String periodLabel(DateTime start) {
+      final range = SleepDynamicsAnalysis.bucketRange(start, _period, index);
+      return _dateRange(range.start, range.endExclusive);
+    }
+    Widget list(List<({SleepSession session, double value})> values) {
+      if (values.isEmpty) return const Text('Нет доступных измерений', style: TextStyle(color: AppTheme.muted));
+      return Column(children: values.map((item) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        child: Row(children: [
+          Expanded(child: Text(DateFormat('dd.MM.yyyy · HH:mm', 'ru').format(item.session.startedAt))),
+          Text(shown(item.value), style: const TextStyle(fontWeight: FontWeight.w600)),
+        ]),
+      )).toList());
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(metricTitle),
+        content: SizedBox(width: 420, child: SingleChildScrollView(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Текущий срез · ${periodLabel(periodStart)}', style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text('Среднее: ${shown(average(current))} · n=${current.length}'),
+            list(current),
+            const Divider(height: 22),
+            Text('Предыдущий срез · ${periodLabel(previousPeriodStart)}', style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text('Среднее: ${shown(average(previous))} · n=${previous.length}'),
+            list(previous),
+            const SizedBox(height: 8),
+            const Text('Показываются только фактические измерения. Отсутствующие значения не заменяются нулями.',
+              style: TextStyle(color: AppTheme.muted, fontSize: 11)),
+          ],
+        ))),
+        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Закрыть'))],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Моя динамика сна'), actions: [
@@ -187,6 +298,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
               SizedBox(height: 150, child: _DynamicsChart(
                 values: current.chartValues, period: _period, maxValue: 720,
                 formatValue: (value) => (value / 60).toStringAsFixed(1) + ' ч',
+                onTap: (index) => _showBucketDetails(data, start, previousStart, index, 'duration', 'Продолжительность сна'),
               )),
             ])),
             if (_hasData(current.chartScoreValues)) ...[
@@ -197,6 +309,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
                 period: _period,
                 maxValue: 100,
                 formatValue: (value) => value.toStringAsFixed(0) + ' / 100',
+                onBucketTap: (index) => _showBucketDetails(data, start, previousStart, index, 'score', 'Оценка качества сна'),
               ),
             ],
             if (_hasData(current.chartEfficiencyValues)) ...[
@@ -207,6 +320,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
                 period: _period,
                 maxValue: 100,
                 formatValue: (value) => value.toStringAsFixed(0) + '%',
+                onBucketTap: (index) => _showBucketDetails(data, start, previousStart, index, 'efficiency', 'Эффективность сна'),
               ),
             ],
             if (_hasData(current.chartAwakeningValues)) ...[
@@ -217,6 +331,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
                 period: _period,
                 maxValue: 10,
                 formatValue: (value) => value.toStringAsFixed(1),
+                onBucketTap: (index) => _showBucketDetails(data, start, previousStart, index, 'awakenings', 'Пробуждения'),
               ),
             ],
             if (_hasData(current.chartQualityValues)) ...[
@@ -227,6 +342,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
                 period: _period,
                 maxValue: 5,
                 formatValue: (value) => value.toStringAsFixed(1) + ' / 5',
+                onBucketTap: (index) => _showBucketDetails(data, start, previousStart, index, 'quality', 'Субъективное качество'),
               ),
             ],
             if (_hasData(current.chartWellbeingValues)) ...[
@@ -237,6 +353,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
                 period: _period,
                 maxValue: 5,
                 formatValue: (value) => value.toStringAsFixed(1) + ' / 5',
+                onBucketTap: (index) => _showBucketDetails(data, start, previousStart, index, 'wellbeing', 'Утреннее самочувствие'),
               ),
             ],
             const SizedBox(height: 12),
@@ -549,13 +666,14 @@ class _DynamicsMetricCard extends StatelessWidget {
 class _DynamicsChartCard extends StatelessWidget {
   const _DynamicsChartCard({
     required this.title, required this.values, required this.period,
-    required this.maxValue, required this.formatValue,
+    required this.maxValue, required this.formatValue, required this.onBucketTap,
   });
   final String title;
   final List<double?> values;
   final SleepDynamicsPeriod period;
   final double maxValue;
   final String Function(double) formatValue;
+  final ValueChanged<int> onBucketTap;
 
   @override
   Widget build(BuildContext context) => SectionCard(child: Column(
@@ -564,7 +682,7 @@ class _DynamicsChartCard extends StatelessWidget {
       Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
       const SizedBox(height: 14),
       SizedBox(height: 150, child: _DynamicsChart(
-        values: values, period: period, maxValue: maxValue, formatValue: formatValue,
+        values: values, period: period, maxValue: maxValue, formatValue: formatValue, onTap: onBucketTap,
       )),
     ],
   ));
@@ -573,11 +691,13 @@ class _DynamicsChartCard extends StatelessWidget {
 class _DynamicsChart extends StatelessWidget {
   const _DynamicsChart({
     required this.values, required this.period, required this.maxValue, required this.formatValue,
+    required this.onTap,
   });
   final List<double?> values;
   final SleepDynamicsPeriod period;
   final double maxValue;
   final String Function(double) formatValue;
+  final ValueChanged<int> onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -589,24 +709,31 @@ class _DynamicsChart extends StatelessWidget {
     return Row(crossAxisAlignment: CrossAxisAlignment.end, children: List.generate(values.length, (index) {
       final value = values[index];
       final height = value == null ? 0.0 : (value / maxValue * 105).clamp(0.0, 105.0).toDouble();
-      return Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
-        if (value != null) Text(formatValue(value), style: const TextStyle(fontSize: 9, color: AppTheme.muted)),
-        const SizedBox(height: 4),
-        Container(
-          height: 108,
-          alignment: Alignment.bottomCenter,
-          child: Container(
-            width: 17,
-            height: height,
-            decoration: BoxDecoration(
-              color: value == null ? AppTheme.surfaceLight : AppTheme.teal,
-              borderRadius: BorderRadius.circular(7),
+      return Expanded(child: InkWell(
+        onTap: () => onTap(index),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
+            if (value != null) Text(formatValue(value), style: const TextStyle(fontSize: 9, color: AppTheme.muted)),
+            const SizedBox(height: 4),
+            Container(
+              height: 108,
+              alignment: Alignment.bottomCenter,
+              child: Container(
+                width: 17,
+                height: height,
+                decoration: BoxDecoration(
+                  color: value == null ? AppTheme.surfaceLight : AppTheme.teal,
+                  borderRadius: BorderRadius.circular(7),
+                ),
+              ),
             ),
-          ),
+            const SizedBox(height: 7),
+            Text(labels[index], style: const TextStyle(fontSize: 9, color: AppTheme.muted)),
+          ]),
         ),
-        const SizedBox(height: 7),
-        Text(labels[index], style: const TextStyle(fontSize: 9, color: AppTheme.muted)),
-      ]));
+      ));
     }));
   }
 }
