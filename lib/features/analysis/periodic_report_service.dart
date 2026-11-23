@@ -55,9 +55,10 @@ class PeriodicReportSnapshot {
 class PeriodicReportService {
   PeriodicReportService(this.database);
   final SleepDatabase database;
-  static const metadataPrefix = 'periodic_report_v4_';
-  static const previousMetadataPrefix = 'periodic_report_v3_';
-  static const olderMetadataPrefix = 'periodic_report_v2_';
+  static const metadataPrefix = 'periodic_report_v5_';
+  static const previousMetadataPrefix = 'periodic_report_v4_';
+  static const olderMetadataPrefix = 'periodic_report_v3_';
+  static const olderMetadataPrefixV2 = 'periodic_report_v2_';
   static const legacyMetadataPrefix = 'periodic_report_v1_';
 
   Future<List<PeriodicReportSnapshot>> generateClosedReports({DateTime? now}) async {
@@ -120,6 +121,7 @@ class PeriodicReportService {
     final legacy = await database.getAppMetadataByPrefix(legacyMetadataPrefix);
     final previous = await database.getAppMetadataByPrefix(previousMetadataPrefix);
     final older = await database.getAppMetadataByPrefix(olderMetadataPrefix);
+    final olderV2 = await database.getAppMetadataByPrefix(olderMetadataPrefixV2);
     final current = await database.getAppMetadataByPrefix(metadataPrefix);
     final byId = <String, PeriodicReportSnapshot>{};
     for (final value in legacy.values) {
@@ -128,7 +130,13 @@ class PeriodicReportService {
         byId[report.id] = report;
       } catch (_) {}
     }
-    // New v4 snapshots win; older v1/v2/v3 snapshots remain readable and intact.
+    // New v5 snapshots win; older v1/v2/v3/v4 snapshots remain readable and intact.
+    for (final value in olderV2.values) {
+      try {
+        final report = PeriodicReportSnapshot.decode(value);
+        byId[report.id] = report;
+      } catch (_) {}
+    }
     for (final value in older.values) {
       try {
         final report = PeriodicReportSnapshot.decode(value);
