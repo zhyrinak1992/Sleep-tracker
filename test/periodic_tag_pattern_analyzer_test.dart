@@ -37,6 +37,16 @@ void main() {
           for (var i = 0; i < 4; i++) 'tag-$i': 3,
           for (var i = 0; i < 4; i++) 'plain-$i': 1,
         },
+        additionalMetrics: {
+          'efficiency': {
+            for (var i = 0; i < 4; i++) 'tag-$i': 80,
+            for (var i = 0; i < 4; i++) 'plain-$i': 90,
+          },
+          'subjectiveQuality': {
+            for (var i = 0; i < 4; i++) 'tag-$i': 2,
+            for (var i = 0; i < 4; i++) 'plain-$i': 4,
+          },
+        },
         tagLabels: {'caffeine': 'Кофеин'},
       );
 
@@ -51,6 +61,12 @@ void main() {
       expect(duration['withoutTagAverage'], 420);
       expect(duration['difference'], -60);
       expect(duration['isSufficient'], isTrue);
+      final efficiency = Map<String, Object?>.from(metrics['efficiency'] as Map);
+      expect(efficiency['withTagAverage'], 80);
+      expect(efficiency['difference'], -10);
+      final quality = Map<String, Object?>.from(metrics['subjectiveQuality'] as Map);
+      expect(quality['withTagAverage'], 2);
+      expect(quality['withoutTagAverage'], 4);
     });
 
     test('does not convert missing values to zero or publish weak comparisons', () {
