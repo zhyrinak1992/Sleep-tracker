@@ -11,7 +11,7 @@ import '../features/diary/sleep_metric_summary.dart';
 import 'sleep_database.dart';
 
 class PdfReportService {
-  static Future<void> exportHistory({int days = 30, DateTime? from, DateTime? to}) async {
+  static Future<void> exportHistory({int days = 30, DateTime? from, DateTime? to, bool includeNotes = false}) async {
     if ((from == null) != (to == null)) {
       throw ArgumentError('Для произвольного периода укажите обе даты: начало и окончание.');
     }
@@ -76,6 +76,10 @@ class PdfReportService {
       }
     }
     final reports = <Map<String, Object?>>[];
+    final selectedIds = selected.map((session) => session.id).toSet();
+    final savedNotes = includeNotes
+        ? (await SleepDatabase.instance.getNotes()).where((note) => selectedIds.contains(note.sessionId)).toList()
+        : const [];
     for (final session in selected) { final report = await SleepDatabase.instance.getMorningReport(session.id); if (report != null) reports.add(report); }
     final wellbeing = reports.where((r) => r['wellbeing'] != null).map((r) => (r['wellbeing'] as num).toDouble()).toList();
     final quality = reports.where((r) => r['sleep_quality'] != null).map((r) => (r['sleep_quality'] as num).toDouble()).toList();
@@ -124,6 +128,17 @@ class PdfReportService {
         }).toList(),
       ),
       ...nightContext,
+      if (savedNotes.isNotEmpty) ...[
+        pw.SizedBox(height: 14),
+        pw.Header(level: 1, child: pw.Text('Заметки за период')),
+        ...savedNotes.map((note) => pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 6),
+          child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+            pw.Text(DateFormat('dd.MM.yyyy').format(note.sessionStartedAt), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+            pw.Text(note.text, style: const pw.TextStyle(fontSize: 8)),
+          ]),
+        )),
+      ],
       pw.SizedBox(height: 10),
       pw.Text('Отчёт содержит только сохранённые данные. Отсутствующие показатели не моделируются. Погодный архив и астрономические расчёты отображаются в карточке ночи в приложении.'),
     ]));
