@@ -34,6 +34,28 @@ void main() {
       );
     });
 
+    test('maps chart buckets to exact calendar ranges including the short fifth week', () {
+      final week = SleepDynamicsAnalysis.bucketRange(
+        DateTime(2026, 11, 23), SleepDynamicsPeriod.week, 6);
+      expect(week.start, DateTime(2026, 11, 29));
+      expect(week.endExclusive, DateTime(2026, 11, 30));
+
+      final month = SleepDynamicsAnalysis.bucketRange(
+        DateTime(2026, 11, 1), SleepDynamicsPeriod.month, 4);
+      expect(month.start, DateTime(2026, 11, 29));
+      expect(month.endExclusive, DateTime(2026, 12, 1));
+
+      final year = SleepDynamicsAnalysis.bucketRange(
+        DateTime(2026, 1, 1), SleepDynamicsPeriod.year, 11);
+      expect(year.start, DateTime(2026, 12, 1));
+      expect(year.endExclusive, DateTime(2027, 1, 1));
+      expect(
+        () => SleepDynamicsAnalysis.bucketRange(
+          DateTime(2026, 1, 1), SleepDynamicsPeriod.week, 7),
+        throwsRangeError,
+      );
+    });
+
     test('uses only available samples for efficiency, awakenings and morning ratings', () {
       final session = SleepSession(
         id: 'night-1',
