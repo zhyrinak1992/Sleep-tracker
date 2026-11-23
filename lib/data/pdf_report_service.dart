@@ -81,6 +81,91 @@ class PdfReportService {
     await Share.shareXFiles([XFile(file.path, mimeType: 'application/pdf')], subject: 'Сравнение периодов Sleep Tracker');
   }
 
+  /// Exports the currently selected analytics category and period, including
+  /// metric samples, trend buckets, and the underlying completed nights.
+  static Future<void> exportSleepDynamics({
+    required String title,
+    required String category,
+    required String dateRange,
+    required String previousRange,
+    required int sessionsCount,
+    required int completedCount,
+    required int previousCompletedCount,
+    required List<Map<String, Object?>> metrics,
+    required List<Map<String, Object?>> trend,
+    required List<Map<String, Object?>> nights,
+  }) async {
+    final regular = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Regular.ttf'));
+    final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));
+    final doc = pw.Document();
+    doc.addPage(pw.MultiPage(
+      theme: pw.ThemeData.withFont(base: regular, bold: bold),
+      build: (_) => [
+        pw.Header(level: 0, child: pw.Text('Sleep Tracker — $title')),
+        pw.Text('Сформирован: ${DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now())}'),
+        pw.Text('Категория: $category'),
+        pw.Text('Выбранный период: $dateRange'),
+        pw.Text('Предыдущий равный период: $previousRange'),
+        pw.SizedBox(height: 10),
+        pw.Header(level: 1, child: pw.Text('Сводные показатели')),
+        pw.Text('Записей в выбранном периоде: $sessionsCount · завершённых ночей: $completedCount · в предыдущем периоде: $previousCompletedCount'),
+        if (metrics.isEmpty) pw.Text('Для выбранной категории нет доступных показателей.')
+        else pw.TableHelper.fromTextArray(
+          headers: ['Показатель', 'Текущий период', 'n', 'Предыдущий период', 'n'],
+          cellStyle: const pw.TextStyle(fontSize: 7),
+          headerStyle: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold),
+          data: metrics.map((metric) => [
+            metric['label'] ?? '—',
+            metric['current'] ?? 'Нет данных',
+            metric['currentSamples'] ?? 0,
+            metric['previous'] ?? 'Нет данных',
+            metric['previousSamples'] ?? 0,
+          ]).toList(),
+        ),
+        pw.SizedBox(height: 12),
+        pw.Header(level: 1, child: pw.Text('Динамика по интервалам')),
+        if (trend.isEmpty) pw.Text('Нет данных для графиков.')
+        else pw.TableHelper.fromTextArray(
+          headers: ['Показатель', 'Интервал', 'Среднее значение'],
+          cellStyle: const pw.TextStyle(fontSize: 7),
+          headerStyle: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold),
+          data: trend.map((point) => [
+            point['metric'] ?? '—',
+            point['interval'] ?? '—',
+            point['value'] ?? 'Нет данных',
+          ]).toList(),
+        ),
+        pw.SizedBox(height: 12),
+        pw.Header(level: 1, child: pw.Text('Фактические данные отдельных ночей')),
+        pw.Text('Завершённых ночей в таблице: ${nights.length}'),
+        if (nights.isEmpty) pw.Text('Нет завершённых ночных записей.')
+        else pw.TableHelper.fromTextArray(
+          headers: ['Дата', 'Засыпание', 'Пробуждение', 'Сон', 'Оценка', 'Эффективность', 'Пробуждения', 'Качество', 'Самочувствие'],
+          cellStyle: const pw.TextStyle(fontSize: 6),
+          headerStyle: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold),
+          data: nights.map((night) => [
+            night['date'] ?? '—',
+            night['bedtime'] ?? '—',
+            night['wake'] ?? '—',
+            night['duration'] ?? '—',
+            night['score'] ?? '—',
+            night['efficiency'] ?? '—',
+            night['awakenings'] ?? '—',
+            night['quality'] ?? '—',
+            night['wellbeing'] ?? '—',
+          ]).toList(),
+        ),
+        pw.SizedBox(height: 10),
+        pw.Text('Каждый показатель использует собственную доступную выборку (n). Пропущенные значения обозначены тире и не заменяются нулём. Средние по интервалам отражают доступные завершённые ночи. Отчёт описывает наблюдения и не устанавливает причинно-следственные связи.',
+          style: const pw.TextStyle(fontSize: 8)),
+      ],
+    ));
+    final dir = await getTemporaryDirectory();
+    final file = File(p.join(dir.path, 'SleepTracker-analytics-${DateTime.now().millisecondsSinceEpoch}.pdf'));
+    await file.writeAsBytes(await doc.save(), flush: true);
+    await Share.shareXFiles([XFile(file.path, mimeType: 'application/pdf')], subject: 'Аналитика сна Sleep Tracker');
+  }
+
   /// Exports the immutable archived snapshot rather than recalculating a past
   /// period from records that may have been edited since the report was saved.
   static Future<void> exportPeriodicSnapshot(
