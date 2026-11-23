@@ -88,7 +88,7 @@ class _AudioEventAnalysisCardState extends State<AudioEventAnalysisCard> {
         children: [
           const Text('Звуковые события', style: TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
-          const Text('Сохранённые и классифицированные фрагменты по ночам выбранного периода', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
+          const Text('Зарегистрированные звуковые события по ночам выбранного периода', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
           const SizedBox(height: 12),
           Row(children: [
             Expanded(child: _Stat(label: 'Событий', value: '${current.eventCount}', previous: previous.eventCount)),
@@ -112,7 +112,7 @@ class _AudioEventAnalysisCardState extends State<AudioEventAnalysisCard> {
               ]),
             ),
           const SizedBox(height: 8),
-          const Text('Длительность — только сохранённые короткие аудиофрагменты, не общее время работы микрофона. Категории показываются по фактическим меткам классификатора; неопределённые события не исключаются.', style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4)),
+          const Text('Длительность рассчитывается по метаданным зарегистрированных коротких сегментов, а не по общему времени работы микрофона. Сами аудиофайлы хранятся 7 дней; статистика событий остаётся в истории. Категории берутся из фактических меток классификатора.', style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4)),
         ],
       ));
     },
