@@ -55,7 +55,7 @@ class SleepScoreResult {
       'awakenings': 20,
       'subjectiveQuality': 10,
     },
-    'methodVersion': 1,
+    'methodVersion': 2,
   };
 }
 
@@ -96,7 +96,11 @@ class SleepScoreCalculator {
     final report = morningReports[session.id];
     final qualityValue = report?['sleep_quality'];
     final quality = qualityValue is num ? qualityValue.toInt() : null;
-    final hasAwakeningCoverage = stages.isNotEmpty &&
+    final hasExplicitAwakeSamples = stages.any((row) {
+      final stage = (row['stage'] as String? ?? '').toLowerCase();
+      return stage.contains('бодрств') || stage.contains('awake');
+    });
+    final hasAwakeningCoverage = hasExplicitAwakeSamples &&
       metrics.stageCoveragePercent != null &&
       metrics.stageCoveragePercent! >= 80;
     return calculate(
@@ -105,6 +109,7 @@ class SleepScoreCalculator {
       personalUpperMinutes: need.isSufficient ? need.upperMinutes : null,
       sleepEfficiencyPercent: metrics.sleepEfficiencyPercent,
       awakeningCount: metrics.awakeningCount,
+      awakeningDurationMinutes: metrics.awakeStageMinutes,
       awakeningsAvailable: hasAwakeningCoverage,
       subjectiveQuality: quality,
     );
@@ -116,6 +121,7 @@ class SleepScoreCalculator {
     required int? personalUpperMinutes,
     required double? sleepEfficiencyPercent,
     required int? awakeningCount,
+    required int? awakeningDurationMinutes,
     required bool awakeningsAvailable,
     required int? subjectiveQuality,
   }) {
@@ -124,8 +130,10 @@ class SleepScoreCalculator {
     );
     final efficiencyScore = _efficiencyScore(sleepEfficiencyPercent);
     final awakeningsScore = awakeningsAvailable && awakeningCount != null &&
-        awakeningCount >= 0
-        ? (100 - awakeningCount * 20).clamp(0, 100).toDouble()
+        awakeningCount >= 0 && awakeningDurationMinutes != null &&
+        awakeningDurationMinutes >= 0
+        ? (((100 - awakeningCount * 20).clamp(0, 100).toDouble()) +
+            (100 - awakeningDurationMinutes / 120 * 100).clamp(0, 100).toDouble()) / 2
         : null;
     final qualityScore = subjectiveQuality != null &&
         subjectiveQuality >= 1 && subjectiveQuality <= 5
@@ -152,7 +160,7 @@ class SleepScoreCalculator {
         weight: awakeningsWeight, score: awakeningsScore,
         detail: awakeningsScore == null
           ? 'Нет достоверных данных о пробуждениях.'
-          : '0 пробуждений — 100; за каждое зарегистрированное пробуждение снимается 20 баллов, минимум — 0.',
+          : 'Компонент объединяет число и суммарную длительность бодрствования поровну: за каждое пробуждение снимается 20 баллов (минимум 0), а длительность линейно снижается от 100 баллов до 0 на отметке 120 минут; затем берётся среднее двух оценок.',
       ),
       SleepScoreComponent(
         key: 'subjectiveQuality', label: 'Субъективное качество сна',
