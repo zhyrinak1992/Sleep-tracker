@@ -155,7 +155,9 @@ class _ReportCard extends StatelessWidget {
                     ? Map<String, Object?>.from(metrics[metricKey] as Map) : <String, Object?>{};
                   final previous = previousMetrics[metricKey] is Map
                     ? Map<String, Object?>.from(previousMetrics[metricKey] as Map) : <String, Object?>{};
-                  String value(Object? raw) => raw is num ? raw.toStringAsFixed(metricKey == 'duration' ? 0 : 1) + suffix : 'нет данных';
+                  String value(Object? raw) => metricKey == 'duration'
+                    ? _formatDuration(raw)
+                    : raw is num ? raw.toStringAsFixed(1) + suffix : 'нет данных';
                   final difference = current['difference'];
                   final delta = difference is num
                     ? ' · разница ' + (difference > 0 ? '+' : '') + difference.toStringAsFixed(1) + suffix
