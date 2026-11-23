@@ -4,6 +4,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'dart:io';
 
 import '../../data/backup_service.dart';
+import '../../data/backup_restore_planner.dart';
 import '../../data/comparison_suggestion_store.dart';
 import '../../data/app_lock_service.dart';
 import '../../data/apple_health_service.dart';
@@ -429,11 +430,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final date = preview.createdAt == null
           ? 'не указана'
           : MaterialLocalizations.of(context).formatMediumDate(preview.createdAt!.toLocal());
+      final replacePlan = draft.impact.replace;
+      final mergePlan = draft.impact.merge;
       final merge = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Содержимое резервной копии'),
+          title: const Text('Содержимое и последствия восстановления'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -444,7 +447,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Text(preview.integrityVerified
                     ? 'Целостность: манифест и контрольные суммы проверены'
                     : 'Целостность: старый формат без манифеста контрольных сумм'),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 _backupPreviewRow('Ночи сна', preview.sessions),
                 _backupPreviewRow('Утренние отчёты', preview.reports),
                 _backupPreviewRow('Заметки', preview.notes),
@@ -456,28 +459,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _backupPreviewRow('Теги', preview.tags),
                 _backupPreviewRow('Исторические снимки главных изменений', preview.changeHistorySnapshots),
                 _backupPreviewRow('История предложений сравнений', preview.suggestionHistoryEntries),
+                _restoreImpactSection('Полная замена', replacePlan, merge: false),
+                _restoreImpactSection('Безопасное объединение', mergePlan, merge: true),
                 const SizedBox(height: 12),
-                const Text('Архив проверен. До выбора действия текущие данные не изменялись.'),
-                const SizedBox(height: 8),
-                const Text('Полная замена удалит текущие данные приложения и заменит их содержимым архива. Объединение сохранит существующие записи и добавит отсутствующие.'),
+                const Text('До выбора действия база данных и аудиофайлы не изменяются. Если данные приложения изменятся после этого просмотра, восстановление остановится и попросит пересчитать последствия.',
+                  style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4)),
               ],
             ),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Отмена')),
-            OutlinedButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Полная замена')),
-            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Объединить')),
+            OutlinedButton(
+              onPressed: replacePlan.hasEnoughSpace ? () => Navigator.pop(dialogContext, false) : null,
+              child: const Text('Полная замена'),
+            ),
+            FilledButton(
+              onPressed: mergePlan.hasEnoughSpace ? () => Navigator.pop(dialogContext, true) : null,
+              child: const Text('Объединить'),
+            ),
           ],
         ),
       );
       if (merge == null || !mounted) return;
       final result = await BackupService.instance.restorePreparedBackup(draft: draft, merge: merge);
-      if (!mounted) return;
-      if (result == BackupImportResult.imported) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(merge ? 'Данные объединены. Существующие записи сохранены.' : 'Данные успешно восстановлены.'),
-        ));
-      }
+      if (!mounted || result.cancelled || result.plan == null) return;
+      final plan = result.plan!;
+      final message = merge
+          ? 'Объединение завершено. Добавлено записей: ${plan.recordsToAdd}; добавлено записей истории: ${plan.historyEntriesToMerge}; пропущено дубликатов: ${plan.duplicatesToSkip}; аудиофайлов восстановлено: ${plan.audioFilesToRestore}; отсутствующих вложений: ${plan.missingAudioFiles}.'
+          : 'Замена завершена. Загружено записей: ${plan.recordsToAdd}; заменено текущих: ${plan.currentRecordsToReplace}; аудиофайлов восстановлено: ${plan.audioFilesToRestore}; отсутствующих вложений: ${plan.missingAudioFiles}.';
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Восстановление завершено'),
+          content: Text(message),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Готово')),
+          ],
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Не удалось восстановить данные: $error')));
@@ -485,11 +504,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) setState(() => _busy = false);
     }
   }
-
-  Widget _backupPreviewRow(String label, int count) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 3),
-    child: Row(children: [Expanded(child: Text(label)), Text('$count', style: const TextStyle(fontWeight: FontWeight.w600))]),
-  );
 
   Future<void> _exportCustomReport() async {
     final today = DateUtils.dateOnly(DateTime.now());
