@@ -45,6 +45,17 @@ class SleepRecordEvent {
   }
 }
 
+
+class SleepRecordHistoryDecode {
+  const SleepRecordHistoryDecode({
+    required this.events,
+    required this.needsRewrite,
+  });
+
+  final List<SleepRecordEvent> events;
+  final bool needsRewrite;
+}
+
 class SleepRecordState {
   const SleepRecordState({required this.history, this.newRecords = const []});
 
@@ -86,6 +97,44 @@ class SleepRecordService {
 
   String _eventKey(SleepRecordEvent event) =>
       '${event.type}|${event.sessionId}|${event.value}';
+
+  /// Decodes persisted history and reports whether its representation needs
+  /// repairing. Invalid entries are discarded without touching source sleep data.
+  static SleepRecordHistoryDecode decodePersistedHistory(String? raw) {
+    if (raw == null || raw.isEmpty) {
+      return const SleepRecordHistoryDecode(events: [], needsRewrite: true);
+    }
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) {
+        return const SleepRecordHistoryDecode(events: [], needsRewrite: true);
+      }
+
+      final events = <SleepRecordEvent>[];
+      final seen = <String>{};
+      var needsRewrite = false;
+      for (final item in decoded) {
+        final event = SleepRecordEvent.fromMap(item);
+        if (event == null) {
+          needsRewrite = true;
+          continue;
+        }
+        final key = '${event.type}|${event.sessionId}|${event.value}';
+        if (!seen.add(key)) {
+          needsRewrite = true;
+          continue;
+        }
+        events.add(event);
+      }
+      return SleepRecordHistoryDecode(
+        events: List.unmodifiable(events),
+        needsRewrite: needsRewrite,
+      );
+    } on FormatException {
+      return const SleepRecordHistoryDecode(events: [], needsRewrite: true);
+    }
+  }
 
   Future<void> markCelebrated(SleepRecordEvent event) async {
     final database = SleepDatabase.instance;
@@ -132,20 +181,9 @@ class SleepRecordService {
         // An invalid celebration marker must not affect sleep data.
       }
     }
-    final history = <SleepRecordEvent>[];
-    if (raw != null && raw.isNotEmpty) {
-      try {
-        final decoded = jsonDecode(raw);
-        if (decoded is List) {
-          for (final item in decoded) {
-            final event = SleepRecordEvent.fromMap(item);
-            if (event != null) history.add(event);
-          }
-        }
-      } on FormatException {
-        // Invalid metadata is ignored; sleep records remain untouched.
-      }
-    }
+    final decodedHistory = decodePersistedHistory(raw);
+    final history = decodedHistory.events.toList();
+    var historyChanged = decodedHistory.needsRewrite;
 
     // Recover pending celebrations from persisted history. A process may be
     // closed after saving a record but before its dialog is displayed.
@@ -183,6 +221,7 @@ class SleepRecordService {
             achievedAt: session.endedAt!,
           );
           history.add(event);
+          historyChanged = true;
           if (!isFirstInitialization && !celebratedKeys.contains(eventKey)) {
             newRecords.add(event);
           }
@@ -214,6 +253,7 @@ class SleepRecordService {
             achievedAt: session.endedAt!,
           );
           history.add(event);
+          historyChanged = true;
           if (!isFirstInitialization && !celebratedKeys.contains(eventKey)) {
             newRecords.add(event);
           }
@@ -223,8 +263,10 @@ class SleepRecordService {
       }
     }
 
-    if (history.isNotEmpty && history.length !=
-        (raw == null || raw.isEmpty ? 0 : _decodedEventCount(raw))) {
+    if (historyChanged) {
+      // Persist even an empty first-run history. Otherwise a user who has no
+      // qualifying records yet would be treated as a first-time installation
+      // again later, suppressing the first real achievement celebration.
       await database.setAppMetadata(
         _historyKey,
         jsonEncode(history.map((item) => item.toMap()).toList()),
@@ -247,14 +289,4 @@ class SleepRecordService {
     );
   }
 
-  int _decodedEventCount(String raw) {
-    try {
-      final decoded = jsonDecode(raw);
-      return decoded is List
-          ? decoded.map(SleepRecordEvent.fromMap).whereType<SleepRecordEvent>().length
-          : 0;
-    } on FormatException {
-      return 0;
-    }
-  }
 }
