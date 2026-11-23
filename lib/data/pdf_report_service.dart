@@ -123,7 +123,36 @@ class PdfReportService {
           ]).toList(),
         ),
         pw.SizedBox(height: 12),
-        pw.Header(level: 1, child: pw.Text('Динамика по интервалам')),
+        pw.Header(level: 1, child: pw.Text('Графики динамики')),
+        if (trend.where((point) => point['rawValue'] is num).isEmpty)
+          pw.Text('Нет числовых данных для построения графиков.')
+        else ...trend.map((point) => point['metric']).toSet().map((metric) {
+          final points = trend.where((point) => point['metric'] == metric && point['rawValue'] is num).toList();
+          if (points.isEmpty) return pw.SizedBox();
+          final values = points.map((point) => (point['rawValue'] as num).toDouble()).toList();
+          final maximum = values.fold<double>(0, (a, b) => b > a ? b : a);
+          final safeMaximum = maximum <= 0 ? 1.0 : maximum;
+          final barWidth = 420 / points.length * 0.55;
+          final gap = 420 / points.length;
+          final bars = <String>[];
+          for (var i = 0; i < values.length; i++) {
+            final height = values[i] / safeMaximum * 82;
+            final x = 48 + i * gap + (gap - barWidth) / 2;
+            final y = 104 - height;
+            bars.add('<rect x="$x" y="$y" width="$barWidth" height="$height" rx="3" fill="#397E9A"/>');
+          }
+          final svg = '<svg xmlns="http://www.w3.org/2000/svg" width="520" height="125" viewBox="0 0 520 125"><line x1="38" y1="104" x2="490" y2="104" stroke="#9AAAB5" stroke-width="1"/>' + bars.join() + '</svg>';
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(metric.toString(), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+              pw.SizedBox(height: 3),
+              pw.SvgImage(svg: svg, width: 520, height: 125),
+              pw.SizedBox(height: 3),
+            ],
+          );
+        }),
+        pw.Header(level: 1, child: pw.Text('Точные значения по интервалам')),
         if (trend.isEmpty) pw.Text('Нет данных для графиков.')
         else pw.TableHelper.fromTextArray(
           headers: ['Показатель', 'Интервал', 'Среднее значение'],
