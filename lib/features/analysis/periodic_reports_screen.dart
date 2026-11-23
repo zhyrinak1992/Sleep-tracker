@@ -19,9 +19,7 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
   @override
   void initState() { super.initState(); _future = _load(); }
   Future<List<PeriodicReportSnapshot>> _load() async {
-    final service = PeriodicReportService(widget.database);
-    await service.generateClosedReports();
-    return service.loadArchive();
+    return PeriodicReportService(widget.database).loadArchive();
   }
   void _refresh() => setState(() => _future = _load());
   Future<void> _export(PeriodicReportSnapshot report) async {
