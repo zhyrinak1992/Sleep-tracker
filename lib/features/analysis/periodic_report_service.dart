@@ -186,13 +186,16 @@ class PeriodicReportService {
         if (monthSessions.isNotEmpty) months.add({'month': month, ...summarize(monthSessions)});
       }
       data['months'] = months;
-      final measurable = months.where((m) => m['averageSleepMinutes'] is num).toList();
+      const minimumMonthNightsForRanking = 3;
+      final measurable = months.where((m) => m['averageSleepMinutes'] is num &&
+        (m['nights'] as int? ?? 0) >= minimumMonthNightsForRanking).toList();
       if (measurable.isNotEmpty) {
         final sorted = measurable.toList()..sort((a, b) =>
           (a['averageSleepMinutes'] as num).compareTo(b['averageSleepMinutes'] as num));
         data['shortestAverageMonth'] = sorted.first['month'];
         data['longestAverageMonth'] = sorted.last['month'];
-        data['monthRankingCriterion'] = 'Средняя продолжительность сна; только месяцы с доступными данными.';
+        data['monthRankingCriterion'] = 'Средняя продолжительность сна; не менее 3 завершённых ночей в месяце.';
+        data['monthRankingMinimumNights'] = minimumMonthNightsForRanking;
       }
     }
     return PeriodicReportSnapshot(data).data;
