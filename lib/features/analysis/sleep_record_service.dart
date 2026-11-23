@@ -62,6 +62,44 @@ class SleepRecordHistoryDecode {
   final bool needsRewrite;
 }
 
+/// Rebuilds the sequence of personal records from the current source data.
+/// A session contributes at most one candidate per metric; corrected or
+/// deleted sessions therefore cannot leave stale record events behind.
+List<SleepRecordEvent> buildSleepRecordHistory(
+  Iterable<SleepRecordEvent> candidates,
+) {
+  final ordered = candidates.toList()
+    ..sort((a, b) {
+      final byDate = a.achievedAt.compareTo(b.achievedAt);
+      return byDate != 0 ? byDate : a.sessionId.compareTo(b.sessionId);
+    });
+
+  final history = <SleepRecordEvent>[];
+  final seenSessions = <String>{};
+  num? bestScore;
+  int? fewestAwakenings;
+
+  for (final event in ordered) {
+    final sessionMetric = '${event.type}|${event.sessionId}';
+    if (!seenSessions.add(sessionMetric)) continue;
+
+    if (event.type == 'sleep_score') {
+      if (bestScore == null || event.value > bestScore) {
+        history.add(event);
+        bestScore = event.value;
+      }
+    } else if (event.type == 'awakening_count') {
+      final value = event.value.toInt();
+      if (fewestAwakenings == null || value < fewestAwakenings) {
+        history.add(event);
+        fewestAwakenings = value;
+      }
+    }
+  }
+
+  return List.unmodifiable(history);
+}
+
 class SleepRecordState {
   const SleepRecordState({required this.history, this.newRecords = const []});
 
@@ -153,6 +191,27 @@ class SleepRecordService {
     }
   }
 
+  static bool _sameHistory(
+    List<SleepRecordEvent> previous,
+    List<SleepRecordEvent> current,
+  ) {
+    if (previous.length != current.length) return false;
+    final previousByKey = {
+      for (final event in previous)
+        _eventKeyForComparison(event): event.achievedAt.toUtc().toIso8601String(),
+    };
+    for (final event in current) {
+      if (previousByKey[_eventKeyForComparison(event)] !=
+          event.achievedAt.toUtc().toIso8601String()) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static String _eventKeyForComparison(SleepRecordEvent event) =>
+      '${event.type}|${event.sessionId}|${event.value}';
+
   Future<void> markCelebrated(SleepRecordEvent event) async {
     final database = SleepDatabase.instance;
     final raw = await database.getAppMetadata(_celebratedKey);
@@ -199,25 +258,20 @@ class SleepRecordService {
       }
     }
     final decodedHistory = decodePersistedHistory(raw);
-    final history = decodedHistory.events.toList();
-    var historyChanged = decodedHistory.needsRewrite;
+    final previousHistory = decodedHistory.events;
+    final previousKeys = previousHistory.map(_eventKey).toSet();
+    final previousSessionMetrics = previousHistory
+        .map((event) => '${event.type}|${event.sessionId}')
+        .toSet();
+    final previousLatestByType = <String, DateTime>{};
+    for (final event in previousHistory) {
+      final current = previousLatestByType[event.type];
+      if (current == null || event.achievedAt.isAfter(current)) {
+        previousLatestByType[event.type] = event.achievedAt;
+      }
+    }
 
-    // Recover pending celebrations from persisted history. A process may be
-    // closed after saving a record but before its dialog is displayed.
-    final newRecords = <SleepRecordEvent>[
-      if (!isFirstInitialization)
-        ...history.where((event) => !celebratedKeys.contains(_eventKey(event))),
-    ];
-    final knownEvents = history.map(_eventKey).toSet();
-    num? bestScore = history
-        .where((item) => item.type == 'sleep_score')
-        .fold<num?>(null, (best, item) =>
-            best == null || item.value > best ? item.value : best);
-    int? fewestAwakenings = history
-        .where((item) => item.type == 'awakening_count')
-        .fold<int?>(null, (best, item) =>
-            best == null || item.value < best ? item.value.toInt() : best);
-
+    final candidates = <SleepRecordEvent>[];
     for (final session in sessions) {
       final stages = stagesBySession[session.id] ?? const <Map<String, Object?>>[];
       final score = SleepScoreCalculator.calculateForSession(
@@ -227,24 +281,12 @@ class SleepRecordService {
         stagesBySession: stagesBySession,
       ).score;
       if (score != null) {
-        final value = score.round();
-        final eventKey = 'sleep_score|${session.id}|$value';
-        if ((bestScore == null || value > bestScore) &&
-            !knownEvents.contains(eventKey)) {
-          final event = SleepRecordEvent(
-            type: 'sleep_score',
-            sessionId: session.id,
-            value: value,
-            achievedAt: session.endedAt!,
-          );
-          history.add(event);
-          historyChanged = true;
-          if (!isFirstInitialization && !celebratedKeys.contains(eventKey)) {
-            newRecords.add(event);
-          }
-          knownEvents.add(eventKey);
-          bestScore = value;
-        }
+        candidates.add(SleepRecordEvent(
+          type: 'sleep_score',
+          sessionId: session.id,
+          value: score.round(),
+          achievedAt: session.endedAt!,
+        ));
       }
 
       final metrics = SleepSessionMetrics.calculate(
@@ -259,23 +301,34 @@ class SleepRecordService {
           metrics.stageCoveragePercent != null &&
           metrics.stageCoveragePercent! >= 80;
       if (awakeningsAreReliable) {
-        final value = metrics.awakeningCount;
-        final eventKey = 'awakening_count|${session.id}|$value';
-        if ((fewestAwakenings == null || value < fewestAwakenings) &&
-            !knownEvents.contains(eventKey)) {
-          final event = SleepRecordEvent(
-            type: 'awakening_count',
-            sessionId: session.id,
-            value: value,
-            achievedAt: session.endedAt!,
-          );
-          history.add(event);
-          historyChanged = true;
-          if (!isFirstInitialization && !celebratedKeys.contains(eventKey)) {
-            newRecords.add(event);
-          }
-          knownEvents.add(eventKey);
-          fewestAwakenings = value;
+        candidates.add(SleepRecordEvent(
+          type: 'awakening_count',
+          sessionId: session.id,
+          value: metrics.awakeningCount,
+          achievedAt: session.endedAt!,
+        ));
+      }
+    }
+
+    final history = buildSleepRecordHistory(candidates);
+    final historyChanged = decodedHistory.needsRewrite ||
+        !_sameHistory(previousHistory, history);
+
+    // Recover only genuinely newer records. A changed value for an existing
+    // session, or an older record promoted after deletion, is a recalculation,
+    // not a new achievement deserving a celebration.
+    final newRecords = <SleepRecordEvent>[];
+    if (!isFirstInitialization) {
+      for (final event in history) {
+        final previousLatest = previousLatestByType[event.type];
+        final sessionMetric = '${event.type}|${event.sessionId}';
+        final isNewSessionRecord = !previousKeys.contains(_eventKey(event)) &&
+            !previousSessionMetrics.contains(sessionMetric) &&
+            (previousLatest == null ||
+                event.achievedAt.isAfter(previousLatest));
+        if (isNewSessionRecord &&
+            !celebratedKeys.contains(_eventKey(event))) {
+          newRecords.add(event);
         }
       }
     }
@@ -292,9 +345,8 @@ class SleepRecordService {
     }
 
     if (historyChanged) {
-      // Persist even an empty first-run history. Otherwise a user who has no
-      // qualifying records yet would be treated as a first-time installation
-      // again later, suppressing the first real achievement celebration.
+      // Persist the rebuilt timeline, including an empty history after all
+      // qualifying source sessions have been removed or corrected.
       await database.setAppMetadata(
         _historyKey,
         jsonEncode(history.map((item) => item.toMap()).toList()),
