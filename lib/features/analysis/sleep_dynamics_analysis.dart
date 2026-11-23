@@ -79,11 +79,12 @@ class SleepDynamicsRollingRanges {
 }
 
 class SleepDynamicsAnalysis {
-  static SleepDynamicsRollingRanges rollingThirtyDayRanges(DateTime now) {
+  static SleepDynamicsRollingRanges rollingRanges(DateTime now, int days) {
+    if (days <= 0) throw ArgumentError.value(days, 'days', 'Длительность должна быть положительной.');
     final today = DateTime(now.year, now.month, now.day);
-    final currentStart = today.subtract(const Duration(days: 29));
+    final currentStart = today.subtract(Duration(days: days - 1));
     final currentEnd = today.add(const Duration(days: 1));
-    final previousStart = currentStart.subtract(const Duration(days: 30));
+    final previousStart = currentStart.subtract(Duration(days: days));
     return SleepDynamicsRollingRanges(
       currentStart: currentStart,
       currentEndExclusive: currentEnd,
@@ -91,6 +92,9 @@ class SleepDynamicsAnalysis {
       previousEndExclusive: currentStart,
     );
   }
+
+  static SleepDynamicsRollingRanges rollingThirtyDayRanges(DateTime now) =>
+    rollingRanges(now, 30);
   static DateTime periodStart(DateTime value, SleepDynamicsPeriod period) {
     final day = DateTime(value.year, value.month, value.day);
     if (period == SleepDynamicsPeriod.week) {
