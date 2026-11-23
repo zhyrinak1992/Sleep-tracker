@@ -9,6 +9,7 @@ import '../models/sleep_tag.dart';
 import '../models/sleep_note.dart';
 import 'sleep_change_history.dart';
 import 'comparison_suggestion_history_merge.dart';
+import 'backup_restore_planner.dart';
 
 class SleepDatabase {
   SleepDatabase._();
@@ -153,6 +154,36 @@ class SleepDatabase {
         'climate_samples': await txn.query('climate_samples', orderBy: 'measured_at ASC'),
       };
     });
+  }
+
+  /// Builds a read-only impact plan. No database rows are inserted, updated or deleted.
+  Future<BackupRestoreImpact> previewRestoreImpact(
+    Map<String, dynamic> snapshot, {
+    required int? availableBytes,
+  }) async {
+    final archiveRows = validateSnapshot(snapshot);
+    final db = await database;
+    const keyColumns = <String, List<String>>{
+      'sleep_sessions': ['id'],
+      'sleep_session_tags': ['session_id', 'tag_key'],
+      'sleep_notes': ['id'],
+      'app_metadata': ['key', 'value'],
+      'sleep_stages': ['id'],
+      'sleep_metrics': ['id'],
+      'audio_events': ['id'],
+      'morning_reports': ['session_id'],
+      'climate_samples': ['id'],
+    };
+    final currentRows = <String, List<Map<String, Object?>>>{};
+    for (final entry in keyColumns.entries) {
+      final rows = await db.query(entry.key, columns: entry.value);
+      currentRows[entry.key] = rows.map((row) => Map<String, Object?>.from(row)).toList();
+    }
+    return BackupRestorePlanner.calculate(
+      archiveRows: archiveRows,
+      currentRows: currentRows,
+      availableBytes: availableBytes,
+    );
   }
 
   /// Полное восстановление с проверкой структуры и атомарной заменой данных.
