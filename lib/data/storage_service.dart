@@ -37,6 +37,11 @@ class StorageService {
 
   static const defaultWarningThreshold = 1024 * 1024 * 1024;
   static const thresholdMetadataKey = 'storage_warning_threshold_bytes';
+  static const allowedWarningThresholds = <int>{
+    500 * 1024 * 1024,
+    1024 * 1024 * 1024,
+    2 * 1024 * 1024 * 1024,
+  };
 
   Future<StorageSnapshot> measure() async {
     final documents = await getApplicationDocumentsDirectory();
@@ -125,12 +130,7 @@ class StorageService {
   }
 
   Future<void> setWarningThreshold(int bytes) async {
-    const allowed = {
-      500 * 1024 * 1024,
-      1024 * 1024 * 1024,
-      2 * 1024 * 1024 * 1024,
-    };
-    if (!allowed.contains(bytes)) {
+    if (!allowedWarningThresholds.contains(bytes)) {
       throw ArgumentError.value(bytes, 'bytes', 'Недопустимый порог предупреждения.');
     }
     await SleepDatabase.instance.setAppMetadata(thresholdMetadataKey, bytes.toString());
