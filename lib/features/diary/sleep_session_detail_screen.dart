@@ -7,6 +7,7 @@ import '../analysis/climate_analytics.dart';
 import 'screen_time_card.dart';
 import 'weather_night_detail_card.dart';
 import 'sleep_session_metrics_card.dart';
+import 'sleep_session_metrics.dart';
 import 'sleep_metric_summary.dart';
 import '../../models/sleep_session.dart';
 import '../../models/sleep_note.dart';
@@ -135,7 +136,125 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
     if (result == 'save' || result == 'skip') {
       await _reload();
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Утренний отчёт сохранён')));
+      final refreshedSession = await widget.database.getSessionById(session.id);
+      if (refreshedSession != null && mounted) {
+        await _showMorningSummary(refreshedSession);
+      }
     }
+  }
+
+  Future<void> _showMorningSummary(SleepSession session) async {
+    final stages = await widget.database.getStages(session.id);
+    final metrics = SleepSessionMetrics.calculate(session: session, stages: stages);
+    final events = await widget.database.getAudioEvents(sessionId: session.id);
+    final report = await widget.database.getMorningReport(session.id);
+
+    final categoryCounts = <String, int>{};
+    for (final event in events) {
+      final category = (event['category'] as String?)?.trim();
+      final label = category == null || category.isEmpty || category == 'unknown'
+          ? 'Неопределённый звук'
+          : category;
+      categoryCounts[label] = (categoryCounts[label] ?? 0) + 1;
+    }
+    final orderedCategories = categoryCounts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    final rawAnswers = report?['answers_json'];
+    Map<String, dynamic> answers = {};
+    if (rawAnswers is String && rawAnswers.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(rawAnswers);
+        if (decoded is Map<String, dynamic>) answers = decoded;
+      } catch (_) {}
+    }
+
+    String durationLabel(int? minutes) => minutes == null
+        ? 'Нет достоверных данных'
+        : _duration(Duration(minutes: minutes));
+    String ratingLabel(Object? value) =>
+        value is num ? value.toInt().toString() + ' из 5' : 'Не заполнено';
+
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Краткий итог ночи'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _detailRow(
+                'Фактическая продолжительность сна',
+                durationLabel(metrics.sleepDurationMinutes),
+                icon: Icons.bedtime_outlined,
+              ),
+              _detailRow(
+                'Время в постели',
+                durationLabel(metrics.timeInBedMinutes),
+                icon: Icons.hotel_outlined,
+              ),
+              _detailRow(
+                'Эффективность сна',
+                metrics.sleepEfficiencyPercent == null
+                    ? 'Недостаточно данных'
+                    : metrics.sleepEfficiencyPercent!.round().toString() + '%',
+                icon: Icons.insights_outlined,
+              ),
+              _detailRow(
+                'Зарегистрированные пробуждения',
+                metrics.stageBreakdownMinutes.containsKey('Бодрствование')
+                    ? metrics.awakeningCount.toString()
+                    : 'Нет данных Apple Health',
+                icon: Icons.wb_sunny_outlined,
+              ),
+              _detailRow(
+                'Зарегистрированные звуковые события',
+                events.length.toString(),
+                icon: Icons.graphic_eq_rounded,
+              ),
+              if (orderedCategories.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                const Text('Категории звуков', style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                ...orderedCategories.map((entry) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Text(entry.key + ': ' + entry.value.toString(), style: const TextStyle(fontSize: 13)),
+                )),
+              ],
+              const Divider(height: 22),
+              const Text('Твоя утренняя оценка', style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              Text('Качество сна: ' + ratingLabel(report?['sleep_quality'])),
+              Text('Ощущение отдыха: ' + ratingLabel(report?['wellbeing'])),
+              Text('Сонливость: ' + ratingLabel(answers['sleepiness'])),
+              if (answers['skipped'] == true)
+                const Padding(
+                  padding: EdgeInsets.only(top: 5),
+                  child: Text('Субъективная оценка была пропущена.', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
+                ),
+              const SizedBox(height: 10),
+              const Text(
+                'Показатели отображаются только при наличии сохранённых данных. Отсутствующие измерения не заменяются расчётными значениями.',
+                style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
+              ),
+              const SizedBox(height: 5),
+              const Text(
+                'Единый балл качества сна 0–100 пока не рассчитывается: методика и веса показателей должны быть отдельно утверждены.',
+                style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Готово'),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _detailRow(String label, String value, {IconData? icon}) => Padding(
