@@ -55,11 +55,15 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
   DateTime _bucketStart(DateTime periodStart, int index) {
     if (_period == AnalysisPeriod.week) return periodStart.add(Duration(days: index));
-    return DateTime(periodStart.year, periodStart.month, index * 7 + 1);
+    if (_period == AnalysisPeriod.month) {
+      return DateTime(periodStart.year, periodStart.month, index * 7 + 1);
+    }
+    return DateTime(periodStart.year, index + 1);
   }
 
   DateTime _bucketEnd(DateTime periodStart, int index) {
     if (_period == AnalysisPeriod.week) return periodStart.add(Duration(days: index + 1));
+    if (_period == AnalysisPeriod.year) return DateTime(periodStart.year, index + 2);
     final next = DateTime(periodStart.year, periodStart.month, (index + 1) * 7 + 1);
     final monthEnd = DateTime(periodStart.year, periodStart.month + 1);
     return next.isBefore(monthEnd) ? next : monthEnd;
@@ -112,7 +116,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       builder: (dialogContext) => AlertDialog(
         title: Text(_period == AnalysisPeriod.week
           ? DateFormat('EEEE, d MMMM', 'ru').format(currentFrom)
-          : 'Неделя ${index + 1} месяца'),
+          : _period == AnalysisPeriod.month
+              ? 'Неделя ${index + 1} месяца'
+              : DateFormat('LLLL yyyy', 'ru').format(currentFrom)),
         content: SingleChildScrollView(child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -140,6 +146,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       final end = start.add(const Duration(days: 6));
       return '${DateFormat('d MMM', 'ru').format(start)} — ${DateFormat('d MMM', 'ru').format(end)}';
     }
+    if (_period == AnalysisPeriod.year) return start.year.toString();
     return DateFormat('LLLL yyyy', 'ru').format(start);
   }
 
@@ -188,6 +195,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             segments: const [
               ButtonSegment(value: AnalysisPeriod.week, label: Text('Неделя')),
               ButtonSegment(value: AnalysisPeriod.month, label: Text('Месяц')),
+              ButtonSegment(value: AnalysisPeriod.year, label: Text('Год')),
             ],
             selected: {_period},
             onSelectionChanged: (value) => setState(() {
@@ -229,9 +237,23 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             ),
             const SizedBox(height: 14),
             SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Продолжительность по дням', style: TextStyle(fontWeight: FontWeight.w600)),
+              Text(
+                _period == AnalysisPeriod.year
+                    ? 'Продолжительность по месяцам'
+                    : _period == AnalysisPeriod.month
+                        ? 'Продолжительность по неделям'
+                        : 'Продолжительность по дням',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 4),
-              const Text('Среднее для дней с завершёнными сессиями · шкала 0–12 ч', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
+              Text(
+                _period == AnalysisPeriod.year
+                    ? 'Среднее за каждый календарный месяц · шкала 0–12 ч'
+                    : _period == AnalysisPeriod.month
+                        ? 'Среднее по неделям месяца · шкала 0–12 ч'
+                        : 'Среднее по дням недели · шкала 0–12 ч',
+                style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+              ),
               const SizedBox(height: 18),
               SizedBox(height: 150, child: _DurationChart(values: chart, period: _period, onTap: (index) => _showChartDetails(context, all, start, previousStart, index))),
             ])),
@@ -375,9 +397,11 @@ class _DurationChart extends StatelessWidget {
   final ValueChanged<int> onTap;
   @override
   Widget build(BuildContext context) {
-    final labels = period == AnalysisPeriod.week
-        ? const ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
-        : List.generate(5, (i) => '${i + 1} нед.');
+    final labels = switch (period) {
+      AnalysisPeriod.week => const ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+      AnalysisPeriod.month => List.generate(5, (i) => '${i + 1} нед.'),
+      AnalysisPeriod.year => const ['Ян', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'],
+    };
     const maxValue = 720.0; // Единая шкала 0–12 часов для сопоставимости периодов.
     return Row(crossAxisAlignment: CrossAxisAlignment.end, children: List.generate(values.length, (i) {
       final value = values[i];
