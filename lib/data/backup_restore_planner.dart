@@ -198,13 +198,11 @@ class BackupRestorePlanner {
         continue;
       }
 
-      final newRows = <Map<String, Object?>>[];
       for (final row in archive) {
         if (currentKeys.contains(_key(row, keys))) {
           duplicatesToSkip++;
         } else {
           recordsToAdd++;
-          newRows.add(row);
           mergeDatabaseBytes += _rowBytes(row);
         }
       }
