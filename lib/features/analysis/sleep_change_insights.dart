@@ -100,9 +100,9 @@ class SleepChangeInsights {
 
     String duration(double value) {
       final minutes = value.round();
-      return minutes ~/ 60 == 0
-          ? '${minutes} мин'
-          : '${minutes ~/ 60} ч ${minutes % 60} мин';
+      if (minutes ~/ 60 == 0) return '${minutes} мин';
+      if (minutes % 60 == 0) return '${minutes ~/ 60} ч';
+      return '${minutes ~/ 60} ч ${minutes % 60} мин';
     }
 
     add(
