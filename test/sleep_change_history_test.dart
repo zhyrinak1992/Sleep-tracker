@@ -39,7 +39,7 @@ void main() {
       expect(second.records[1]['supersedesVersion'], 1);
       expect(second.records[0]['fingerprint'], 'v1');
       expect(second.records[1]['fingerprint'], 'v2');
-      expect(second.records[1]['revisionReason'], contains('изменились'));
+      expect(second.records[1]['revisionReason'], contains('Изменились'));
     });
 
     test('returns only the latest revision per month in chronological order', () {
