@@ -47,9 +47,10 @@ class SleepRecordEvent {
 }
 
 class SleepRecordState {
-  const SleepRecordState({required this.history});
+  const SleepRecordState({required this.history, this.newRecords = const []});
 
   final List<SleepRecordEvent> history;
+  final List<SleepRecordEvent> newRecords;
 
   SleepRecordEvent? get bestSleepScore {
     final values = history.where((item) => item.type == 'sleep_score');
@@ -103,6 +104,7 @@ class SleepRecordService {
       }
     }
 
+    final newRecords = <SleepRecordEvent>[];
     final knownEvents = history
         .map((item) => '${item.type}|${item.sessionId}|${item.value}')
         .toSet();
@@ -128,12 +130,14 @@ class SleepRecordService {
         final eventKey = 'sleep_score|${session.id}|$value';
         if ((bestScore == null || value > bestScore) &&
             !knownEvents.contains(eventKey)) {
-          history.add(SleepRecordEvent(
+          final event = SleepRecordEvent(
             type: 'sleep_score',
             sessionId: session.id,
             value: value,
             achievedAt: session.endedAt!,
-          ));
+          );
+          history.add(event);
+          newRecords.add(event);
           knownEvents.add(eventKey);
           bestScore = value;
         }
@@ -155,12 +159,14 @@ class SleepRecordService {
         final eventKey = 'awakening_count|${session.id}|$value';
         if ((fewestAwakenings == null || value < fewestAwakenings) &&
             !knownEvents.contains(eventKey)) {
-          history.add(SleepRecordEvent(
+          final event = SleepRecordEvent(
             type: 'awakening_count',
             sessionId: session.id,
             value: value,
             achievedAt: session.endedAt!,
-          ));
+          );
+          history.add(event);
+          newRecords.add(event);
           knownEvents.add(eventKey);
           fewestAwakenings = value;
         }
@@ -175,7 +181,10 @@ class SleepRecordService {
       );
     }
 
-    return SleepRecordState(history: List.unmodifiable(history));
+    return SleepRecordState(
+      history: List.unmodifiable(history),
+      newRecords: List.unmodifiable(newRecords),
+    );
   }
 
   int _decodedEventCount(String raw) {
