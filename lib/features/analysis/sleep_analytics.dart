@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import '../../models/sleep_session.dart';
 
-enum AnalysisPeriod { week, month }
+enum AnalysisPeriod { week, month, year }
 
 class SleepPeriodSummary {
   const SleepPeriodSummary({
@@ -38,18 +38,21 @@ class SleepAnalytics {
     if (period == AnalysisPeriod.week) {
       return day.subtract(Duration(days: day.weekday - DateTime.monday));
     }
-    return DateTime(date.year, date.month);
+    if (period == AnalysisPeriod.month) return DateTime(date.year, date.month);
+    return DateTime(date.year);
   }
 
-  static DateTime nextPeriodStart(DateTime start, AnalysisPeriod period) =>
-      period == AnalysisPeriod.week
-          ? start.add(const Duration(days: 7))
-          : DateTime(start.year, start.month + 1);
+  static DateTime nextPeriodStart(DateTime start, AnalysisPeriod period) {
+    if (period == AnalysisPeriod.week) return start.add(const Duration(days: 7));
+    if (period == AnalysisPeriod.month) return DateTime(start.year, start.month + 1);
+    return DateTime(start.year + 1);
+  }
 
-  static DateTime previousPeriodStart(DateTime start, AnalysisPeriod period) =>
-      period == AnalysisPeriod.week
-          ? start.subtract(const Duration(days: 7))
-          : DateTime(start.year, start.month - 1);
+  static DateTime previousPeriodStart(DateTime start, AnalysisPeriod period) {
+    if (period == AnalysisPeriod.week) return start.subtract(const Duration(days: 7));
+    if (period == AnalysisPeriod.month) return DateTime(start.year, start.month - 1);
+    return DateTime(start.year - 1);
+  }
 
   static SleepPeriodSummary summarize(
     Iterable<SleepSession> all,
@@ -117,16 +120,18 @@ class SleepAnalytics {
   }
 
   static List<double?> chartValues(SleepPeriodSummary summary, AnalysisPeriod period) {
-    final count = period == AnalysisPeriod.week ? 7 : 5;
+    final count = switch (period) { AnalysisPeriod.week => 7, AnalysisPeriod.month => 5, AnalysisPeriod.year => 12 };
     final values = List<double?>.filled(count, null);
     final totals = List<int>.filled(count, 0);
     final samples = List<int>.filled(count, 0);
     for (final session in summary.sessions) {
       final duration = session.duration;
       if (duration == null || duration.inMinutes <= 0) continue;
-      final index = period == AnalysisPeriod.week
-          ? session.startedAt.weekday - 1
-          : ((session.startedAt.day - 1) ~/ 7).clamp(0, 4);
+      final index = switch (period) {
+        AnalysisPeriod.week => session.startedAt.weekday - 1,
+        AnalysisPeriod.month => ((session.startedAt.day - 1) ~/ 7).clamp(0, 4),
+        AnalysisPeriod.year => session.startedAt.month - 1,
+      };
       totals[index] += duration.inMinutes;
       samples[index]++;
     }
