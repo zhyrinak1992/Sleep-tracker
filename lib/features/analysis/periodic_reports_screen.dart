@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../../data/pdf_report_service.dart';
 import '../../data/sleep_database.dart';
 import '../../theme/app_theme.dart';
@@ -95,7 +94,6 @@ class _ReportCard extends StatelessWidget {
       ? (report.data['notes'] as List).whereType<Map>().toList() : const <Map>[];
     final months = report.data['months'] is List
       ? (report.data['months'] as List).whereType<Map>().toList() : const <Map>[];
-    final monthNames = DateFormat.MMMM('ru');
     final shortest = report.data['shortestAverageMonth'];
     final longest = report.data['longestAverageMonth'];
     return Padding(
@@ -142,13 +140,13 @@ class _ReportCard extends StatelessWidget {
             ...months.map((month) {
               final index = month['month'] as int;
               final value = (month['averageSleepMinutes'] as num?)?.toDouble();
-              return _ReportLine(label: monthNames.format(DateTime(report.start.year, index)),
+              return _ReportLine(label: PeriodicReportSnapshot.monthName(index),
                 value: value == null ? 'Нет данных' : _formatDuration(value));
             }),
             if (shortest is int && longest is int)
               Text(
-                'Меньшая средняя длительность: ' + monthNames.format(DateTime(report.start.year, shortest)) +
-                '. Большая средняя длительность: ' + monthNames.format(DateTime(report.start.year, longest)) +
+                'Меньшая средняя длительность: ' + PeriodicReportSnapshot.monthName(shortest) +
+                '. Большая средняя длительность: ' + PeriodicReportSnapshot.monthName(longest) +
                 '. Критерий — средняя продолжительность, не оценка здоровья.',
                 style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
               ),
