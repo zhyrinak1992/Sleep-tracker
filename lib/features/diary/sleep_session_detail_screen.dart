@@ -402,10 +402,53 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
               const Text('Оценка качества сна', style: TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 5),
               if (sleepScore.score != null) ...[
-                Text(
-                  sleepScore.score!.round().toString() + ' / 100',
-                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: AppTheme.teal),
-                ),
+                Builder(builder: (context) {
+                  final value = sleepScore.score!.round();
+                  final color = value >= 80
+                      ? AppTheme.teal
+                      : value >= 60 ? AppTheme.accentPink : const Color(0xFFFF8A8A);
+                  return Center(
+                    child: Semantics(
+                      label: 'Оценка качества сна',
+                      value: '$value из 100',
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween<double>(begin: 0, end: value / 100),
+                        duration: const Duration(milliseconds: 900),
+                        curve: Curves.easeOutCubic,
+                        builder: (context, progress, child) => SizedBox(
+                          width: 108,
+                          height: 108,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              SizedBox.expand(
+                                child: CircularProgressIndicator(
+                                  value: progress,
+                                  strokeWidth: 8,
+                                  strokeCap: StrokeCap.round,
+                                  backgroundColor: Colors.white.withValues(alpha: 0.10),
+                                  valueColor: AlwaysStoppedAnimation<Color>(color),
+                                ),
+                              ),
+                              child!,
+                            ],
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(value.toString(), style: TextStyle(
+                              fontSize: 29, fontWeight: FontWeight.w800, color: color,
+                            )),
+                            const Text('/ 100', style: TextStyle(
+                              color: AppTheme.muted, fontSize: 11,
+                            )),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }),
                 Text(
                   'Учтено компонентов: ${sleepScore.availableComponents} из 4 · исходный вес доступных данных: ${sleepScore.availableWeight.toStringAsFixed(0)}%. Недостающие веса пропорционально перераспределены.',
                   style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
