@@ -71,14 +71,18 @@ class SleepRecordService {
   static const _historyKey = 'sleep_records_history_v1';
   static const _celebratedKey = 'sleep_records_celebrated_v1';
 
-  // Prevent two mounted achievement cards from opening the same celebration.
-  static final Set<String> _activeCelebrations = <String>{};
+  // Only one celebration dialog may be visible across mounted cards/screens.
+  static String? _activeCelebration;
 
-  bool tryClaimCelebration(SleepRecordEvent event) =>
-      _activeCelebrations.add(_eventKey(event));
+  bool tryClaimCelebration(SleepRecordEvent event) {
+    if (_activeCelebration != null) return false;
+    _activeCelebration = _eventKey(event);
+    return true;
+  }
 
-  void releaseCelebration(SleepRecordEvent event) =>
-      _activeCelebrations.remove(_eventKey(event));
+  void releaseCelebration(SleepRecordEvent event) {
+    if (_activeCelebration == _eventKey(event)) _activeCelebration = null;
+  }
 
   String _eventKey(SleepRecordEvent event) =>
       '${event.type}|${event.sessionId}|${event.value}';
