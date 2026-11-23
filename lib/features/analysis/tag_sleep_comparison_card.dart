@@ -17,12 +17,16 @@ class TagSleepComparisonCard extends StatefulWidget {
     required this.sessions,
     required this.start,
     required this.endExclusive,
+    this.initialTagKeys = const [],
+    this.initialMetric = TagSleepMetric.sleepDuration,
   });
 
   final SleepDatabase database;
   final List<SleepSession> sessions;
   final DateTime start;
   final DateTime endExclusive;
+  final List<String> initialTagKeys;
+  final TagSleepMetric initialMetric;
 
   @override
   State<TagSleepComparisonCard> createState() => _TagSleepComparisonCardState();
@@ -48,6 +52,8 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialTagKeys.isNotEmpty) _tagKeys = widget.initialTagKeys.toSet();
+    _metric = widget.initialMetric;
     _data = _loadData();
   }
 
