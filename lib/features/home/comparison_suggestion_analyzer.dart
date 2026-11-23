@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import '../../models/sleep_session.dart';
 import '../analysis/tag_combination_suggestions.dart';
 import '../analysis/tag_sleep_comparison.dart';
+import 'comparison_statistics.dart';
 
 class ComparisonSuggestionCandidate {
   const ComparisonSuggestionCandidate({
@@ -19,6 +20,7 @@ class ComparisonSuggestionCandidate {
     required this.difference,
     required this.threshold,
     required this.priority,
+    required this.pValue,
     required this.fingerprint,
     required this.withSessionIds,
     required this.withoutSessionIds,
@@ -36,6 +38,7 @@ class ComparisonSuggestionCandidate {
   final double difference;
   final double threshold;
   final double priority;
+  final double pValue;
   final String fingerprint;
   final List<String> withSessionIds;
   final List<String> withoutSessionIds;
@@ -53,6 +56,7 @@ class ComparisonSuggestionCandidate {
     'difference': difference,
     'threshold': threshold,
     'priority': priority,
+    'pValue': pValue,
     'fingerprint': fingerprint,
     'withSessionIds': withSessionIds,
     'withoutSessionIds': withoutSessionIds,
@@ -72,7 +76,7 @@ class ComparisonSuggestionCandidate {
         map['withNights'] is! int || map['withoutNights'] is! int ||
         map['withAverage'] is! num || map['withoutAverage'] is! num ||
         map['difference'] is! num || map['threshold'] is! num ||
-        map['priority'] is! num || map['fingerprint'] is! String ||
+        map['priority'] is! num || map['pValue'] is! num || map['fingerprint'] is! String ||
         map['withSessionIds'] is! List || map['withoutSessionIds'] is! List ||
         (map['withSessionIds'] as List).any((item) => item is! String) ||
         (map['withoutSessionIds'] as List).any((item) => item is! String)) {
@@ -91,6 +95,7 @@ class ComparisonSuggestionCandidate {
       difference: (map['difference'] as num).toDouble(),
       threshold: (map['threshold'] as num).toDouble(),
       priority: (map['priority'] as num).toDouble(),
+      pValue: (map['pValue'] as num).toDouble(),
       fingerprint: map['fingerprint'] as String,
       withSessionIds: (map['withSessionIds'] as List).cast<String>(),
       withoutSessionIds: (map['withoutSessionIds'] as List).cast<String>(),
@@ -158,10 +163,16 @@ class ComparisonSuggestionAnalyzer {
         final threshold = thresholdFor(metric);
         final magnitude = result.difference!.abs();
         if (magnitude < threshold) continue;
+        final pValue = ComparisonStatistics.mannWhitneyTwoSidedPValue(
+          result.withTag.values, result.withoutTag.values,
+        );
+        if (pValue == null || pValue >= 0.05) continue;
 
         final minGroup = math.min(result.withTag.nights, result.withoutTag.nights).toInt();
         final normalized = magnitude / threshold;
-        final priority = normalized * (1 + math.min(minGroup, 20).toDouble() / 40);
+        final priority = normalized *
+            (1 + math.min(minGroup, 20).toDouble() / 40) *
+            (1 - pValue);
         final withIds = result.withTag.sessionIds.toList()..sort();
         final withoutIds = result.withoutTag.sessionIds.toList()..sort();
         final fingerprint = jsonEncode({
@@ -185,6 +196,7 @@ class ComparisonSuggestionAnalyzer {
           difference: result.difference!,
           threshold: threshold,
           priority: priority,
+          pValue: pValue,
           fingerprint: fingerprint,
           withSessionIds: List.unmodifiable(withIds),
           withoutSessionIds: List.unmodifiable(withoutIds),
