@@ -45,6 +45,12 @@ class _ComparisonSuggestionCardState extends State<ComparisonSuggestionCard> {
     return '${value.toStringAsFixed(1)} эпизода';
   }
 
+  String _differenceUnit(TagSleepMetric metric) => switch (metric) {
+    TagSleepMetric.sleepDuration => 'мин',
+    TagSleepMetric.morningRating => 'балла',
+    TagSleepMetric.awakeningCount => 'эпизода',
+  };
+
   String get _tags => widget.record.candidate.tagKeys
       .map((key) => widget.tagLabels[key] ?? 'Отметка')
       .join(' + ');
@@ -146,7 +152,7 @@ class _ComparisonSuggestionCardState extends State<ComparisonSuggestionCard> {
     final signed = difference > 0 ? '+' : difference < 0 ? '−' : '';
     final diffText = candidate.metric == TagSleepMetric.sleepDuration
         ? '$signed${_value(difference.abs(), candidate.metric)}'
-        : '$signed${difference.abs().toStringAsFixed(1)} ${candidate.metric.unit}';
+        : '$signed${difference.abs().toStringAsFixed(1)} ${_differenceUnit(candidate.metric)}';
     final start = candidate.start;
     final end = DateTime(candidate.endExclusive.year, candidate.endExclusive.month, candidate.endExclusive.day - 1);
     return SectionCard(child: Column(
