@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../data/sleep_database.dart';
+import '../../data/pdf_report_service.dart';
 import '../../models/sleep_session.dart';
+import '../diary/sleep_session_metrics.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import 'sleep_period_comparison.dart';
@@ -132,6 +134,125 @@ class _SleepPeriodComparisonScreenState extends State<SleepPeriodComparisonScree
     return percentage
       ? '$sign${value.toStringAsFixed(1)}%'
       : '$sign${value.toStringAsFixed(1)} балла';
+  }
+
+  Future<void> _exportComparison(
+    _PeriodComparisonData data,
+    SleepRangeSummary current,
+    SleepRangeSummary previous,
+    SleepPeriodDetailSummary currentDetails,
+    SleepPeriodDetailSummary previousDetails,
+  ) async {
+    String clockDelta(int? a, int? b) => _clockChange(a, b);
+    final durationDelta = current.averageDurationMinutes == null || previous.averageDurationMinutes == null
+      ? null : current.averageDurationMinutes! - previous.averageDurationMinutes!;
+    final durationPercent = SleepPeriodComparison.percentageChange(
+      current.averageDurationMinutes, previous.averageDurationMinutes);
+    final ratingDelta = current.averageRating == null || previous.averageRating == null
+      ? null : current.averageRating! - previous.averageRating!;
+    final metrics = <Map<String, Object?>>[
+      {
+        'label': 'Средняя длительность',
+        'a': _duration(current.averageDurationMinutes) + ' · n=${current.completed}',
+        'b': _duration(previous.averageDurationMinutes) + ' · n=${previous.completed}',
+        'change': durationDelta == null ? 'Недостаточно данных' :
+          '${durationDelta > 0 ? '+' : ''}${_duration(durationDelta.abs())} · ${_change(durationPercent, percentage: true)}',
+      },
+      {
+        'label': 'Оценка самочувствия',
+        'a': current.averageRating == null ? 'Нет данных' : '${current.averageRating!.toStringAsFixed(1)} / 5 · n=${current.rated}',
+        'b': previous.averageRating == null ? 'Нет данных' : '${previous.averageRating!.toStringAsFixed(1)} / 5 · n=${previous.rated}',
+        'change': _change(ratingDelta),
+      },
+      {
+        'label': 'Эффективность сна',
+        'a': _metric(currentDetails.averageEfficiency, '%', currentDetails.efficiencySamples),
+        'b': _metric(previousDetails.averageEfficiency, '%', previousDetails.efficiencySamples),
+        'change': currentDetails.averageEfficiency == null || previousDetails.averageEfficiency == null ? 'Недостаточно данных' :
+          _delta(currentDetails.averageEfficiency! - previousDetails.averageEfficiency!, ' п. п.'),
+      },
+      {
+        'label': 'Пробуждения',
+        'a': _metric(currentDetails.averageAwakenings, '', currentDetails.awakeningSamples),
+        'b': _metric(previousDetails.averageAwakenings, '', previousDetails.awakeningSamples),
+        'change': currentDetails.averageAwakenings == null || previousDetails.averageAwakenings == null ? 'Недостаточно данных' :
+          _delta(currentDetails.averageAwakenings! - previousDetails.averageAwakenings!, ''),
+      },
+      {
+        'label': 'Субъективное качество сна',
+        'a': _metric(currentDetails.averageQuality, ' / 5', currentDetails.qualitySamples),
+        'b': _metric(previousDetails.averageQuality, ' / 5', previousDetails.qualitySamples),
+        'change': currentDetails.averageQuality == null || previousDetails.averageQuality == null ? 'Недостаточно данных' :
+          _delta(currentDetails.averageQuality! - previousDetails.averageQuality!, ' балла'),
+      },
+      {
+        'label': 'Утреннее самочувствие',
+        'a': _metric(currentDetails.averageWellbeing, ' / 5', currentDetails.wellbeingSamples),
+        'b': _metric(previousDetails.averageWellbeing, ' / 5', previousDetails.wellbeingSamples),
+        'change': currentDetails.averageWellbeing == null || previousDetails.averageWellbeing == null ? 'Недостаточно данных' :
+          _delta(currentDetails.averageWellbeing! - previousDetails.averageWellbeing!, ' балла'),
+      },
+      {
+        'label': 'Типичное время засыпания',
+        'a': _clock(currentDetails.typicalBedtimeMinute),
+        'b': _clock(previousDetails.typicalBedtimeMinute),
+        'change': clockDelta(currentDetails.typicalBedtimeMinute, previousDetails.typicalBedtimeMinute),
+      },
+      {
+        'label': 'Типичное время пробуждения',
+        'a': _clock(currentDetails.typicalWakeMinute),
+        'b': _clock(previousDetails.typicalWakeMinute),
+        'change': clockDelta(currentDetails.typicalWakeMinute, previousDetails.typicalWakeMinute),
+      },
+      {
+        'label': 'Стабильность засыпания',
+        'a': _minutes(current.bedtimeDeviationMinutes) + ' · n=${current.regularitySampleCount}',
+        'b': _minutes(previous.bedtimeDeviationMinutes) + ' · n=${previous.regularitySampleCount}',
+        'change': _variabilityChange(current.bedtimeDeviationMinutes, previous.bedtimeDeviationMinutes),
+      },
+      {
+        'label': 'Стабильность пробуждения',
+        'a': _minutes(current.wakeTimeDeviationMinutes) + ' · n=${current.regularitySampleCount}',
+        'b': _minutes(previous.wakeTimeDeviationMinutes) + ' · n=${previous.regularitySampleCount}',
+        'change': _variabilityChange(current.wakeTimeDeviationMinutes, previous.wakeTimeDeviationMinutes),
+      },
+      {
+        'label': 'Звуковые события',
+        'a': '${currentDetails.audio.eventCount} событий · ${currentDetails.audio.nightsWithEvents} ночей',
+        'b': '${previousDetails.audio.eventCount} событий · ${previousDetails.audio.nightsWithEvents} ночей',
+        'change': 'События учитываются по завершённым ночным сессиям',
+      },
+    ];
+
+    List<Map<String, Object?>> nightly(SleepRangeSummary range) =>
+      range.sessions.where((session) => session.endedAt != null &&
+        session.duration != null && session.duration!.inMinutes > 0).map((session) {
+          final stages = data.stages[session.id] ?? const <Map<String, Object?>>[];
+          final calculated = SleepSessionMetrics.calculate(session: session, stages: stages);
+          final report = data.morning[session.id];
+          String shown(Object? value, {String suffix = ''}) =>
+            value is num && value.toDouble().isFinite ? value.toStringAsFixed(1) + suffix : '—';
+          return <String, Object?>{
+            'date': DateFormat('dd.MM.yyyy', 'ru').format(session.startedAt),
+            'start': DateFormat('HH:mm', 'ru').format(session.startedAt),
+            'end': DateFormat('HH:mm', 'ru').format(session.endedAt!),
+            'duration': _duration(calculated.sleepDurationMinutes?.toDouble() ?? session.duration!.inMinutes.toDouble()),
+            'efficiency': shown(calculated.sleepEfficiencyPercent, suffix: '%'),
+            'awakenings': stages.isNotEmpty && calculated.stageCoveragePercent != null
+              ? calculated.awakeningCount.toString() : '—',
+            'quality': shown(report?['sleep_quality'], suffix: ' / 5'),
+            'wellbeing': shown(report?['wellbeing'], suffix: ' / 5'),
+          };
+        }).toList();
+
+    await PdfReportService.exportPeriodComparison(
+      title: 'Сравнение произвольных периодов',
+      periodALabel: _range(current.start, current.endExclusive.subtract(const Duration(days: 1))),
+      periodBLabel: _range(previous.start, previous.endExclusive.subtract(const Duration(days: 1))),
+      metrics: metrics,
+      nightsA: nightly(current),
+      nightsB: nightly(previous),
+    );
   }
 
   @override
@@ -282,6 +403,13 @@ class _SleepPeriodComparisonScreenState extends State<SleepPeriodComparisonScree
             b: '${previous.sessions.length} всего · ${previous.completed} завершено · ${previous.rated} с оценкой',
             change: 'Количество записей сравнивается напрямую'),
           const SizedBox(height: 12),
+          const SizedBox(height: 14),
+          OutlinedButton.icon(
+            onPressed: () => _exportComparison(data, current, previous, currentDetails, previousDetails),
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+            label: const Text('Экспортировать сравнение в PDF'),
+          ),
+          const SizedBox(height: 8),
           const Text('Стабильность — медианное абсолютное отклонение фактического времени засыпания и пробуждения от круговой медианы. В выборку регулярности входят только записи с фактическими границами сна, не отмеченные как ручные или изменённые; нужно не менее двух таких ночей. Длительность в карточке отражает сохранённый интервал ночной сессии. Отсутствующие измерения не заменяются нулями. Сравнение не устанавливает причины изменений, отсутствующие измерения не заменяются нулями.',
             style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.45)),
         ],
