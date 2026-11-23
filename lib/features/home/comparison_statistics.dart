@@ -66,7 +66,7 @@ class ComparisonStatistics {
 
       enumerate(0, n1, 0);
       if (combinations == 0) return null;
-      return (extreme / combinations).clamp(0.0, 1.0);
+      return (extreme / combinations).clamp(0.0, 1.0).toDouble();
     }
 
     final tieCorrection = tieSizes.fold<int>(
@@ -76,9 +76,9 @@ class ComparisonStatistics {
     final variance = n1 * n2 / 12.0 *
         ((total + 1) - tieCorrection / (total * (total - 1)));
     if (variance <= 0) return 1;
-    final z = math.max(0.0, (observedDistance - 0.5) / math.sqrt(variance));
-    final p = 2 * (1 - _normalCdf(z));
-    return p.clamp(0.0, 1.0);
+    final z = math.max(0.0, (observedDistance - 0.5) / math.sqrt(variance)).toDouble();
+    final p = (2 * (1 - _normalCdf(z))).clamp(0.0, 1.0).toDouble();
+    return p;
   }
 
   static double _normalCdf(double z) {
