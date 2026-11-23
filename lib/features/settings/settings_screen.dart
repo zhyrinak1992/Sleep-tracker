@@ -4,6 +4,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'dart:io';
 
 import '../../data/backup_service.dart';
+import '../../data/comparison_suggestion_store.dart';
 import '../../data/app_lock_service.dart';
 import '../../data/apple_health_service.dart';
 import '../../data/apple_health_file_import_service.dart';
@@ -30,15 +31,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
   YandexHomeSnapshot? _yandexHome;
   String? _selectedYandexDeviceId;
   bool _yandexConnected = false;
+  ComparisonSuggestionFrequency? _comparisonFrequency;
+  bool _savingComparisonFrequency = false;
 
   @override
   void initState() {
     super.initState();
     _loadHealthOnboarding();
     _loadYandexConnection();
+    _loadComparisonSuggestionFrequency();
   }
 
 
+
+  Future<void> _loadComparisonSuggestionFrequency() async {
+    final frequency = await ComparisonSuggestionStore(
+      SleepDatabase.instance.getAppMetadata,
+      SleepDatabase.instance.setAppMetadata,
+    ).loadFrequency();
+    if (mounted) setState(() => _comparisonFrequency = frequency);
+  }
+
+  Future<void> _saveComparisonSuggestionFrequency(ComparisonSuggestionFrequency frequency) async {
+    if (_savingComparisonFrequency) return;
+    setState(() => _savingComparisonFrequency = true);
+    try {
+      await ComparisonSuggestionStore(
+        SleepDatabase.instance.getAppMetadata,
+        SleepDatabase.instance.setAppMetadata,
+      ).saveFrequency(frequency);
+      if (mounted) setState(() => _comparisonFrequency = frequency);
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось сохранить частоту предложений: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _savingComparisonFrequency = false);
+    }
+  }
 
   Future<void> _loadYandexConnection() async {
     final service = YandexSmartHomeService.instance;
@@ -491,6 +521,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
         icon: Icons.tune_rounded,
       ),
       const SizedBox(height: 0),
+      SectionCard(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Предложения сравнений', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+          const SizedBox(height: 6),
+          const Text('На главном экране одновременно появляется не более одной карточки. Повторные предложения требуют новых наблюдений или заметного обновления результата; отдельные push-уведомления не отправляются.',
+            style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.45)),
+          const SizedBox(height: 10),
+          if (_comparisonFrequency == null)
+            const LinearProgressIndicator()
+          else
+            DropdownButtonFormField<ComparisonSuggestionFrequency>(
+              initialValue: _comparisonFrequency,
+              decoration: const InputDecoration(labelText: 'Частота показа'),
+              items: ComparisonSuggestionFrequency.values.map((frequency) => DropdownMenuItem(
+                value: frequency,
+                child: Text('${frequency.label} — ${frequency.description}'),
+              )).toList(),
+              onChanged: _savingComparisonFrequency ? null : (value) {
+                if (value != null) _saveComparisonSuggestionFrequency(value);
+              },
+            ),
+          if (_savingComparisonFrequency)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: LinearProgressIndicator(),
+            ),
+        ],
+      )),
+      const SizedBox(height: 12),
       SectionCard(child: ValueListenableBuilder<bool>(
         valueListenable: AppLockService.instance.enabled,
         builder: (context, enabled, _) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
