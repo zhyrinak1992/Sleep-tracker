@@ -42,8 +42,20 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
 
   Future<void> _showRecordCelebration(SleepRecordEvent event) async {
     final recordService = SleepRecordService.instance;
-    if (!mounted || !recordService.tryClaimCelebration(event)) return;
+    if (!mounted || await recordService.isCelebrated(event)) return;
+
+    // The analysis page and the dedicated achievements page can both remain
+    // mounted. Wait for the active dialog to finish instead of dropping this
+    // event when another card temporarily owns the global celebration lock.
+    while (!recordService.tryClaimCelebration(event)) {
+      await Future<void>.delayed(const Duration(milliseconds: 180));
+      if (!mounted || await recordService.isCelebrated(event)) return;
+    }
+
     try {
+      // Another mounted card may have completed this same event while this
+      // card was waiting for the global dialog slot.
+      if (await recordService.isCelebrated(event)) return;
       final isScore = event.type == 'sleep_score';
       final title = isScore ? 'Новый рекорд SleepScore!' : 'Новый рекорд пробуждений!';
       final value = isScore ? '${event.value.toInt()} из 100' : '${event.value.toInt()} за ночь';
