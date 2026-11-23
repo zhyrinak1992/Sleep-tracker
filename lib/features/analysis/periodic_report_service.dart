@@ -73,6 +73,8 @@ class PeriodicReportService {
     final audio = await database.getAudioEvents();
     final notes = await database.getNotes();
     final tagsBySession = await database.getTagsForSessions(completed.map((s) => s.id).toList());
+    final allSleepMetrics = await database.getAllMetrics();
+    final allClimateSamples = await database.getClimateSamples();
     final tagLabels = <String, String>{
       for (final tag in SleepTag.catalog) tag.key: tag.label,
     };
@@ -250,6 +252,21 @@ class PeriodicReportService {
       final durations = <String, double>{};
       final scores = <String, double>{};
       final awakeningsBySession = <String, double>{};
+      final efficiencyBySession = <String, double>{};
+      final latencyBySession = <String, double>{};
+      final qualityBySession = <String, double>{};
+      final wellbeingBySession = <String, double>{};
+      final physiology = <String, Map<String, List<double>>>{
+        'heartRate': <String, List<double>>{},
+        'respiratoryRate': <String, List<double>>{},
+        'bloodOxygen': <String, List<double>>{},
+        'hrv': <String, List<double>>{},
+      };
+      final climate = <String, Map<String, List<double>>>{
+        'roomTemperature': <String, List<double>>{},
+        'roomHumidity': <String, List<double>>{},
+      };
+      final selectedIds = selected.map((session) => session.id).toSet();
       for (final session in selected) {
         final metric = SleepSessionMetrics.calculate(
           session: session,
@@ -257,6 +274,13 @@ class PeriodicReportService {
         );
         final duration = metric.sleepDurationMinutes;
         if (duration != null && duration > 0) durations[session.id] = duration.toDouble();
+        final efficiency = metric.sleepEfficiencyPercent;
+        if (efficiency != null && efficiency.isFinite) efficiencyBySession[session.id] = efficiency;
+        final latency = metric.sleepLatencyMinutes;
+        if (latency != null && latency >= 0) latencyBySession[session.id] = latency.toDouble();
+        final report = morning[session.id];
+        if (report?['sleep_quality'] is num) qualityBySession[session.id] = (report!['sleep_quality'] as num).toDouble();
+        if (report?['wellbeing'] is num) wellbeingBySession[session.id] = (report!['wellbeing'] as num).toDouble();
         final score = scoreCache.putIfAbsent(session.id, () =>
           SleepScoreCalculator.calculateForSession(
             session: session,
@@ -271,12 +295,52 @@ class PeriodicReportService {
           awakeningsBySession[session.id] = metric.awakeningCount.toDouble();
         }
       }
+      final metricTypeToPattern = <String, String>{
+        'Пульс': 'heartRate',
+        'Частота дыхания': 'respiratoryRate',
+        'Насыщение кислородом': 'bloodOxygen',
+        'Вариабельность пульса SDNN': 'hrv',
+      };
+      for (final row in allSleepMetrics) {
+        final sessionId = row['session_id'];
+        final patternKey = metricTypeToPattern[row['metric_type']];
+        final value = row['value'];
+        if (sessionId is String && selectedIds.contains(sessionId) &&
+            patternKey != null && value is num && value.toDouble().isFinite) {
+          physiology[patternKey]!.putIfAbsent(sessionId, () => <double>[]).add(value.toDouble());
+        }
+      }
+      for (final row in allClimateSamples) {
+        final sessionId = row['session_id'];
+        final metricType = row['metric_type'];
+        final value = row['value'];
+        final patternKey = metricType == 'temperature' ? 'roomTemperature'
+          : metricType == 'humidity' ? 'roomHumidity' : null;
+        if (sessionId is String && selectedIds.contains(sessionId) &&
+            patternKey != null && value is num && value.toDouble().isFinite) {
+          climate[patternKey]!.putIfAbsent(sessionId, () => <double>[]).add(value.toDouble());
+        }
+      }
+      Map<String, double> perNightAverage(Map<String, List<double>> values) => {
+        for (final entry in values.entries)
+          if (entry.value.isNotEmpty)
+            entry.key: entry.value.reduce((a, b) => a + b) / entry.value.length,
+      };
+      final additionalMetrics = <String, Map<String, double>>{
+        'efficiency': efficiencyBySession,
+        'sleepLatency': latencyBySession,
+        'subjectiveQuality': qualityBySession,
+        'wellbeing': wellbeingBySession,
+        for (final entry in physiology.entries) entry.key: perNightAverage(entry.value),
+        for (final entry in climate.entries) entry.key: perNightAverage(entry.value),
+      };
       return PeriodicTagPatternAnalyzer.analyze(
         sessions: selected,
         tagsBySession: tagsBySession,
         durationBySession: durations,
         scoreBySession: scores,
         awakeningsBySession: awakeningsBySession,
+        additionalMetrics: additionalMetrics,
         tagLabels: tagLabels,
       );
     }
