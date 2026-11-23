@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:intl/intl.dart';
 import '../../data/sleep_database.dart';
 import '../../models/sleep_session.dart';
+import '../../models/sleep_note.dart';
 import '../diary/sleep_session_metrics.dart';
 
 enum PeriodicReportKind { week, month, year }
@@ -51,6 +52,7 @@ class PeriodicReportService {
     final stages = await database.getStagesForSessions(completed.map((s) => s.id).toList());
     final morning = await database.getMorningReportsForSessions(completed.map((s) => s.id).toList());
     final audio = await database.getAudioEvents();
+    final notes = await database.getNotes();
 
     for (final kind in PeriodicReportKind.values) {
       final first = _periodStart(completed.first.startedAt, kind);
@@ -68,7 +70,7 @@ class PeriodicReportService {
             final snapshot = _buildSnapshot(
               kind: kind, start: cursor, end: end, sessions: selected,
               previousSessions: previous, stages: stages, morning: morning,
-              audio: audio, allSessions: completed,
+              audio: audio, notes: notes, allSessions: completed,
             );
             await database.setAppMetadata(metadataPrefix + id, jsonEncode(snapshot.data));
           }
@@ -94,7 +96,8 @@ class PeriodicReportService {
     required List<SleepSession> sessions, required List<SleepSession> previousSessions,
     required Map<String, List<Map<String, Object?>>> stages,
     required Map<String, Map<String, Object?>> morning,
-    required List<Map<String, Object?>> audio, required List<SleepSession> allSessions,
+    required List<Map<String, Object?>> audio, required List<SleepNote> notes,
+    required List<SleepSession> allSessions,
   }) {
     Map<String, Object?> summarize(List<SleepSession> selected) {
       final metrics = selected.map((s) => SleepSessionMetrics.calculate(session: s, stages: stages[s.id] ?? const [])).toList();
@@ -148,11 +151,17 @@ class PeriodicReportService {
       categories[category] = (categories[category] ?? 0) + 1;
     }
 
+    final periodNotes = notes.where((note) => ids.contains(note.sessionId)).map((note) => <String, Object?>{
+      'sessionStartedAt': note.sessionStartedAt.toIso8601String(),
+      'text': note.text,
+    }).toList();
+
     final data = <String, Object?>{
       'schemaVersion': 1, 'id': _id(kind, start), 'kind': kind.name,
       'start': start.toIso8601String(), 'endExclusive': end.toIso8601String(),
       'generatedAt': DateTime.now().toIso8601String(),
       ...current, 'audioEventCount': events.length, 'audioCategories': categories,
+      'notes': periodNotes, 'noteCount': periodNotes.length,
       'previous': previous, 'score': null,
     };
     if (kind == PeriodicReportKind.year) {
