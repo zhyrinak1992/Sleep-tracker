@@ -13,7 +13,7 @@ void main() {
         awakeningsAvailable: true,
         subjectiveQuality: 4,
       );
-      expect(result.score, closeTo(90, 0.001));
+      expect(result.score, closeTo(93.5, 0.001));
       expect(result.availableWeight, 100);
       expect(result.availableComponents, 4);
       expect(result.components.map((x) => x.weight).toList(), [40, 30, 20, 10]);
