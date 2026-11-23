@@ -206,3 +206,17 @@ class _StorageManagementPanelState extends State<StorageManagementPanel> {
     ),
   );
 }
+
+
+class StorageManagementScreen extends StatelessWidget {
+  const StorageManagementScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Хранилище iPhone')),
+    body: ListView(
+      padding: const EdgeInsets.all(20),
+      children: const [StorageManagementPanel()],
+    ),
+  );
+}
