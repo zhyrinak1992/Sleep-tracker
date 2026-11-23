@@ -234,7 +234,10 @@ void main() {
           previousAwakenings,
           improvedAwakenings,
         ],
-        celebratedKeys: const {},
+        celebratedKeys: {
+          'sleep_score|night-a|90',
+          'awakening_count|night-a|3',
+        },
         isFirstInitialization: false,
       );
 
