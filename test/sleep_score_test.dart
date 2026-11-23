@@ -10,10 +10,11 @@ void main() {
         personalUpperMinutes: 480,
         sleepEfficiencyPercent: 90,
         awakeningCount: 1,
+        awakeningDurationMinutes: 20,
         awakeningsAvailable: true,
         subjectiveQuality: 4,
       );
-      expect(result.score, closeTo(93.5, 0.001));
+      expect(result.score, closeTo(90.1666666667, 0.001));
       expect(result.availableWeight, 100);
       expect(result.availableComponents, 4);
       expect(result.components.map((x) => x.weight).toList(), [40, 30, 20, 10]);
@@ -27,6 +28,7 @@ void main() {
         personalUpperMinutes: 480,
         sleepEfficiencyPercent: null,
         awakeningCount: null,
+        awakeningDurationMinutes: null,
         awakeningsAvailable: false,
         subjectiveQuality: 5,
       );
@@ -60,6 +62,21 @@ void main() {
       expect(lowWeight.availableWeight, 40);
     });
 
+    test('awakening component includes both count and total awake minutes', () {
+      final result = SleepScoreCalculator.calculate(
+        sleepDurationMinutes: null,
+        personalLowerMinutes: null,
+        personalUpperMinutes: null,
+        sleepEfficiencyPercent: null,
+        awakeningCount: 2,
+        awakeningDurationMinutes: 30,
+        awakeningsAvailable: true,
+        subjectiveQuality: 5,
+      );
+      // Count: 60; awake duration: 75; component average: 67.5.
+      expect(result.components[2].score, 67.5);
+    });
+
     test('duration component falls linearly outside the personal range', () {
       final result = SleepScoreCalculator.calculate(
         sleepDurationMinutes: 330,
@@ -67,6 +84,7 @@ void main() {
         personalUpperMinutes: 480,
         sleepEfficiencyPercent: 90,
         awakeningCount: 0,
+        awakeningDurationMinutes: 0,
         awakeningsAvailable: true,
         subjectiveQuality: 5,
       );
@@ -80,6 +98,7 @@ void main() {
         personalUpperMinutes: null,
         sleepEfficiencyPercent: 140,
         awakeningCount: -1,
+        awakeningDurationMinutes: -1,
         awakeningsAvailable: true,
         subjectiveQuality: 8,
       );
