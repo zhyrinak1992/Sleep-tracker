@@ -44,6 +44,10 @@ class _ComparisonSuggestionCardState extends State<ComparisonSuggestionCard> {
     return '${value.toStringAsFixed(1)} эпизода';
   }
 
+  String _pValue(double value) => value < 0.001
+      ? 'p < 0,001'
+      : 'p = ${value.toStringAsFixed(3).replaceAll('.', ',')}';
+
   String _differenceUnit(TagSleepMetric metric) => switch (metric) {
     TagSleepMetric.sleepDuration => 'мин',
     TagSleepMetric.morningRating => 'балла',
@@ -175,8 +179,10 @@ class _ComparisonSuggestionCardState extends State<ComparisonSuggestionCard> {
         const SizedBox(height: 6),
         Text('Разница средних: $diffText',
           style: const TextStyle(color: AppTheme.teal, fontWeight: FontWeight.w700)),
-        Text('Значения: ${_value(candidate.withAverage, candidate.metric)} против ${_value(candidate.withoutAverage, candidate.metric)}. Различие превышает установленный порог для этой метрики; это повод посмотреть данные, а не вывод о причине.',
+        Text('Значения: ${_value(candidate.withAverage, candidate.metric)} против ${_value(candidate.withoutAverage, candidate.metric)}. Различие превышает практический порог для этой метрики.',
           style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.45)),
+        Text('Проверка распределений: U-критерий Манна — Уитни, ${_pValue(candidate.pValue)}. Это не доказывает причинную связь.',
+          style: const TextStyle(color: AppTheme.muted, fontSize: 10, height: 1.4)),
         const SizedBox(height: 12),
         SizedBox(width: double.infinity, child: FilledButton.icon(
           onPressed: _busy ? null : _open,
