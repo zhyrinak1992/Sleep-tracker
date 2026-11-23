@@ -7,6 +7,7 @@ import 'dart:io';
 import '../models/sleep_session.dart';
 import '../models/sleep_tag.dart';
 import '../models/sleep_note.dart';
+import 'sleep_change_history.dart';
 
 class SleepDatabase {
   SleepDatabase._();
@@ -890,12 +891,6 @@ class SleepDatabase {
   /// Appends a new monthly snapshot or a transparent revision when source data changed.
   /// Previous revisions are retained; identical fingerprints are never duplicated.
   Future<bool> saveSleepChangeHistorySnapshot(Map<String, Object?> snapshot) async {
-    final periodKey = snapshot['periodKey'];
-    final fingerprint = snapshot['fingerprint'];
-    if (periodKey is! String || periodKey.isEmpty ||
-        fingerprint is! String || fingerprint.isEmpty) {
-      throw ArgumentError('У снимка истории отсутствует ключ периода или отпечаток данных.');
-    }
     final db = await database;
     return db.transaction((txn) async {
       final rows = await txn.query('app_metadata', columns: ['value'],
@@ -910,20 +905,11 @@ class SleepDatabase {
           history.add(Map<String, Object?>.from(row));
         }
       }
-      final samePeriod = history.where((item) => item['periodKey'] == periodKey).toList();
-      if (samePeriod.any((item) => item['fingerprint'] == fingerprint)) return false;
-      final latestVersion = samePeriod.fold<int>(0, (value, item) {
-        final version = item['version'];
-        return version is int && version > value ? version : value;
-      });
-      final stored = Map<String, Object?>.from(snapshot)
-        ..['version'] = latestVersion + 1
-        ..['supersedesVersion'] = latestVersion == 0 ? null : latestVersion
-        ..['revisionReason'] = latestVersion == 0 ? 'Первичный снимок месяца' : 'Изменились исходные данные или состав сопоставимых наблюдений';
-      history.add(stored);
+      final update = SleepChangeHistoryRecords.append(history, snapshot);
+      if (!update.changed) return false;
       await txn.insert('app_metadata', {
         'key': 'sleep_change_history_v1',
-        'value': jsonEncode(history),
+        'value': jsonEncode(update.records),
       }, conflictAlgorithm: ConflictAlgorithm.replace);
       return true;
     });
