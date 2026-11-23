@@ -56,13 +56,14 @@ class PeriodicReportSnapshot {
 class PeriodicReportService {
   PeriodicReportService(this.database);
   final SleepDatabase database;
-  static const metadataPrefix = 'periodic_report_v8_';
-  static const previousMetadataPrefix = 'periodic_report_v7_';
-  static const olderMetadataPrefix = 'periodic_report_v6_';
-  static const olderMetadataPrefixV2 = 'periodic_report_v5_';
-  static const olderMetadataPrefixV3 = 'periodic_report_v4_';
-  static const olderMetadataPrefixV4 = 'periodic_report_v3_';
-  static const olderMetadataPrefixV5 = 'periodic_report_v2_';
+  static const metadataPrefix = 'periodic_report_v9_';
+  static const previousMetadataPrefix = 'periodic_report_v8_';
+  static const olderMetadataPrefix = 'periodic_report_v7_';
+  static const olderMetadataPrefixV2 = 'periodic_report_v6_';
+  static const olderMetadataPrefixV3 = 'periodic_report_v5_';
+  static const olderMetadataPrefixV4 = 'periodic_report_v4_';
+  static const olderMetadataPrefixV5 = 'periodic_report_v3_';
+  static const olderMetadataPrefixV6 = 'periodic_report_v2_';
   static const legacyMetadataPrefix = 'periodic_report_v1_';
 
   Future<List<PeriodicReportSnapshot>> generateClosedReports({DateTime? now}) async {
@@ -132,6 +133,7 @@ class PeriodicReportService {
     final olderV3 = await database.getAppMetadataByPrefix(olderMetadataPrefixV3);
     final olderV4 = await database.getAppMetadataByPrefix(olderMetadataPrefixV4);
     final olderV5 = await database.getAppMetadataByPrefix(olderMetadataPrefixV5);
+    final olderV6 = await database.getAppMetadataByPrefix(olderMetadataPrefixV6);
     final current = await database.getAppMetadataByPrefix(metadataPrefix);
     final byId = <String, PeriodicReportSnapshot>{};
     for (final value in legacy.values) {
@@ -141,6 +143,12 @@ class PeriodicReportService {
       } catch (_) {}
     }
     // New v8 snapshots win; older v1-v7 snapshots remain readable and intact.
+    for (final value in olderV6.values) {
+      try {
+        final report = PeriodicReportSnapshot.decode(value);
+        byId[report.id] = report;
+      } catch (_) {}
+    }
     for (final value in olderV5.values) {
       try {
         final report = PeriodicReportSnapshot.decode(value);
@@ -486,7 +494,7 @@ class PeriodicReportService {
     }).toList();
 
     final data = <String, Object?>{
-      'schemaVersion': 7, 'id': _id(kind, start), 'kind': kind.name,
+      'schemaVersion': 8, 'id': _id(kind, start), 'kind': kind.name,
       'start': start.toIso8601String(), 'endExclusive': end.toIso8601String(),
       'generatedAt': DateTime.now().toIso8601String(),
       ...current, 'audioEventCount': events.length, 'audioCategories': categories,
