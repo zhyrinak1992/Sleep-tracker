@@ -87,17 +87,6 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
     return hour + ':' + value;
   }
 
-  String _clockDelta(int? current, int? previous) {
-    if (current == null || previous == null) return 'Недостаточно данных';
-    var delta = current - previous;
-    if (delta > 720) delta -= 1440;
-    if (delta < -720) delta += 1440;
-    if (delta == 0) return 'Без изменения';
-    return delta > 0
-      ? delta.toString() + ' мин позже'
-      : delta.abs().toString() + ' мин раньше';
-  }
-
   bool _hasData(List<double?> values) => values.any((value) => value != null);
 
   String _signed(double? value, String suffix, {int decimals = 1}) {
