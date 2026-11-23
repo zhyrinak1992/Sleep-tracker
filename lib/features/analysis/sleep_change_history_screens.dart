@@ -4,27 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../data/sleep_database.dart';
+import '../../data/sleep_change_history.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/screen_header.dart';
 import '../../widgets/section_card.dart';
 import 'sleep_dynamics_screen.dart';
 
-List<Map<String, Object?>> _latestMonthlySnapshots(
-  List<Map<String, Object?>> history,
-) {
-  final byMonth = <String, Map<String, Object?>>{};
-  for (final item in history) {
-    final key = item['periodKey'];
-    if (key is! String) continue;
-    final existing = byMonth[key];
-    final version = item['version'] is int ? item['version'] as int : 1;
-    final existingVersion = existing?['version'] is int ? existing!['version'] as int : 0;
-    if (existing == null || version > existingVersion) byMonth[key] = item;
-  }
-  final result = byMonth.values.toList()
-    ..sort((a, b) => (a['periodKey'] as String).compareTo(b['periodKey'] as String));
-  return result;
-}
 
 String _formatHistoryDate(Object? value) {
   if (value is! String) return 'Дата не указана';
@@ -89,7 +74,7 @@ class _SleepChangeHistoryScreenState extends State<SleepChangeHistoryScreen> {
           ));
         }
         final all = state.data ?? const <Map<String, Object?>>[];
-        final latest = _latestMonthlySnapshots(all).reversed.toList();
+        final latest = SleepChangeHistoryRecords.latestPerMonth(all).reversed.toList();
         if (latest.isEmpty) {
           return const Center(child: Padding(
             padding: EdgeInsets.all(24),
@@ -408,7 +393,7 @@ class _ChangeSeriesPainter extends CustomPainter {
     if (values.isEmpty) return;
     final available = values.whereType<double>().toList();
     if (available.isEmpty) return;
-    final maxAbs = available.map((value) => value.abs()).reduce(math.max);
+    final maxAbs = available.map((value) => value.abs()).reduce((a, b) => a > b ? a : b);
     final scale = maxAbs == 0 ? 1.0 : maxAbs;
     final center = size.height * 0.48;
     final amplitude = size.height * 0.34;
