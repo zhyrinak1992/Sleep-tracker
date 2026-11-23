@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -48,7 +50,88 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
     final ids = sessions.where((s) => s.endedAt != null).map((s) => s.id).toList();
     final stages = await widget.database.getStagesForSessions(ids);
     final morning = await widget.database.getMorningReportsForSessions(ids);
-    return _DynamicsData(sessions: sessions, stages: stages, morning: morning, scoreCache: <String, SleepScoreResult>{});
+    final data = _DynamicsData(sessions: sessions, stages: stages, morning: morning, scoreCache: <String, SleepScoreResult>{});
+    await _recordMonthlyChangeSnapshot(data);
+    return data;
+  }
+
+  Future<void> _recordMonthlyChangeSnapshot(_DynamicsData data) async {
+    final now = DateTime.now();
+    final ranges = SleepDynamicsAnalysis.rollingThirtyDayRanges(now);
+    final current = _summarize(data, ranges.currentStart, ranges.currentEndExclusive, SleepDynamicsPeriod.month);
+    final previous = _summarize(data, ranges.previousStart, ranges.previousEndExclusive, SleepDynamicsPeriod.month);
+    final insights = SleepChangeInsights.calculate(current: current, previous: previous);
+
+    final relevant = data.sessions.where((session) =>
+      !session.startedAt.isBefore(ranges.previousStart) &&
+      session.startedAt.isBefore(ranges.currentEndExclusive)).toList()
+      ..sort((a, b) => a.id.compareTo(b.id));
+    final ids = relevant.map((session) => session.id).toSet();
+    final source = <String, Object?>{
+      'sessions': relevant.map((session) => {
+        'id': session.id,
+        'startedAt': session.startedAt.toIso8601String(),
+        'endedAt': session.endedAt?.toIso8601String(),
+        'updatedAt': session.updatedAt?.toIso8601String(),
+        'actualSleepStartedAt': session.actualSleepStartedAt?.toIso8601String(),
+        'actualSleepEndedAt': session.actualSleepEndedAt?.toIso8601String(),
+        'morningRating': session.morningRating,
+        'source': session.source,
+        'userEdited': session.userEdited,
+      }).toList(),
+      'stages': data.stages.entries
+        .where((entry) => ids.contains(entry.key))
+        .toList()
+        ..sort((a, b) => a.key.compareTo(b.key))
+        .map((entry) => {
+          'sessionId': entry.key,
+          'rows': entry.value.map((row) => Map<String, Object?>.from(row)).toList(),
+        }).toList(),
+      'morning': data.morning.entries
+        .where((entry) => ids.contains(entry.key))
+        .toList()
+        ..sort((a, b) => a.key.compareTo(b.key))
+        .map((entry) => {
+          'sessionId': entry.key,
+          'report': Map<String, Object?>.from(entry.value),
+        }).toList(),
+    };
+    final fingerprint = _stableFingerprint(jsonEncode(source));
+    final periodKey = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+    await widget.database.saveSleepChangeHistorySnapshot({
+      'periodKey': periodKey,
+      'generatedAt': now.toIso8601String(),
+      'currentStart': ranges.currentStart.toIso8601String(),
+      'currentEndExclusive': ranges.currentEndExclusive.toIso8601String(),
+      'previousStart': ranges.previousStart.toIso8601String(),
+      'previousEndExclusive': ranges.previousEndExclusive.toIso8601String(),
+      'fingerprint': fingerprint,
+      'hasComparableData': insights.hasComparableData,
+      'summary': insights.personalSummary,
+      'mainChangeStatus': !insights.hasComparableData
+          ? 'insufficient_data'
+          : insights.mainChange == null ? 'no_clear_change' : 'selected',
+      'mainChange': insights.mainChange?.toMap(),
+      'notableChanges': insights.items.map((item) => item.toMap()).toList(),
+      'sampleCounts': {
+        'duration': {'previous': previous.durationSamples, 'current': current.durationSamples},
+        'score': {'previous': previous.scoreSamples, 'current': current.scoreSamples},
+        'efficiency': {'previous': previous.efficiencySamples, 'current': current.efficiencySamples},
+        'awakenings': {'previous': previous.awakeningSamples, 'current': current.awakeningSamples},
+        'quality': {'previous': previous.qualitySamples, 'current': current.qualitySamples},
+        'wellbeing': {'previous': previous.wellbeingSamples, 'current': current.wellbeingSamples},
+        'regularity': {'previous': previous.regularitySamples, 'current': current.regularitySamples},
+      },
+    });
+  }
+
+  String _stableFingerprint(String value) {
+    var hash = 0xcbf29ce484222325;
+    for (final byte in utf8.encode(value)) {
+      hash ^= byte;
+      hash = (hash * 0x100000001b3) & 0xffffffffffffffff;
+    }
+    return hash.toRadixString(16).padLeft(16, '0');
   }
 
   void _refresh() => setState(() => _future = _load());
