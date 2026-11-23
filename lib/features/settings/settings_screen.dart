@@ -533,6 +533,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const LinearProgressIndicator()
           else
             DropdownButtonFormField<ComparisonSuggestionFrequency>(
+              key: ValueKey(_comparisonFrequency),
               initialValue: _comparisonFrequency,
               decoration: const InputDecoration(labelText: 'Частота показа'),
               items: ComparisonSuggestionFrequency.values.map((frequency) => DropdownMenuItem(
