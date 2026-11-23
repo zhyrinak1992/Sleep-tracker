@@ -255,6 +255,7 @@ class SleepDatabase {
   /// При любой ошибке SQLite откатывает транзакцию и оставляет исходную базу.
   Future<void> restoreSnapshot(Map<String, dynamic> snapshot, {bool merge = false}) async {
     final rowsByTable = validateSnapshot(snapshot);
+    const tables = ['sleep_sessions', 'sleep_session_tags', 'sleep_notes', 'app_metadata', 'sleep_stages', 'sleep_metrics', 'audio_events', 'morning_reports', 'climate_samples'];
     final db = await database;
     await db.transaction((txn) async {
       if (!merge) {
