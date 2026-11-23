@@ -63,11 +63,12 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
     final previous = _summarize(data, ranges.previousStart, ranges.previousEndExclusive, SleepDynamicsPeriod.month);
     final insights = SleepChangeInsights.calculate(current: current, previous: previous);
 
-    final relevant = data.sessions.where((session) =>
-      !session.startedAt.isBefore(ranges.previousStart) &&
-      session.startedAt.isBefore(ranges.currentEndExclusive)).toList()
+    // SleepScore for nights in these windows may use earlier history as its baseline.
+    // Include the full available source set in the fingerprint so a changed historical
+    // baseline creates a transparent new revision instead of silently changing scores.
+    final fingerprintSessions = data.sessions.toList()
       ..sort((a, b) => a.id.compareTo(b.id));
-    final ids = relevant.map((session) => session.id).toSet();
+    final ids = fingerprintSessions.map((session) => session.id).toSet();
     final sortedStages = data.stages.entries
       .where((entry) => ids.contains(entry.key)).toList()
       ..sort((a, b) => a.key.compareTo(b.key));
@@ -75,7 +76,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
       .where((entry) => ids.contains(entry.key)).toList()
       ..sort((a, b) => a.key.compareTo(b.key));
     final source = <String, Object?>{
-      'sessions': relevant.map((session) => {
+      'sessions': fingerprintSessions.map((session) => {
         'id': session.id,
         'startedAt': session.startedAt.toIso8601String(),
         'endedAt': session.endedAt?.toIso8601String(),
