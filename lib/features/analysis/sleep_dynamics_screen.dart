@@ -126,10 +126,10 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
   }
 
   String _stableFingerprint(String value) {
-    var hash = 0xcbf29ce484222325;
+    var hash = 0x811c9dc5;
     for (final byte in utf8.encode(value)) {
       hash ^= byte;
-      hash = (hash * 0x100000001b3) & 0xffffffffffffffff;
+      hash = (hash * 0x01000193) & 0xffffffff;
     }
     return hash.toRadixString(16).padLeft(16, '0');
   }
