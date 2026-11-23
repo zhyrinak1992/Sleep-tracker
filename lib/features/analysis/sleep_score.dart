@@ -11,6 +11,7 @@ class SleepScoreComponent {
     required this.label,
     required this.weight,
     required this.score,
+    required this.actualValue,
     required this.detail,
   });
 
@@ -18,6 +19,7 @@ class SleepScoreComponent {
   final String label;
   final double weight;
   final double? score;
+  final String actualValue;
   final String detail;
 
   Map<String, Object?> toMap() => {
@@ -25,6 +27,7 @@ class SleepScoreComponent {
     'label': label,
     'weight': weight,
     'score': score,
+    'actualValue': actualValue,
     'detail': detail,
   };
 }
@@ -43,6 +46,14 @@ class SleepScoreResult {
   final List<SleepScoreComponent> components;
 
   bool get isAvailable => score != null;
+
+  double? contributionPoints(SleepScoreComponent component) =>
+      score == null || component.score == null || availableWeight <= 0
+          ? null : component.score! * component.weight / availableWeight;
+
+  double? effectiveWeight(SleepScoreComponent component) =>
+      score == null || component.score == null || availableWeight <= 0
+          ? null : component.weight / availableWeight * 100;
 
   Map<String, Object?> toMap() => {
     'score': score == null ? null : score!.round(),
@@ -144,6 +155,8 @@ class SleepScoreCalculator {
       SleepScoreComponent(
         key: 'duration', label: 'Продолжительность сна',
         weight: durationWeight, score: durationScore,
+        actualValue: sleepDurationMinutes != null && sleepDurationMinutes > 0
+          ? '${sleepDurationMinutes ~/ 60} ч ${sleepDurationMinutes % 60} мин' : 'Нет данных',
         detail: durationScore == null
           ? 'Нет подтверждённого индивидуального диапазона или длительности сна.'
           : 'Сравнение с личным диапазоном сна; внутри диапазона — 100, за его границами балл плавно снижается до нуля на расстоянии 3 часов.',
@@ -151,6 +164,8 @@ class SleepScoreCalculator {
       SleepScoreComponent(
         key: 'efficiency', label: 'Эффективность сна',
         weight: efficiencyWeight, score: efficiencyScore,
+        actualValue: sleepEfficiencyPercent != null && sleepEfficiencyPercent.isFinite && sleepEfficiencyPercent >= 0 && sleepEfficiencyPercent <= 100
+          ? '${sleepEfficiencyPercent.toStringAsFixed(1)}%' : 'Нет данных',
         detail: efficiencyScore == null
           ? 'Недостаточное покрытие измерениями сна и бодрствования.'
           : '70% и ниже — 0; 90% и выше — 100; между ними — линейная шкала.',
@@ -158,6 +173,8 @@ class SleepScoreCalculator {
       SleepScoreComponent(
         key: 'awakenings', label: 'Пробуждения',
         weight: awakeningsWeight, score: awakeningsScore,
+        actualValue: awakeningsAvailable && awakeningCount != null && awakeningDurationMinutes != null
+          ? '$awakeningCount · $awakeningDurationMinutes мин бодрствования' : 'Нет достоверных данных',
         detail: awakeningsScore == null
           ? 'Нет достоверных данных о пробуждениях.'
           : 'Компонент объединяет число и суммарную длительность бодрствования поровну: за каждое пробуждение снимается 20 баллов (минимум 0), а длительность линейно снижается от 100 баллов до 0 на отметке 120 минут; затем берётся среднее двух оценок.',
@@ -165,6 +182,8 @@ class SleepScoreCalculator {
       SleepScoreComponent(
         key: 'subjectiveQuality', label: 'Субъективное качество сна',
         weight: subjectiveQualityWeight, score: qualityScore,
+        actualValue: subjectiveQuality != null && subjectiveQuality >= 1 && subjectiveQuality <= 5
+          ? '$subjectiveQuality из 5' : 'Нет данных',
         detail: qualityScore == null
           ? 'Утренняя оценка качества сна не заполнена.'
           : 'Оценка 1–5 линейно переводится в диапазон 0–100.',
