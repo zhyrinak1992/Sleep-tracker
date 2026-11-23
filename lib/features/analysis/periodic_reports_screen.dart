@@ -155,13 +155,13 @@ class _ReportCard extends StatelessWidget {
                   value: _formatDuration(month['averageSleepMinutes']),
                 ),
                 if (month['averageEfficiency'] is num)
-                  _ReportLine(label: '  Эффективность', value: _formatPercent(_number(month['averageEfficiency']))),
+                  _ReportLine(label: '  Эффективность · ' + (month['efficiencySamples'] ?? 0).toString() + ' измерений', value: _formatPercent(_number(month['averageEfficiency']))),
                 if (month['averageAwakenings'] is num)
-                  _ReportLine(label: '  Пробуждения', value: _formatNumber(_number(month['averageAwakenings']))),
+                  _ReportLine(label: '  Пробуждения · ' + (month['awakeningSamples'] ?? 0).toString() + ' ночей', value: _formatNumber(_number(month['averageAwakenings']))),
                 if (month['averageQuality'] is num)
-                  _ReportLine(label: '  Качество сна', value: _formatScale(_number(month['averageQuality']))),
+                  _ReportLine(label: '  Качество сна · ' + (month['qualitySamples'] ?? 0).toString() + ' оценок', value: _formatScale(_number(month['averageQuality']))),
                 if (month['averageWellbeing'] is num)
-                  _ReportLine(label: '  Самочувствие', value: _formatScale(_number(month['averageWellbeing']))),
+                  _ReportLine(label: '  Самочувствие · ' + (month['wellbeingSamples'] ?? 0).toString() + ' оценок', value: _formatScale(_number(month['averageWellbeing']))),
               ]);
             }),
             if (shortest is int && longest is int)
