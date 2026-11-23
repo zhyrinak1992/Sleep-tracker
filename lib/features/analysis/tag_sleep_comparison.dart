@@ -19,10 +19,11 @@ extension TagSleepMetricLabel on TagSleepMetric {
 }
 
 class TagSleepGroupSummary {
-  const TagSleepGroupSummary({required this.nights, required this.average, this.sessionIds = const []});
+  const TagSleepGroupSummary({required this.nights, required this.average, this.sessionIds = const [], this.values = const []});
   final int nights;
   final double? average;
   final List<String> sessionIds;
+  final List<double> values;
 }
 
 class TagSleepComparisonResult {
@@ -97,8 +98,8 @@ class TagSleepComparison {
     final sufficient = withValues.length >= minimumNightsPerGroup &&
         withoutValues.length >= minimumNightsPerGroup;
     return TagSleepComparisonResult(
-      withTag: TagSleepGroupSummary(nights: withValues.length, average: withAverage, sessionIds: List.unmodifiable(withSessionIds)),
-      withoutTag: TagSleepGroupSummary(nights: withoutValues.length, average: withoutAverage, sessionIds: List.unmodifiable(withoutSessionIds)),
+      withTag: TagSleepGroupSummary(nights: withValues.length, average: withAverage, sessionIds: List.unmodifiable(withSessionIds), values: List.unmodifiable(withValues)),
+      withoutTag: TagSleepGroupSummary(nights: withoutValues.length, average: withoutAverage, sessionIds: List.unmodifiable(withoutSessionIds), values: List.unmodifiable(withoutValues)),
       difference: sufficient && withAverage != null && withoutAverage != null
           ? withAverage - withoutAverage
           : null,
