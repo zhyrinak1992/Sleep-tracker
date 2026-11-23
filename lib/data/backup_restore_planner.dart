@@ -14,6 +14,7 @@ class BackupRestorePlan {
     required this.requiredBytesEstimate,
     required this.availableBytes,
     required this.stateFingerprint,
+    this.blockedReason,
   });
 
   final int archiveRecordCount;
@@ -28,9 +29,11 @@ class BackupRestorePlan {
   final int requiredBytesEstimate;
   final int? availableBytes;
   final String stateFingerprint;
+  final String? blockedReason;
 
   bool get spaceCheckKnown => availableBytes != null;
   bool get hasEnoughSpace => availableBytes == null || availableBytes! >= requiredBytesEstimate;
+  bool get canProceed => blockedReason == null && hasEnoughSpace;
 }
 
 class BackupRestoreImpact {
@@ -70,7 +73,8 @@ class BackupRestorePlanner {
     for (final item in metadata) {
       if (item['key'] == key) { row = item; break; }
     }
-    if (row == null || row['value'] is! String) return [];
+    if (row == null) return [];
+    if (row['value'] is! String) throw FormatException('Повреждено значение истории $key.');
     final decoded = jsonDecode(row['value'] as String);
     if (decoded is! List || decoded.any((item) => item is! Map)) {
       throw FormatException('Повреждён раздел истории $key в резервной копии.');
@@ -129,6 +133,7 @@ class BackupRestorePlanner {
     var duplicatesToSkip = 0;
     var historyEntriesToMerge = 0;
     var mergeDatabaseBytes = 0;
+    String? mergeBlockedReason;
 
     final fingerprintBasis = <String, Object?>{
       'archive': <String, Object?>{},
@@ -173,7 +178,13 @@ class BackupRestorePlanner {
               metadataKey == 'comparison_suggestion_history_v1') {
             final historyKey = metadataKey as String;
             final importedHistory = _historyRows(archive, historyKey);
-            final localHistory = _historyRows(current, historyKey);
+            List<Map<String, Object?>> localHistory;
+            try {
+              localHistory = _historyRows(current, historyKey);
+            } catch (_) {
+              mergeBlockedReason ??= 'Локальная история $historyKey повреждена. Для безопасного восстановления выберите полную замену.';
+              localHistory = [];
+            }
             final localIds = _historyIdentities(localHistory, historyKey);
             final importedIds = _historyIdentities(importedHistory, historyKey);
             final newCount = importedIds.difference(localIds).length;
@@ -239,6 +250,7 @@ class BackupRestorePlanner {
         requiredBytesEstimate: replaceRequired,
         availableBytes: availableBytes,
         stateFingerprint: replaceFingerprint,
+        blockedReason: null,
       ),
       merge: BackupRestorePlan(
         archiveRecordCount: archiveRecordCount,
@@ -253,6 +265,7 @@ class BackupRestorePlanner {
         requiredBytesEstimate: mergeRequired,
         availableBytes: availableBytes,
         stateFingerprint: mergeFingerprint,
+        blockedReason: mergeBlockedReason,
       ),
     );
   }
