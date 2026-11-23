@@ -90,6 +90,7 @@ class BackupService {
     // This validation is deliberately read-only and runs before the user sees restore choices.
     SleepDatabase.instance.validateSnapshot(data);
     _validateAudioArchive(data, decoded['formatVersion'] as int);
+    _validateSleepChangeHistory(data);
     return BackupImportDraft._(
       document: Map<String, dynamic>.from(decoded),
       data: data,
@@ -119,6 +120,28 @@ class BackupService {
       if (audioBytes.isEmpty) throw const FormatException('В резервной копии обнаружен пустой аудиофайл. Импорт отменён.');
       if (row['id'] is! String || (row['id'] as String).isEmpty) {
         throw const FormatException('У аудиозаписи в резервной копии отсутствует ID.');
+      }
+    }
+  }
+
+  void _validateSleepChangeHistory(Map<String, dynamic> data) {
+    final metadata = data['app_metadata'];
+    if (metadata is! List) return;
+    for (final raw in metadata) {
+      if (raw is! Map || raw['key'] != 'sleep_change_history_v1') continue;
+      final value = raw['value'];
+      if (value is! String) {
+        throw const FormatException('История главных изменений в резервной копии повреждена.');
+      }
+      final decoded = jsonDecode(value);
+      if (decoded is! List) {
+        throw const FormatException('История главных изменений в резервной копии имеет неверный формат.');
+      }
+      for (final item in decoded) {
+        if (item is! Map || item['periodKey'] is! String ||
+            item['fingerprint'] is! String || item['version'] is! int) {
+          throw const FormatException('В резервной копии обнаружена некорректная запись истории главных изменений.');
+        }
       }
     }
   }
@@ -198,16 +221,27 @@ class BackupImportPreview {
     required this.formatVersion, required this.createdAt, required this.sessions,
     required this.reports, required this.notes, required this.audioEvents,
     required this.audioFiles, required this.climateSamples, required this.stages,
-    required this.metrics, required this.tags,
+    required this.metrics, required this.tags, required this.changeHistorySnapshots,
   });
   final int formatVersion;
   final DateTime? createdAt;
-  final int sessions, reports, notes, audioEvents, audioFiles, climateSamples, stages, metrics, tags;
+  final int sessions, reports, notes, audioEvents, audioFiles, climateSamples, stages, metrics, tags, changeHistorySnapshots;
 
   static int _count(Map<String, dynamic> data, String key) => data[key] is List ? (data[key] as List).length : 0;
   factory BackupImportPreview.fromDocument(Map<String, dynamic> document, Map<String, dynamic> data) {
     final audio = (data['audio_events'] as List?) ?? const [];
     final files = audio.where((row) => row is Map && row['audioDataB64'] is String && (row['audioDataB64'] as String).isNotEmpty).length;
+    var changeHistorySnapshots = 0;
+    final metadata = (data['app_metadata'] as List?) ?? const [];
+    for (final row in metadata) {
+      if (row is! Map || row['key'] != 'sleep_change_history_v1' || row['value'] is! String) continue;
+      try {
+        final decoded = jsonDecode(row['value'] as String);
+        if (decoded is List) changeHistorySnapshots = decoded.length;
+      } catch (_) {
+        // Structural validation reports malformed history before the preview is shown.
+      }
+    }
     return BackupImportPreview(
       formatVersion: document['formatVersion'] as int,
       createdAt: DateTime.tryParse(document['createdAt'] is String ? document['createdAt'] as String : ''),
@@ -215,6 +249,7 @@ class BackupImportPreview {
       notes: _count(data, 'sleep_notes'), audioEvents: audio.length, audioFiles: files,
       climateSamples: _count(data, 'climate_samples'), stages: _count(data, 'sleep_stages'),
       metrics: _count(data, 'sleep_metrics'), tags: _count(data, 'sleep_session_tags'),
+      changeHistorySnapshots: changeHistorySnapshots,
     );
   }
 }
