@@ -69,8 +69,8 @@ void main() {
     });
 
     test('does not create conclusions from insufficient samples', () {
-      final previous = summary(duration: 420, durationSamples: 4);
-      final current = summary(duration: 500, durationSamples: 4);
+      final previous = summary(duration: 420, durationSamples: 4, scoreSamples: 4);
+      final current = summary(duration: 500, durationSamples: 4, scoreSamples: 4);
       final result = SleepChangeInsights.calculate(current: current, previous: previous);
 
       expect(result.hasComparableData, isFalse);
