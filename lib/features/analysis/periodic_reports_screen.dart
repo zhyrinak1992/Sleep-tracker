@@ -133,7 +133,7 @@ class _ReportCard extends StatelessWidget {
                 style: const TextStyle(fontSize: 12, height: 1.4)),
             )),
           ],
-          if (categories.isNotEmpty) [
+          if (categories.isNotEmpty) ...[
             const Divider(height: 22),
             const Text('Категории звуковых событий', style: TextStyle(fontWeight: FontWeight.w600)),
             ...categories.entries.map((entry) => _ReportLine(label: entry.key, value: entry.value.toString())),
