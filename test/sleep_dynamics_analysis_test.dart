@@ -97,6 +97,16 @@ void main() {
       expect(week.endExclusive, DateTime(2026, 3, 30));
       expect(week.start.hour, 0);
       expect(week.endExclusive.hour, 0);
+      expect(
+        SleepDynamicsAnalysis.nextPeriodStart(
+          DateTime(2026, 3, 23), SleepDynamicsPeriod.week),
+        DateTime(2026, 3, 30),
+      );
+      expect(
+        SleepDynamicsAnalysis.previousPeriodStart(
+          DateTime(2026, 3, 30), SleepDynamicsPeriod.week),
+        DateTime(2026, 3, 23),
+      );
     });
 
     test('uses only available samples for efficiency, awakenings and morning ratings', () {
