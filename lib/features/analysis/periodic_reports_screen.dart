@@ -155,12 +155,23 @@ class _ReportCard extends StatelessWidget {
                     ? Map<String, Object?>.from(metrics[metricKey] as Map) : <String, Object?>{};
                   final previous = previousMetrics[metricKey] is Map
                     ? Map<String, Object?>.from(previousMetrics[metricKey] as Map) : <String, Object?>{};
-                  String value(Object? raw) => metricKey == 'duration'
-                    ? _formatDuration(raw)
-                    : raw is num ? raw.toStringAsFixed(1) + suffix : 'нет данных';
+                  String value(Object? raw) {
+                    if (metricKey == 'duration') return _formatDuration(raw);
+                    if (raw is! num) return 'нет данных';
+                    if (metricKey == 'bedtime' || metricKey == 'wakeTime') {
+                      final minute = raw.round().remainder(1440);
+                      return minute.toString().padLeft(2, '0').replaceRange(
+                        minute.toString().padLeft(2, '0').length - 2,
+                        minute.toString().padLeft(2, '0').length,
+                        (minute % 60).toString().padLeft(2, '0'),
+                      );
+                    }
+                    return raw.toStringAsFixed(1) + suffix;
+                  }
                   final difference = current['difference'];
+                  final deltaSuffix = metricKey == 'bedtime' || metricKey == 'wakeTime' ? ' мин' : suffix;
                   final delta = difference is num
-                    ? ' · разница ' + (difference > 0 ? '+' : '') + difference.toStringAsFixed(1) + suffix
+                    ? ' · разница ' + (difference > 0 ? '+' : '') + difference.toStringAsFixed(1) + deltaSuffix
                     : ' · недостаточно данных для сравнения';
                   return 'С отметкой: ' + value(current['withTagAverage']) +
                     ' (n=' + (current['withTagSamples'] ?? 0).toString() + '); без отметки: ' +
@@ -186,6 +197,8 @@ class _ReportCard extends StatelessWidget {
                       ('sleepLatency', 'Засыпание · задержка', ' мин'),
                       ('subjectiveQuality', 'Субъективное качество', ' / 5'),
                       ('wellbeing', 'Утреннее самочувствие', ' / 5'),
+                      ('bedtime', 'Время засыпания', ''),
+                      ('wakeTime', 'Время пробуждения', ''),
                       ('heartRate', 'Пульс', ' уд/мин'),
                       ('respiratoryRate', 'Частота дыхания', ' вдох/мин'),
                       ('bloodOxygen', 'Насыщение кислородом', '%'),
