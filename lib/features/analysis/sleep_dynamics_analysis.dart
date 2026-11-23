@@ -107,13 +107,13 @@ class SleepDynamicsAnalysis {
   }
 
   static DateTime nextPeriodStart(DateTime start, SleepDynamicsPeriod period) {
-    if (period == SleepDynamicsPeriod.week) return start.add(const Duration(days: 7));
+    if (period == SleepDynamicsPeriod.week) return DateTime(start.year, start.month, start.day + 7);
     if (period == SleepDynamicsPeriod.month) return DateTime(start.year, start.month + 1);
     return DateTime(start.year + 1);
   }
 
   static DateTime previousPeriodStart(DateTime start, SleepDynamicsPeriod period) {
-    if (period == SleepDynamicsPeriod.week) return start.subtract(const Duration(days: 7));
+    if (period == SleepDynamicsPeriod.week) return DateTime(start.year, start.month, start.day - 7);
     if (period == SleepDynamicsPeriod.month) return DateTime(start.year, start.month - 1);
     return DateTime(start.year - 1);
   }
