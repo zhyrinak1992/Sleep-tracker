@@ -151,7 +151,7 @@ class ComparisonSuggestionHistoryDetailScreen extends StatelessWidget {
               Text(tags, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
               const SizedBox(height: 6),
               Text(candidate.metric.label),
-              Text('Период: ${DateFormat('d MMM yyyy', 'ru').format(candidate.start.toLocal())} — ${DateFormat('d MMM yyyy', 'ru').format(candidate.endExclusive.toLocal().subtract(const Duration(days: 1)))}'),
+              Text('Период: ${DateFormat('d MMM yyyy', 'ru').format(candidate.start.toLocal())} — ${DateFormat('d MMM yyyy', 'ru').format(DateTime(candidate.endExclusive.toLocal().year, candidate.endExclusive.toLocal().month, candidate.endExclusive.toLocal().day - 1))}'),
               const SizedBox(height: 8),
               Text('Ночи с отметками: ${candidate.withNights}; без комбинации: ${candidate.withoutNights}.'),
               Text('Средние значения: ${candidate.withAverage.toStringAsFixed(1)} и ${candidate.withoutAverage.toStringAsFixed(1)} ${candidate.metric.unit}.'),
