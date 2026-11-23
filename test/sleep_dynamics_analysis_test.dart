@@ -4,6 +4,16 @@ import 'package:sleep_tracker/models/sleep_session.dart';
 
 void main() {
   group('SleepDynamicsAnalysis', () {
+    test('creates contiguous current and previous 30-calendar-day windows', () {
+      final ranges = SleepDynamicsAnalysis.rollingThirtyDayRanges(DateTime(2026, 11, 23, 14, 30));
+      expect(ranges.currentStart, DateTime(2026, 10, 25));
+      expect(ranges.currentEndExclusive, DateTime(2026, 11, 24));
+      expect(ranges.previousStart, DateTime(2026, 9, 25));
+      expect(ranges.previousEndExclusive, DateTime(2026, 10, 25));
+      expect(ranges.currentEndExclusive.difference(ranges.currentStart).inDays, 30);
+      expect(ranges.previousEndExclusive.difference(ranges.previousStart).inDays, 30);
+    });
+
     test('calculates calendar period boundaries for week, month and year', () {
       final date = DateTime(2026, 11, 25);
       expect(
@@ -69,6 +79,12 @@ void main() {
       expect(result.wellbeingSamples, 1);
       expect(result.averageWellbeing, 5);
       expect(result.chartValues[1], 410);
+      expect(result.chartEfficiencyValues[1], closeTo(85.4, 0.2));
+      expect(result.chartAwakeningValues[1], 1);
+      expect(result.chartQualityValues[1], 4);
+      expect(result.chartWellbeingValues[1], 5);
+      expect(result.typicalBedtimeMinute, 23 * 60 + 10);
+      expect(result.typicalWakeMinute, 6 * 60 + 10);
     });
 
     test('does not turn missing phase coverage into zero efficiency or zero awakenings', () {
@@ -122,6 +138,8 @@ void main() {
       expect(result.regularitySamples, 2);
       expect(result.bedtimeDeviationMinutes, 5);
       expect(result.wakeTimeDeviationMinutes, 5);
+      expect(result.typicalBedtimeMinute, 23 * 60 + 55);
+      expect(result.typicalWakeMinute, 6 * 60 + 55);
     });
   });
 }
