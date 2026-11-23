@@ -72,7 +72,7 @@ class PeriodicReportService {
               previousSessions: previous, stages: stages, morning: morning,
               audio: audio, notes: notes, allSessions: completed,
             );
-            await database.setAppMetadata(metadataPrefix + id, jsonEncode(snapshot.data));
+            await database.setAppMetadata(metadataPrefix + id, jsonEncode(snapshot));
           }
         }
         cursor = end;
