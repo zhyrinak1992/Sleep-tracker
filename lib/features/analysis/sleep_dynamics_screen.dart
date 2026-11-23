@@ -128,6 +128,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
           case 'duration':
             final minutes = metrics.sleepDurationMinutes ?? session.duration!.inMinutes;
             if (minutes > 0) value = minutes.toDouble();
+            break;
           case 'score':
             value = data.scoreCache.putIfAbsent(session.id, () =>
               SleepScoreCalculator.calculateForSession(
@@ -137,18 +138,23 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
                 stagesBySession: data.stages,
               ),
             ).score;
+            break;
           case 'efficiency':
             value = metrics.sleepEfficiencyPercent;
+            break;
           case 'awakenings':
             if (stages.isNotEmpty && metrics.stageCoveragePercent != null) {
               value = metrics.awakeningCount.toDouble();
             }
+            break;
           case 'quality':
             final raw = data.morning[session.id]?['sleep_quality'];
             if (raw is num && raw.toDouble().isFinite) value = raw.toDouble();
+            break;
           case 'wellbeing':
             final raw = data.morning[session.id]?['wellbeing'];
             if (raw is num && raw.toDouble().isFinite) value = raw.toDouble();
+            break;
         }
         if (value != null && value.isFinite) result.add((session: session, value: value));
       }
