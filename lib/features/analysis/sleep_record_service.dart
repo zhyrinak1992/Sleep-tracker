@@ -136,6 +136,17 @@ class SleepRecordService {
     }
   }
 
+  Future<bool> isCelebrated(SleepRecordEvent event) async {
+    final raw = await SleepDatabase.instance.getAppMetadata(_celebratedKey);
+    if (raw == null || raw.isEmpty) return false;
+    try {
+      final decoded = jsonDecode(raw);
+      return decoded is List && decoded.whereType<String>().contains(_eventKey(event));
+    } on FormatException {
+      return false;
+    }
+  }
+
   Future<void> markCelebrated(SleepRecordEvent event) async {
     final database = SleepDatabase.instance;
     final raw = await database.getAppMetadata(_celebratedKey);
