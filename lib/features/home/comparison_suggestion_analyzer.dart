@@ -149,9 +149,9 @@ class ComparisonSuggestionAnalyzer {
         final magnitude = result.difference!.abs();
         if (magnitude < threshold) continue;
 
-        final minGroup = math.min(result.withTag.nights, result.withoutTag.nights);
+        final minGroup = math.min(result.withTag.nights, result.withoutTag.nights).toInt();
         final normalized = magnitude / threshold;
-        final priority = normalized * (1 + math.min(minGroup, 20) / 40);
+        final priority = normalized * (1 + math.min(minGroup, 20).toDouble() / 40);
         final fingerprint = jsonEncode({
           'withNights': result.withTag.nights,
           'withoutNights': result.withoutTag.nights,
@@ -159,10 +159,7 @@ class ComparisonSuggestionAnalyzer {
           'withoutAverage': result.withoutTag.average!.toStringAsFixed(2),
           'difference': result.difference!.toStringAsFixed(2),
         });
-        final signature = jsonEncode({
-          'tags': keys,
-          'metric': metric.name,
-        });
+        final signature = TagCombinationSuggestionStore.signature(keys);
         candidates.add(ComparisonSuggestionCandidate(
           signature: signature,
           tagKeys: keys,
