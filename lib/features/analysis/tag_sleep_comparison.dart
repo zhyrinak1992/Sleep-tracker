@@ -19,9 +19,10 @@ extension TagSleepMetricLabel on TagSleepMetric {
 }
 
 class TagSleepGroupSummary {
-  const TagSleepGroupSummary({required this.nights, required this.average});
+  const TagSleepGroupSummary({required this.nights, required this.average, this.sessionIds = const []});
   final int nights;
   final double? average;
+  final List<String> sessionIds;
 }
 
 class TagSleepComparisonResult {
@@ -66,6 +67,8 @@ class TagSleepComparison {
 
     final withValues = <double>[];
     final withoutValues = <double>[];
+    final withSessionIds = <String>[];
+    final withoutSessionIds = <String>[];
     for (final session in sessions) {
       if (session.startedAt.isBefore(start) || !session.startedAt.isBefore(endExclusive)) {
         continue;
@@ -82,6 +85,7 @@ class TagSleepComparison {
       final sessionTags = tagsBySession[session.id] ?? const <String>{};
       final hasTag = tagKeys.every(sessionTags.contains);
       (hasTag ? withValues : withoutValues).add(value);
+      (hasTag ? withSessionIds : withoutSessionIds).add(session.id);
     }
 
     double? average(List<double> values) => values.isEmpty
@@ -93,8 +97,8 @@ class TagSleepComparison {
     final sufficient = withValues.length >= minimumNightsPerGroup &&
         withoutValues.length >= minimumNightsPerGroup;
     return TagSleepComparisonResult(
-      withTag: TagSleepGroupSummary(nights: withValues.length, average: withAverage),
-      withoutTag: TagSleepGroupSummary(nights: withoutValues.length, average: withoutAverage),
+      withTag: TagSleepGroupSummary(nights: withValues.length, average: withAverage, sessionIds: List.unmodifiable(withSessionIds)),
+      withoutTag: TagSleepGroupSummary(nights: withoutValues.length, average: withoutAverage, sessionIds: List.unmodifiable(withoutSessionIds)),
       difference: sufficient && withAverage != null && withoutAverage != null
           ? withAverage - withoutAverage
           : null,
