@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sleep_tracker/features/analysis/sleep_record_service.dart';
 
@@ -33,6 +35,47 @@ void main() {
         'value': double.nan,
         'achievedAt': '2026-11-20T07:00:00Z',
       }), isNull);
+    });
+
+    test('repairs partially invalid persisted history even when valid count is unchanged', () {
+      final valid = SleepRecordEvent(
+        type: 'sleep_score',
+        sessionId: 'night-1',
+        value: 92,
+        achievedAt: DateTime.utc(2026, 11, 20, 7),
+      ).toMap();
+      final decoded = SleepRecordService.decodePersistedHistory(
+        '[${jsonEncode(valid)},{"type":"unknown"}]',
+      );
+
+      expect(decoded.events, hasLength(1));
+      expect(decoded.events.single.sessionId, 'night-1');
+      expect(decoded.needsRewrite, isTrue);
+    });
+
+    test('marks empty first-run history for persistence', () {
+      final decoded = SleepRecordService.decodePersistedHistory(null);
+
+      expect(decoded.events, isEmpty);
+      expect(decoded.needsRewrite, isTrue);
+    });
+
+    test('repairs duplicate records and malformed JSON', () {
+      final event = SleepRecordEvent(
+        type: 'awakening_count',
+        sessionId: 'night-2',
+        value: 1,
+        achievedAt: DateTime.utc(2026, 11, 21, 7),
+      ).toMap();
+      final duplicated = SleepRecordService.decodePersistedHistory(
+        '[${jsonEncode(event)},${jsonEncode(event)}]',
+      );
+      final malformed = SleepRecordService.decodePersistedHistory('{broken');
+
+      expect(duplicated.events, hasLength(1));
+      expect(duplicated.needsRewrite, isTrue);
+      expect(malformed.events, isEmpty);
+      expect(malformed.needsRewrite, isTrue);
     });
   });
 
