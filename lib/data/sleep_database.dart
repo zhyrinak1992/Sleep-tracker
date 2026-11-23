@@ -155,7 +155,7 @@ class SleepDatabase {
   /// Полное восстановление с проверкой структуры и атомарной заменой данных.
   /// При любой ошибке SQLite откатывает транзакцию и оставляет исходную базу.
   /// Проверяет структуру архива без записи в SQLite. Используется перед показом предпросмотра.
-  void validateSnapshot(Map<String, dynamic> snapshot) {bool merge = false}) async {
+  Map<String, List<Map<String, Object?>>> validateSnapshot(Map<String, dynamic> snapshot) {
     if (snapshot['schemaVersion'] != 3 && snapshot['schemaVersion'] != 4 && snapshot['schemaVersion'] != 5 && snapshot['schemaVersion'] != 6 && snapshot['schemaVersion'] != 7 && snapshot['schemaVersion'] != 8) {
       throw const FormatException('Версия структуры резервной копии не поддерживается.');
     }
@@ -254,7 +254,7 @@ class SleepDatabase {
   /// Полное восстановление с проверкой структуры и атомарной заменой данных.
   /// При любой ошибке SQLite откатывает транзакцию и оставляет исходную базу.
   Future<void> restoreSnapshot(Map<String, dynamic> snapshot, {bool merge = false}) async {
-    validateSnapshot(snapshot);
+    final rowsByTable = validateSnapshot(snapshot);
     final db = await database;
     await db.transaction((txn) async {
       if (!merge) {
