@@ -177,6 +177,66 @@ void main() {
       expect(enoughNewData?.status, ComparisonSuggestionStatus.pending);
     });
 
+    test('allows a same-metric result change only after a full threshold shift and adequate samples', () async {
+      final now = DateTime(2026, 11, 1, 10);
+      final first = await store.currentOrCreate(
+        candidates: [candidate(withNights: 6, withoutNights: 6, difference: 1.5)],
+        now: now,
+      );
+      await store.updateStatus(
+        id: first!.id,
+        status: ComparisonSuggestionStatus.opened,
+        now: now,
+      );
+
+      final sameMetricChanged = await store.currentOrCreate(
+        candidates: [candidate(
+          withNights: 6,
+          withoutNights: 6,
+          difference: 2.0,
+          fingerprint: 'same-nights-new-difference',
+        )],
+        now: now.add(const Duration(days: 15)),
+      );
+      expect(sameMetricChanged, isNotNull);
+    });
+
+    test('does not treat a different metric as a changed result in comparable units', () async {
+      final now = DateTime(2026, 11, 1, 10);
+      final first = await store.currentOrCreate(
+        candidates: [candidate()],
+        now: now,
+      );
+      await store.updateStatus(
+        id: first!.id,
+        status: ComparisonSuggestionStatus.opened,
+        now: now,
+      );
+
+      final differentMetric = ComparisonSuggestionCandidate(
+        signature: candidate().signature,
+        tagKeys: candidate().tagKeys,
+        metric: TagSleepMetric.awakeningCount,
+        start: candidate().start,
+        endExclusive: candidate().endExclusive,
+        withNights: candidate().withNights,
+        withoutNights: candidate().withoutNights,
+        withAverage: 2,
+        withoutAverage: 1,
+        difference: 1,
+        threshold: 0.5,
+        priority: 2,
+        fingerprint: 'different-metric',
+        withSessionIds: candidate().withSessionIds,
+        withoutSessionIds: candidate().withoutSessionIds,
+      );
+      final result = await store.currentOrCreate(
+        candidates: [differentMetric],
+        now: now.add(const Duration(days: 15)),
+      );
+      expect(result, isNull);
+    });
+
     test('automatically marks an unattended card as not viewed next morning', () async {
       final createdAt = DateTime(2026, 11, 23, 22);
       final record = await store.currentOrCreate(
