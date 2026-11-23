@@ -8,6 +8,8 @@ class SleepSessionMetrics {
     required this.sleepLatencyMinutes,
     required this.firstAwakeningAt,
     required this.finalWakeAt,
+    required this.sleepOnsetAt,
+    required this.sleepEndAt,
     required this.sleepEfficiencyPercent,
     required this.stageCoveragePercent,
     required this.awakeStageMinutes,
@@ -21,6 +23,10 @@ class SleepSessionMetrics {
   final int? sleepLatencyMinutes;
   final DateTime? firstAwakeningAt;
   final DateTime? finalWakeAt;
+  /// Actual sleep onset from explicit boundaries or the first asleep stage.
+  final DateTime? sleepOnsetAt;
+  /// Actual sleep end from explicit boundaries or the last asleep stage.
+  final DateTime? sleepEndAt;
   final double? sleepEfficiencyPercent;
   final double? stageCoveragePercent;
   final int awakeStageMinutes;
@@ -112,6 +118,8 @@ class SleepSessionMetrics {
       sleepLatencyMinutes: latency,
       firstAwakeningAt: firstAwakening,
       finalWakeAt: finalWake,
+      sleepOnsetAt: actualStart,
+      sleepEndAt: actualEnd,
       sleepEfficiencyPercent: efficiency,
       stageCoveragePercent: coverage,
       awakeStageMinutes: awakeMinutes,
