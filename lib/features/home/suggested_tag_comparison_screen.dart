@@ -56,8 +56,8 @@ class _SuggestedTagComparisonScreenState extends State<SuggestedTagComparisonScr
           ));
         }
         final now = DateTime.now();
-        final end = DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
-        final start = end.subtract(const Duration(days: 90));
+        final end = DateTime(now.year, now.month, now.day + 1);
+        final start = DateTime(now.year, now.month, now.day - 89);
         final sessions = snapshot.data ?? const <SleepSession>[];
         final selectedLabels = widget.candidate.tagKeys
             .map((key) => widget.tagLabels[key] ?? 'Отметка')
