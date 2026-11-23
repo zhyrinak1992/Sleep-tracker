@@ -21,6 +21,7 @@ import 'tag_sleep_comparison_card.dart';
 import 'sleep_regularity_analysis.dart';
 import 'sleep_achievements_card.dart';
 import 'audio_event_analysis_card.dart';
+import 'periodic_reports_screen.dart';
 import '../diary/sleep_session_detail_screen.dart';
 
 class AnalysisScreen extends StatefulWidget {
@@ -189,6 +190,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             )),
             icon: const Icon(Icons.compare_arrows_rounded),
             label: const Text('Сравнить любые два периода'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => PeriodicReportsScreen(database: widget.database),
+            )),
+            icon: const Icon(Icons.description_outlined),
+            label: const Text('Периодические отчёты'),
           ),
           const SizedBox(height: 18),
           SegmentedButton<AnalysisPeriod>(
