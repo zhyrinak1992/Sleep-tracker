@@ -220,6 +220,26 @@ void main() {
       ), isEmpty);
     });
 
+    test('restores only remaining events when the app closes mid-queue', () {
+      final alreadyCelebrated = score('night-a', 90, 21);
+      final pendingAwakenings = awakenings('night-a', 2, 21);
+      final pendingScore = score('night-b', 95, 22);
+      final persistedHistory = [
+        alreadyCelebrated,
+        pendingAwakenings,
+        pendingScore,
+      ];
+
+      final restoredQueue = findNewSleepRecordEvents(
+        previousHistory: persistedHistory,
+        currentHistory: persistedHistory,
+        celebratedKeys: {'sleep_score|night-a|90'},
+        isFirstInitialization: false,
+      );
+
+      expect(restoredQueue, [pendingAwakenings, pendingScore]);
+    });
+
     test('celebrates record improvements when timestamps are identical', () {
       final previousScore = score('night-a', 90, 23);
       final improvedScore = score('night-b', 95, 23);
