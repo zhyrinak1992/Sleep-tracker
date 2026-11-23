@@ -368,6 +368,7 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                 currentWellbeing,
                 previousWellbeing,
                 unit: ' из 5',
+                deltaUnit: ' балла',
               ), style: const TextStyle(fontSize: 12, height: 1.4)),
               const SizedBox(height: 5),
               Text(comparisonText(
@@ -375,6 +376,7 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                 currentSleepiness,
                 previousSleepiness,
                 unit: ' из 5',
+                deltaUnit: ' балла',
               ), style: const TextStyle(fontSize: 12, height: 1.4)),
               const SizedBox(height: 10),
               const Text(
