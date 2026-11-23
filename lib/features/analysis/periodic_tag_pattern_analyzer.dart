@@ -11,6 +11,7 @@ class PeriodicTagPatternAnalyzer {
     required Map<String, double> scoreBySession,
     required Map<String, double> awakeningsBySession,
     Map<String, Map<String, double>> additionalMetrics = const <String, Map<String, double>>{},
+    Set<String> circularMetricKeys = const <String>{},
     required Map<String, String> tagLabels,
   }) {
     final completed = sessions.where((s) =>
@@ -36,17 +37,40 @@ class PeriodicTagPatternAnalyzer {
           .whereType<double>().where((v) => v.isFinite).toList();
         final withoutValues = withoutTag.map((s) => entry.value[s.id])
           .whereType<double>().where((v) => v.isFinite).toList();
-        double? average(List<double> values) => values.isEmpty
-          ? null : values.reduce((a, b) => a + b) / values.length;
+        double? average(List<double> values) {
+          if (values.isEmpty) return null;
+          if (!circularMetricKeys.contains(entry.key)) {
+            return values.reduce((a, b) => a + b) / values.length;
+          }
+          var best = values.first;
+          var bestCost = double.infinity;
+          for (final candidate in values) {
+            final cost = values.fold<double>(0, (sum, value) {
+              final raw = (value - candidate).abs() % 1440;
+              return sum + (raw > 720 ? 1440 - raw : raw);
+            });
+            if (cost < bestCost) {
+              best = candidate;
+              bestCost = cost;
+            }
+          }
+          return best;
+        }
         final withAverage = average(withValues);
         final withoutAverage = average(withoutValues);
         final sufficient = withValues.length >= minimumNightsPerGroup &&
           withoutValues.length >= minimumNightsPerGroup;
+        double circularDifference(double a, double b) {
+          final normalized = ((a - b) % 1440 + 1440) % 1440;
+          return normalized > 720 ? normalized - 1440 : normalized;
+        }
         metrics[entry.key] = <String, Object?>{
           'withTagAverage': withAverage,
           'withoutTagAverage': withoutAverage,
           'difference': sufficient && withAverage != null && withoutAverage != null
-            ? withAverage - withoutAverage : null,
+            ? (circularMetricKeys.contains(entry.key)
+                ? circularDifference(withAverage, withoutAverage)
+                : withAverage - withoutAverage) : null,
           'withTagSamples': withValues.length,
           'withoutTagSamples': withoutValues.length,
           'isSufficient': sufficient,
