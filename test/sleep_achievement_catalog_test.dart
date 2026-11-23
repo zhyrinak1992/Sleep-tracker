@@ -48,6 +48,41 @@ void main() {
       expect(earned, isNot(contains('ten_ratings')));
     });
 
+    test('unlocks regularity milestones using distinct consecutive calendar dates', () {
+      final sessions = [
+        _session(id: 1),
+        _session(id: 2),
+        _session(id: 3),
+        _session(id: 4),
+        _session(id: 5),
+        _session(id: 6),
+        _session(id: 7),
+        _session(id: 8),
+      ];
+
+      final earned = SleepAchievementCatalog.evaluate(sessions);
+
+      expect(earned, contains('streak_three'));
+      expect(earned, contains('streak_seven'));
+      expect(earned, isNot(contains('streak_fourteen')));
+    });
+
+    test('does not count multiple sessions on one date as multiple streak days', () {
+      final start = DateTime(2026, 1, 1, 22);
+      final sessions = [
+        _session(id: 1),
+        SleepSession(
+          id: 'same-day-extra',
+          startedAt: start.add(const Duration(minutes: 30)),
+          endedAt: start.add(const Duration(hours: 2)),
+        ),
+      ];
+
+      final earned = SleepAchievementCatalog.evaluate(sessions);
+
+      expect(earned, contains('streak_three') == false);
+    });
+
     test('does not unlock anything for an empty history', () {
       expect(SleepAchievementCatalog.evaluate(const []), isEmpty);
     });
