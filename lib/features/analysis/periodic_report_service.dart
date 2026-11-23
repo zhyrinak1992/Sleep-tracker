@@ -102,7 +102,13 @@ class PeriodicReportService {
         final list = values.map((v) => v.toDouble()).where((v) => v.isFinite).toList();
         return list.isEmpty ? null : list.reduce((a, b) => a + b) / list.length;
       }
-      final durations = metrics.map((m) => m.sleepDurationMinutes).whereType<int>().toList();
+      final durations = <int>[];
+      for (var i = 0; i < metrics.length; i++) {
+        final measured = metrics[i].sleepDurationMinutes;
+        final fallback = selected[i].duration?.inMinutes;
+        final value = measured ?? fallback;
+        if (value != null && value > 0) durations.add(value);
+      }
       final efficiencies = metrics.map((m) => m.sleepEfficiencyPercent).whereType<double>().toList();
       final awakenings = <int>[];
       for (var i = 0; i < selected.length; i++) {
