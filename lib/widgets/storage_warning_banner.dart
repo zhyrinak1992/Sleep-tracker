@@ -51,7 +51,9 @@ class _StorageWarningBannerState extends State<StorageWarningBanner> with Widget
 
   String _format(int bytes) {
     if (bytes >= 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} ГБ';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(0)} МБ';
+    if (bytes >= 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(0)} МБ';
+    if (bytes >= 1024) return '${(bytes / 1024).round()} КБ';
+    return '$bytes Б';
   }
 
   @override
