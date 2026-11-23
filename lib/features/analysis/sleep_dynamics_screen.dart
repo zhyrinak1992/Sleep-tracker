@@ -29,6 +29,9 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
   late Future<_DynamicsData> _future;
   SleepDynamicsPeriod _period = SleepDynamicsPeriod.week;
   int _rollingDays = 30;
+  String _metricGroup = 'all';
+  bool _showGroup(String group) => _metricGroup == 'all' || _metricGroup == group;
+
   DateTime _anchor = DateTime.now();
 
   @override
@@ -276,6 +279,19 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
               signed: _signed,
             ),
             const SizedBox(height: 18),
+            const Text('Показатели аналитики', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'all', label: Text('Все')),
+                ButtonSegment(value: 'sleep', label: Text('Сон')),
+                ButtonSegment(value: 'routine', label: Text('Режим')),
+                ButtonSegment(value: 'wellbeing', label: Text('Самочувствие')),
+              ],
+              selected: {_metricGroup},
+              onSelectionChanged: (value) => setState(() => _metricGroup = value.first),
+            ),
+            const SizedBox(height: 10),
             const Text('Динамика за выбранный период', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
             const SizedBox(height: 10),
             SegmentedButton<SleepDynamicsPeriod>(
@@ -299,7 +315,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
                 icon: const Icon(Icons.chevron_right),
               ),
             ]),
-            SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (_showGroup('sleep')) SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(
                 _period == SleepDynamicsPeriod.week ? 'Средняя длительность по дням'
                   : _period == SleepDynamicsPeriod.month ? 'Средняя длительность по неделям месяца'
@@ -316,7 +332,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
                 onTap: (index) => _showBucketDetails(data, start, previousStart, index, 'duration', 'Продолжительность сна'),
               )),
             ])),
-            if (_hasData(current.chartScoreValues)) ...[
+            if (_showGroup('sleep') && _hasData(current.chartScoreValues)) ...[
               const SizedBox(height: 10),
               _DynamicsChartCard(
                 title: 'Оценка качества сна 0–100',
@@ -327,7 +343,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
                 onBucketTap: (index) => _showBucketDetails(data, start, previousStart, index, 'score', 'Оценка качества сна'),
               ),
             ],
-            if (_hasData(current.chartEfficiencyValues)) ...[
+            if (_showGroup('sleep') && _hasData(current.chartEfficiencyValues)) ...[
               const SizedBox(height: 10),
               _DynamicsChartCard(
                 title: 'Эффективность по периодам',
@@ -338,7 +354,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
                 onBucketTap: (index) => _showBucketDetails(data, start, previousStart, index, 'efficiency', 'Эффективность сна'),
               ),
             ],
-            if (_hasData(current.chartAwakeningValues)) ...[
+            if (_showGroup('sleep') && _hasData(current.chartAwakeningValues)) ...[
               const SizedBox(height: 10),
               _DynamicsChartCard(
                 title: 'Пробуждения по периодам',
@@ -349,7 +365,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
                 onBucketTap: (index) => _showBucketDetails(data, start, previousStart, index, 'awakenings', 'Пробуждения'),
               ),
             ],
-            if (_hasData(current.chartQualityValues)) ...[
+            if (_showGroup('wellbeing') && _hasData(current.chartQualityValues)) ...[
               const SizedBox(height: 10),
               _DynamicsChartCard(
                 title: 'Субъективное качество по периодам',
@@ -360,7 +376,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
                 onBucketTap: (index) => _showBucketDetails(data, start, previousStart, index, 'quality', 'Субъективное качество'),
               ),
             ],
-            if (_hasData(current.chartWellbeingValues)) ...[
+            if (_showGroup('wellbeing') && _hasData(current.chartWellbeingValues)) ...[
               const SizedBox(height: 10),
               _DynamicsChartCard(
                 title: 'Самочувствие по периодам',
@@ -372,7 +388,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
               ),
             ],
             const SizedBox(height: 12),
-            _DynamicsMetricCard(
+            if (_showGroup('sleep')) _DynamicsMetricCard(
               title: 'Средняя продолжительность сна',
               value: _duration(current.averageSleepMinutes),
               samples: current.durationSamples,
@@ -380,7 +396,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
               note: 'Завершённых ночей: ' + current.completedCount.toString() + '. Для длительности используются доступные фазы/фактические границы, а при их отсутствии — сохранённый интервал ночной сессии.',
             ),
             const SizedBox(height: 10),
-            _DynamicsMetricCard(
+            if (_showGroup('sleep')) _DynamicsMetricCard(
               title: 'Средняя оценка качества сна',
               value: _number(current.averageSleepScore, ' / 100', decimals: 0),
               samples: current.scoreSamples,
@@ -388,7 +404,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
               note: 'Веса 40/30/20/10. В расчёт каждой ночи входят только доступные компоненты; личный диапазон длительности использует предшествующие 90 дней. При недостатке данных оценка не рассчитывается.',
             ),
             const SizedBox(height: 10),
-            _DynamicsMetricCard(
+            if (_showGroup('sleep')) _DynamicsMetricCard(
               title: 'Эффективность сна',
               value: _number(current.averageEfficiency, '%'),
               samples: current.efficiencySamples,
@@ -396,7 +412,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
               note: 'Учитываются только ночи с достаточным покрытием фаз сна.',
             ),
             const SizedBox(height: 10),
-            _DynamicsMetricCard(
+            if (_showGroup('sleep')) _DynamicsMetricCard(
               title: 'Зарегистрированные пробуждения',
               value: _number(current.averageAwakenings, ''),
               samples: current.awakeningSamples,
@@ -404,7 +420,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
               note: 'Пробуждения включаются только при наличии стадий сна и достаточного покрытия. Отсутствие данных не считается нулём.',
             ),
             const SizedBox(height: 10),
-            _DynamicsMetricCard(
+            if (_showGroup('wellbeing')) _DynamicsMetricCard(
               title: 'Субъективное качество сна',
               value: _number(current.averageQuality, ' / 5'),
               samples: current.qualitySamples,
@@ -412,7 +428,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
               note: 'Среднее по сохранённым утренним оценкам качества.',
             ),
             const SizedBox(height: 10),
-            _DynamicsMetricCard(
+            if (_showGroup('wellbeing')) _DynamicsMetricCard(
               title: 'Утреннее самочувствие',
               value: _number(current.averageWellbeing, ' / 5'),
               samples: current.wellbeingSamples,
@@ -420,7 +436,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
               note: 'Среднее по сохранённым ответам о самочувствии.',
             ),
             const SizedBox(height: 10),
-            _DynamicsMetricCard(
+            if (_showGroup('routine')) _DynamicsMetricCard(
               title: 'Типичное время засыпания',
               value: _clock(current.typicalBedtimeMinute),
               samples: current.regularitySamples,
@@ -428,7 +444,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
               note: 'Круговая медиана фактического времени засыпания; ручные и изменённые записи не включаются.',
             ),
             const SizedBox(height: 10),
-            _DynamicsMetricCard(
+            if (_showGroup('routine')) _DynamicsMetricCard(
               title: 'Типичное время пробуждения',
               value: _clock(current.typicalWakeMinute),
               samples: current.regularitySamples,
@@ -436,7 +452,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
               note: 'Круговая медиана фактического времени пробуждения; ручные и изменённые записи не включаются.',
             ),
             const SizedBox(height: 10),
-            _DynamicsMetricCard(
+            if (_showGroup('routine')) _DynamicsMetricCard(
               title: 'Разброс времени засыпания',
               value: _number(current.bedtimeDeviationMinutes, ' мин', decimals: 0),
               samples: current.regularitySamples,
@@ -444,7 +460,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
               note: 'Медианное абсолютное отклонение фактического времени засыпания; ручные и изменённые записи не включаются.',
             ),
             const SizedBox(height: 10),
-            _DynamicsMetricCard(
+            if (_showGroup('routine')) _DynamicsMetricCard(
               title: 'Разброс времени пробуждения',
               value: _number(current.wakeTimeDeviationMinutes, ' мин', decimals: 0),
               samples: current.regularitySamples,
