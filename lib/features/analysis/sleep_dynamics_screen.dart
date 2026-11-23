@@ -129,12 +129,9 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
         }
         final data = snapshot.data!;
         final today = DateTime.now();
-        final todayStart = DateTime(today.year, today.month, today.day);
-        final rollingStart = todayStart.subtract(const Duration(days: 29));
-        final rollingEnd = todayStart.add(const Duration(days: 1));
-        final previousRollingStart = rollingStart.subtract(const Duration(days: 30));
-        final rollingCurrent = _summarize(data, rollingStart, rollingEnd, SleepDynamicsPeriod.month);
-        final rollingPrevious = _summarize(data, previousRollingStart, rollingStart, SleepDynamicsPeriod.month);
+        final rolling = SleepDynamicsAnalysis.rollingThirtyDayRanges(today);
+        final rollingCurrent = _summarize(data, rolling.currentStart, rolling.currentEndExclusive, SleepDynamicsPeriod.month);
+        final rollingPrevious = _summarize(data, rolling.previousStart, rolling.previousEndExclusive, SleepDynamicsPeriod.month);
 
         final start = SleepDynamicsAnalysis.periodStart(_anchor, _period);
         final end = SleepDynamicsAnalysis.nextPeriodStart(start, _period);
