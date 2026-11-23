@@ -46,6 +46,8 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
     final title = isScore ? 'Новый рекорд SleepScore!' : 'Новый рекорд пробуждений!';
     final value = isScore ? '${event.value.toInt()} из 100' : '${event.value.toInt()} за ночь';
     final date = DateFormat('d MMMM yyyy', 'ru').format(event.achievedAt);
+    await SleepRecordService.instance.markCelebrated(event);
+    if (!mounted) return;
     final openNight = await showDialog<bool>(
       context: context,
       barrierDismissible: true,
@@ -66,11 +68,11 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: LinearGradient(
-                    colors: [AppTheme.teal.withValues(alpha: 0.95), const Color(0xFF5368C8)],
+                    colors: [AppTheme.teal.withOpacity(0.95), const Color(0xFF5368C8)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  boxShadow: [BoxShadow(color: AppTheme.teal.withValues(alpha: 0.25), blurRadius: 24)],
+                  boxShadow: [BoxShadow(color: AppTheme.teal.withOpacity(0.25), blurRadius: 24)],
                 ),
                 child: Icon(isScore ? Icons.stars_rounded : Icons.nights_stay_rounded, size: 48, color: Colors.white),
               ),
