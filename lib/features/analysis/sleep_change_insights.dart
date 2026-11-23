@@ -200,6 +200,8 @@ class SleepChangeInsights {
       previous.efficiencySamples >= 5 && current.efficiencySamples >= 5,
       previous.qualitySamples >= 5 && current.qualitySamples >= 5,
       previous.wellbeingSamples >= 5 && current.wellbeingSamples >= 5,
+      previous.awakeningSamples >= 5 && current.awakeningSamples >= 5,
+      previous.regularitySamples >= 7 && current.regularitySamples >= 7,
     ].any((value) => value);
 
     return SleepChangeInsights(
