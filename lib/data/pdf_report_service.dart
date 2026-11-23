@@ -11,6 +11,119 @@ import '../features/diary/sleep_metric_summary.dart';
 import 'sleep_database.dart';
 
 class PdfReportService {
+
+  /// Exports the immutable archived snapshot rather than recalculating a past
+  /// period from records that may have been edited since the report was saved.
+  static Future<void> exportPeriodicSnapshot(
+    Map<String, Object?> snapshot,
+    String title,
+  ) async {
+    double? number(Object? value) => value is num && value.toDouble().isFinite
+        ? value.toDouble() : null;
+    String duration(Object? value) {
+      final minutes = number(value);
+      if (minutes == null) return 'Нет данных';
+      final rounded = minutes.round();
+      return '\${rounded ~/ 60} ч \${rounded.remainder(60)} мин';
+    }
+    String average(Object? value, {String suffix = ''}) {
+      final parsed = number(value);
+      return parsed == null ? 'Нет данных' : parsed.toStringAsFixed(1) + suffix;
+    }
+
+    final previous = snapshot['previous'] is Map
+        ? Map<String, Object?>.from(snapshot['previous'] as Map)
+        : <String, Object?>{};
+    final categories = snapshot['audioCategories'] is Map
+        ? Map<String, Object?>.from(snapshot['audioCategories'] as Map)
+        : <String, Object?>{};
+    final notes = snapshot['notes'] is List
+        ? (snapshot['notes'] as List).whereType<Map>().toList()
+        : const <Map>[];
+    final months = snapshot['months'] is List
+        ? (snapshot['months'] as List).whereType<Map>().toList()
+        : const <Map>[];
+
+    final regular = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Regular.ttf'));
+    final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));
+    final doc = pw.Document();
+    final content = <pw.Widget>[
+      pw.Header(level: 0, child: pw.Text('Sleep Tracker — $title')),
+      pw.Text('Сохранённый периодический отчёт'),
+      pw.SizedBox(height: 12),
+      pw.Text('Завершённых ночей: \${snapshot['nights'] ?? 0}'),
+      pw.Text('Средняя продолжительность сна: \${duration(snapshot['averageSleepMinutes'])} · выборка \${snapshot['sleepDurationSamples'] ?? 0}'),
+      pw.Text('Среднее время в постели: \${duration(snapshot['averageTimeInBedMinutes'])} · выборка \${snapshot['timeInBedSamples'] ?? 0}'),
+      pw.Text('Эффективность: \${average(snapshot['averageEfficiency'], suffix: '%')} · выборка \${snapshot['efficiencySamples'] ?? 0}'),
+      pw.Text('Пробуждения: \${average(snapshot['averageAwakenings'])} · выборка \${snapshot['awakeningSamples'] ?? 0}'),
+      pw.Text('Субъективное качество: \${average(snapshot['averageQuality'], suffix: ' / 5')} · оценок \${snapshot['qualitySamples'] ?? 0}'),
+      pw.Text('Самочувствие: \${average(snapshot['averageWellbeing'], suffix: ' / 5')} · оценок \${snapshot['wellbeingSamples'] ?? 0}'),
+      pw.Text('Звуковых событий: \${snapshot['audioEventCount'] ?? 0}'),
+      pw.Text('Заметок: \${snapshot['noteCount'] ?? 0}'),
+    ];
+    if (previous.isNotEmpty) {
+      content.add(pw.SizedBox(height: 14));
+      content.add(pw.Header(level: 1, child: pw.Text('Сравнение с предыдущим периодом')));
+      content.add(pw.Text('Завершённых ночей: \${previous['nights'] ?? 0}'));
+      content.add(pw.Text('Средняя продолжительность сна: \${duration(previous['averageSleepMinutes'])}'));
+      content.add(pw.Text('Среднее время в постели: \${duration(previous['averageTimeInBedMinutes'])}'));
+      content.add(pw.Text('Эффективность: \${average(previous['averageEfficiency'], suffix: '%')}'));
+      content.add(pw.Text('Пробуждения: \${average(previous['averageAwakenings'])}'));
+      content.add(pw.Text('Субъективное качество: \${average(previous['averageQuality'], suffix: ' / 5')}'));
+      content.add(pw.Text('Самочувствие: \${average(previous['averageWellbeing'], suffix: ' / 5')}'));
+    }
+    if (categories.isNotEmpty) {
+      content.add(pw.SizedBox(height: 14));
+      content.add(pw.Header(level: 1, child: pw.Text('Категории звуковых событий')));
+      for (final entry in categories.entries) {
+        content.add(pw.Text('\${entry.key}: \${entry.value}'));
+      }
+    }
+    if (months.isNotEmpty) {
+      content.add(pw.SizedBox(height: 14));
+      content.add(pw.Header(level: 1, child: pw.Text('Динамика по месяцам')));
+      content.add(pw.TableHelper.fromTextArray(
+        headers: ['Месяц', 'Ночей', 'Средний сон'],
+        cellStyle: const pw.TextStyle(fontSize: 8),
+        headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+        data: months.map((month) => [
+          month['month']?.toString() ?? '—',
+          month['nights']?.toString() ?? '0',
+          duration(month['averageSleepMinutes']),
+        ]).toList(),
+      ));
+      content.add(pw.Text('Лучший и наиболее сложный месяцы ранжируются только по средней продолжительности сна. Это описательный критерий, не медицинская оценка.'));
+    }
+    if (notes.isNotEmpty) {
+      content.add(pw.SizedBox(height: 14));
+      content.add(pw.Header(level: 1, child: pw.Text('Заметки за период')));
+      for (final note in notes) {
+        final date = DateTime.tryParse(note['sessionStartedAt'] as String? ?? '');
+        final text = note['text'] as String? ?? '';
+        content.add(pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 6),
+          child: pw.Text('\${date == null ? '' : DateFormat('dd.MM.yyyy').format(date)}: $text',
+            style: const pw.TextStyle(fontSize: 8)),
+        ));
+      }
+    }
+    content.add(pw.SizedBox(height: 12));
+    content.add(pw.Text(
+      'Отчёт воспроизводит сохранённый снимок данных на момент формирования. '
+      'Отсутствующие измерения не заменяются нулями. Унифицированный балл 0–100 '
+      'не рассчитывается до отдельного согласования формулы.',
+      style: const pw.TextStyle(fontSize: 8),
+    ));
+    doc.addPage(pw.MultiPage(
+      theme: pw.ThemeData.withFont(base: regular, bold: bold),
+      build: (_) => content,
+    ));
+    final dir = await getTemporaryDirectory();
+    final file = File(p.join(dir.path, 'SleepTracker-periodic-\${DateTime.now().millisecondsSinceEpoch}.pdf'));
+    await file.writeAsBytes(await doc.save(), flush: true);
+    await Share.shareXFiles([XFile(file.path, mimeType: 'application/pdf')], subject: 'Sleep Tracker — $title');
+  }
+
   static Future<void> exportHistory({int days = 30, DateTime? from, DateTime? to, bool includeNotes = false}) async {
     if ((from == null) != (to == null)) {
       throw ArgumentError('Для произвольного периода укажите обе даты: начало и окончание.');
