@@ -7,6 +7,7 @@ import '../../models/sleep_tag.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/screen_header.dart';
 import '../../widgets/section_card.dart';
+import '../analysis/tag_sleep_comparison.dart';
 import 'comparison_suggestion_analyzer.dart';
 import 'suggested_tag_comparison_screen.dart';
 
