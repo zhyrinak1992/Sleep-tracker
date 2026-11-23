@@ -28,12 +28,13 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
     await PdfReportService.exportHistory(
       from: report.start,
       to: report.endExclusive.subtract(const Duration(days: 1)),
+      includeNotes: true,
     );
   }
   String _duration(double? minutes) {
     if (minutes == null) return 'Нет данных';
     final value = minutes.round();
-    return value.toString() + ' мин (' + (value ~/ 60).toString() + ' ч ' + (value % 60).toString() + ' мин)';
+    return (value ~/ 60).toString() + ' ч ' + (value % 60).toString() + ' мин';
   }
   String _average(double? value, String suffix) =>
       value == null ? 'Нет данных' : value.toStringAsFixed(1) + suffix;
@@ -92,6 +93,8 @@ class _ReportCard extends StatelessWidget {
       ? Map<String, Object?>.from(report.data['previous'] as Map) : <String, Object?>{};
     final categories = report.data['audioCategories'] is Map
       ? Map<String, Object?>.from(report.data['audioCategories'] as Map) : <String, Object?>{};
+    final notes = report.data['notes'] is List
+      ? (report.data['notes'] as List).whereType<Map>().toList() : const <Map>[];
     final months = report.data['months'] is List
       ? (report.data['months'] as List).whereType<Map>().toList() : const <Map>[];
     final monthNames = DateFormat.MMMM('ru');
@@ -114,13 +117,23 @@ class _ReportCard extends StatelessWidget {
           _ReportLine(label: 'Субъективное качество', value: average(report.averageQuality, ' / 5')),
           _ReportLine(label: 'Самочувствие', value: average(report.averageWellbeing, ' / 5')),
           _ReportLine(label: 'Звуковые события', value: (report.data['audioEventCount'] ?? 0).toString()),
+          _ReportLine(label: 'Заметки', value: (report.data['noteCount'] ?? 0).toString()),
           if (previous.isNotEmpty) ...[
             const Divider(height: 22),
             const Text('Сравнение с предыдущим периодом', style: TextStyle(fontWeight: FontWeight.w600)),
             _ReportLine(label: 'Ночей', value: report.nights.toString() + ' · ранее ' + (previous['nights'] ?? 0).toString()),
             _ReportLine(label: 'Средняя продолжительность', value: duration + ' · ранее ' + _formatDuration(previous['averageSleepMinutes'])),
           ],
-          if (categories.isNotEmpty) ...[
+          if (notes.isNotEmpty) ...[
+            const Divider(height: 22),
+            const Text('Заметки за период', style: TextStyle(fontWeight: FontWeight.w600)),
+            ...notes.map((note) => Padding(
+              padding: const EdgeInsets.only(top: 7),
+              child: Text(DateFormat('d MMM yyyy', 'ru').format(DateTime.parse(note['sessionStartedAt'] as String)) + ': ' + (note['text'] as String? ?? ''),
+                style: const TextStyle(fontSize: 12, height: 1.4)),
+            )),
+          ],
+          if (categories.isNotEmpty) [
             const Divider(height: 22),
             const Text('Категории звуковых событий', style: TextStyle(fontWeight: FontWeight.w600)),
             ...categories.entries.map((entry) => _ReportLine(label: entry.key, value: entry.value.toString())),
