@@ -482,7 +482,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       if (merge == null || !mounted) return;
       final result = await BackupService.instance.restorePreparedBackup(draft: draft, merge: merge);
-      if (!mounted || result.cancelled || result.plan == null) return;
+      if (!mounted || result.isCancelled || result.plan == null) return;
       final plan = result.plan!;
       final message = merge
           ? 'Объединение завершено. Добавлено записей: ${plan.recordsToAdd}; добавлено записей истории: ${plan.historyEntriesToMerge}; пропущено дубликатов: ${plan.duplicatesToSkip}; аудиофайлов восстановлено: ${plan.audioFilesToRestore}; отсутствующих вложений: ${plan.missingAudioFiles}.'
