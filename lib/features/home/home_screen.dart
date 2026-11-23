@@ -324,7 +324,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     try {
       final now = DateTime.now();
       final dayStart = DateTime(now.year, now.month, now.day);
-      final start = dayStart.subtract(const Duration(days: 90));
+      final start = DateTime(now.year, now.month, now.day - 89);
       final end = dayStart.add(const Duration(days: 1));
       final relevant = sessions.where((session) =>
         !session.startedAt.isBefore(start) && session.startedAt.isBefore(end) &&
