@@ -17,7 +17,7 @@ class SleepDynamicsScreen extends StatefulWidget {
 }
 
 class _DynamicsData {
-  const _DynamicsData({required this.sessions, required this.stages, required this.morning});
+  const _DynamicsData({required this.sessions, required this.stages, required this.morning, required this.scoreCache});
   final List<SleepSession> sessions;
   final Map<String, List<Map<String, Object?>>> stages;
   final Map<String, Map<String, Object?>> morning;
