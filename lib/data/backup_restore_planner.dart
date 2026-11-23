@@ -66,7 +66,10 @@ class BackupRestorePlanner {
     List<Map<String, Object?>> metadata,
     String key,
   ) {
-    final row = metadata.where((item) => item['key'] == key).firstOrNull;
+    Map<String, Object?>? row;
+    for (final item in metadata) {
+      if (item['key'] == key) { row = item; break; }
+    }
     if (row == null || row['value'] is! String) return [];
     final decoded = jsonDecode(row['value'] as String);
     if (decoded is! List || decoded.any((item) => item is! Map)) {
@@ -122,7 +125,6 @@ class BackupRestorePlanner {
     final replaceAudioBytes = replaceAudioRows.fold<int>(0, (sum, row) => sum + _audioBytes(row));
     final mergeAudioBytes = mergeAudioRows.fold<int>(0, (sum, row) => sum + _audioBytes(row));
 
-    final mergeArchiveRows = <String, List<Map<String, Object?>>>{};
     var recordsToAdd = 0;
     var duplicatesToSkip = 0;
     var historyEntriesToMerge = 0;
@@ -138,8 +140,19 @@ class BackupRestorePlanner {
       final current = currentRows[table] ?? const <Map<String, Object?>>[];
       final keys = tableKeys[table]!;
       final currentKeys = _keys(current, keys);
-      fingerprintBasis['archive'] as Map<String, Object?>..[table] = archive.map((row) => _key(row, keys)).toList()..sort();
-      fingerprintBasis['current'] as Map<String, Object?>..[table] = current.map((row) => _key(row, keys)).toList()..sort();
+      if (table == 'app_metadata') {
+        final archiveState = archive.map((row) => {'key': row['key'], 'value': row['value']}).toList()
+          ..sort((a, b) => (a['key'] as String).compareTo(b['key'] as String));
+        final currentState = current.map((row) => {'key': row['key'], 'value': row['value']}).toList()
+          ..sort((a, b) => (a['key'] as String).compareTo(b['key'] as String));
+        (fingerprintBasis['archive'] as Map<String, Object?>)[table] = archiveState;
+        (fingerprintBasis['current'] as Map<String, Object?>)[table] = currentState;
+      } else {
+        final archiveKeys = archive.map((row) => _key(row, keys)).toList()..sort();
+        final currentKeysList = current.map((row) => _key(row, keys)).toList()..sort();
+        (fingerprintBasis['archive'] as Map<String, Object?>)[table] = archiveKeys;
+        (fingerprintBasis['current'] as Map<String, Object?>)[table] = currentKeysList;
+      }
 
       if (table == 'app_metadata') {
         final currentByKey = {
@@ -174,7 +187,6 @@ class BackupRestorePlanner {
             mergeDatabaseBytes += _rowBytes(row);
           }
         }
-        mergeArchiveRows[table] = archive;
         continue;
       }
 
@@ -188,7 +200,6 @@ class BackupRestorePlanner {
           mergeDatabaseBytes += _rowBytes(row);
         }
       }
-      mergeArchiveRows[table] = newRows;
     }
 
     final replaceDatabaseBytes = archiveRows.values
