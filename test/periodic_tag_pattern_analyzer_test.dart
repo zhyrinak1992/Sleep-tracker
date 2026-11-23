@@ -69,6 +69,60 @@ void main() {
       expect(quality['withoutTagAverage'], 4);
     });
 
+    test('uses circular medians for bedtime values across midnight', () {
+      final taggedTimes = [1435, 5, 1438, 2];
+      final plainTimes = [15, 20, 25, 30];
+      DateTime clockDate(int day, int minute) {
+        final date = start.add(Duration(days: day));
+        return DateTime(date.year, date.month, date.day, minute ~/ 60, minute % 60);
+      }
+      DateTime wakeDate(int day, int minute) {
+        final date = start.add(Duration(days: day + (minute >= 20 * 60 ? 1 : 0)));
+        return DateTime(date.year, date.month, date.day, 8);
+      }
+      final sessions = <SleepSession>[
+        for (var i = 0; i < 4; i++)
+          SleepSession(
+            id: 'tag-$i',
+            startedAt: clockDate(i, taggedTimes[i]),
+            endedAt: wakeDate(i, taggedTimes[i]),
+            actualSleepStartedAt: clockDate(i, taggedTimes[i]),
+            actualSleepEndedAt: wakeDate(i, taggedTimes[i]),
+            source: 'apple_health',
+          ),
+        for (var i = 0; i < 4; i++)
+          SleepSession(
+            id: 'plain-$i',
+            startedAt: clockDate(i + 5, plainTimes[i]),
+            endedAt: wakeDate(i + 5, plainTimes[i]),
+            actualSleepStartedAt: clockDate(i + 5, plainTimes[i]),
+            actualSleepEndedAt: wakeDate(i + 5, plainTimes[i]),
+            source: 'apple_health',
+          ),
+      ];
+      final result = PeriodicTagPatternAnalyzer.analyze(
+        sessions: sessions,
+        tagsBySession: {for (var i = 0; i < 4; i++) 'tag-$i': {'late_meal'}},
+        durationBySession: const {},
+        scoreBySession: const {},
+        awakeningsBySession: const {},
+        additionalMetrics: {
+          'bedtime': {
+            for (var i = 0; i < 4; i++) 'tag-$i': taggedTimes[i].toDouble(),
+            for (var i = 0; i < 4; i++) 'plain-$i': plainTimes[i].toDouble(),
+          },
+        },
+        circularMetricKeys: const {'bedtime'},
+        tagLabels: const {},
+      );
+      final metrics = Map<String, Object?>.from(result.single['metrics'] as Map);
+      final bedtime = Map<String, Object?>.from(metrics['bedtime'] as Map);
+      expect(bedtime['withTagAverage'], 1438);
+      expect(bedtime['withoutTagAverage'], 20);
+      expect(bedtime['difference'], -22);
+      expect(bedtime['isSufficient'], isTrue);
+    });
+
     test('does not convert missing values to zero or publish weak comparisons', () {
       final sessions = <SleepSession>[
         for (var i = 0; i < 3; i++) _session('tag-$i', start.add(Duration(days: i))),

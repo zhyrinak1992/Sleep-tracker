@@ -6,6 +6,7 @@ import '../../models/sleep_tag.dart';
 import '../diary/sleep_session_metrics.dart';
 import 'sleep_score.dart';
 import 'periodic_tag_pattern_analyzer.dart';
+import 'sleep_regularity_analysis.dart';
 
 enum PeriodicReportKind { week, month, year }
 
@@ -55,11 +56,12 @@ class PeriodicReportSnapshot {
 class PeriodicReportService {
   PeriodicReportService(this.database);
   final SleepDatabase database;
-  static const metadataPrefix = 'periodic_report_v6_';
-  static const previousMetadataPrefix = 'periodic_report_v5_';
-  static const olderMetadataPrefix = 'periodic_report_v4_';
-  static const olderMetadataPrefixV2 = 'periodic_report_v3_';
-  static const olderMetadataPrefixV3 = 'periodic_report_v2_';
+  static const metadataPrefix = 'periodic_report_v7_';
+  static const previousMetadataPrefix = 'periodic_report_v6_';
+  static const olderMetadataPrefix = 'periodic_report_v5_';
+  static const olderMetadataPrefixV2 = 'periodic_report_v4_';
+  static const olderMetadataPrefixV3 = 'periodic_report_v3_';
+  static const olderMetadataPrefixV4 = 'periodic_report_v2_';
   static const legacyMetadataPrefix = 'periodic_report_v1_';
 
   Future<List<PeriodicReportSnapshot>> generateClosedReports({DateTime? now}) async {
@@ -127,6 +129,7 @@ class PeriodicReportService {
     final older = await database.getAppMetadataByPrefix(olderMetadataPrefix);
     final olderV2 = await database.getAppMetadataByPrefix(olderMetadataPrefixV2);
     final olderV3 = await database.getAppMetadataByPrefix(olderMetadataPrefixV3);
+    final olderV4 = await database.getAppMetadataByPrefix(olderMetadataPrefixV4);
     final current = await database.getAppMetadataByPrefix(metadataPrefix);
     final byId = <String, PeriodicReportSnapshot>{};
     for (final value in legacy.values) {
@@ -135,7 +138,13 @@ class PeriodicReportService {
         byId[report.id] = report;
       } catch (_) {}
     }
-    // New v6 snapshots win; older v1/v2/v3/v4/v5 snapshots remain readable and intact.
+    // New v7 snapshots win; older v1-v6 snapshots remain readable and intact.
+    for (final value in olderV4.values) {
+      try {
+        final report = PeriodicReportSnapshot.decode(value);
+        byId[report.id] = report;
+      } catch (_) {}
+    }
     for (final value in olderV3.values) {
       try {
         final report = PeriodicReportSnapshot.decode(value);
@@ -267,6 +276,8 @@ class PeriodicReportService {
       final latencyBySession = <String, double>{};
       final qualityBySession = <String, double>{};
       final wellbeingBySession = <String, double>{};
+      final bedtimeBySession = <String, double>{};
+      final wakeTimeBySession = <String, double>{};
       final physiology = <String, Map<String, List<double>>>{
         'heartRate': <String, List<double>>{},
         'respiratoryRate': <String, List<double>>{},
@@ -306,6 +317,11 @@ class PeriodicReportService {
           awakeningsBySession[session.id] = metric.awakeningCount.toDouble();
         }
       }
+      final regularity = SleepRegularityAnalysis.calculate(selected);
+      for (final night in regularity.nights) {
+        bedtimeBySession[night.session.id] = night.bedtimeMinute.toDouble();
+        wakeTimeBySession[night.session.id] = night.wakeMinute.toDouble();
+      }
       final metricTypeToPattern = <String, String>{
         'Пульс': 'heartRate',
         'Частота дыхания': 'respiratoryRate',
@@ -342,6 +358,8 @@ class PeriodicReportService {
       if (latencyBySession.isNotEmpty) additionalMetrics['sleepLatency'] = latencyBySession;
       if (qualityBySession.isNotEmpty) additionalMetrics['subjectiveQuality'] = qualityBySession;
       if (wellbeingBySession.isNotEmpty) additionalMetrics['wellbeing'] = wellbeingBySession;
+      if (bedtimeBySession.isNotEmpty) additionalMetrics['bedtime'] = bedtimeBySession;
+      if (wakeTimeBySession.isNotEmpty) additionalMetrics['wakeTime'] = wakeTimeBySession;
       for (final entry in physiology.entries) {
         final values = perNightAverage(entry.value);
         if (values.isNotEmpty) additionalMetrics[entry.key] = values;
@@ -357,6 +375,7 @@ class PeriodicReportService {
         scoreBySession: scores,
         awakeningsBySession: awakeningsBySession,
         additionalMetrics: additionalMetrics,
+        circularMetricKeys: const {'bedtime', 'wakeTime'},
         tagLabels: tagLabels,
       );
     }
@@ -382,7 +401,7 @@ class PeriodicReportService {
     }).toList();
 
     final data = <String, Object?>{
-      'schemaVersion': 5, 'id': _id(kind, start), 'kind': kind.name,
+      'schemaVersion': 6, 'id': _id(kind, start), 'kind': kind.name,
       'start': start.toIso8601String(), 'endExclusive': end.toIso8601String(),
       'generatedAt': DateTime.now().toIso8601String(),
       ...current, 'audioEventCount': events.length, 'audioCategories': categories,

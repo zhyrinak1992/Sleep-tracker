@@ -128,6 +128,8 @@ class PdfReportService {
           'sleepLatency': ('Задержка засыпания', ' мин'),
           'subjectiveQuality': ('Субъективное качество', ' / 5'),
           'wellbeing': ('Утреннее самочувствие', ' / 5'),
+          'bedtime': ('Время засыпания', ''),
+          'wakeTime': ('Время пробуждения', ''),
           'heartRate': ('Пульс', ' уд/мин'),
           'respiratoryRate': ('Частота дыхания', ' вдох/мин'),
           'bloodOxygen': ('Насыщение кислородом', '%'),
@@ -145,12 +147,21 @@ class PdfReportService {
               : <String, Object?>{};
           final suffix = metric.value.$2;
           final label = metric.value.$1;
-          final withValue = average(current['withTagAverage'], suffix: suffix);
-          final withoutValue = average(current['withoutTagAverage'], suffix: suffix);
-          final oldWith = average(old['withTagAverage'], suffix: suffix);
-          final oldWithout = average(old['withoutTagAverage'], suffix: suffix);
+          String value(Object? raw) {
+            if (metric.key == 'bedtime' || metric.key == 'wakeTime') {
+              if (raw is! num) return 'Нет данных';
+              final minute = raw.round() % 1440;
+              return '${(minute ~/ 60).toString().padLeft(2, '0')}:${(minute % 60).toString().padLeft(2, '0')}';
+            }
+            return average(raw, suffix: suffix);
+          }
+          final withValue = value(current['withTagAverage']);
+          final withoutValue = value(current['withoutTagAverage']);
+          final oldWith = value(old['withTagAverage']);
+          final oldWithout = value(old['withoutTagAverage']);
+          final deltaSuffix = metric.key == 'bedtime' || metric.key == 'wakeTime' ? ' мин' : suffix;
           final delta = current['difference'] is num
-              ? ' · разница ${(current['difference'] as num) > 0 ? '+' : ''}${(current['difference'] as num).toStringAsFixed(1)}$suffix'
+              ? ' · разница ${(current['difference'] as num) > 0 ? '+' : ''}${(current['difference'] as num).toStringAsFixed(1)}$deltaSuffix'
               : ' · недостаточно данных для разницы';
           content.add(pw.Text('$label: с отметкой $withValue (n=${current['withTagSamples'] ?? 0}); без отметки $withoutValue (n=${current['withoutTagSamples'] ?? 0})$delta'));
           content.add(pw.Text('Предыдущий период: с отметкой $oldWith; без отметки $oldWithout',
