@@ -2,8 +2,10 @@ import 'dart:convert';
 import '../../data/sleep_database.dart';
 import '../../models/sleep_session.dart';
 import '../../models/sleep_note.dart';
+import '../../models/sleep_tag.dart';
 import '../diary/sleep_session_metrics.dart';
 import 'sleep_score.dart';
+import 'periodic_tag_pattern_analyzer.dart';
 
 enum PeriodicReportKind { week, month, year }
 
@@ -69,6 +71,21 @@ class PeriodicReportService {
     final morning = await database.getMorningReportsForSessions(completed.map((s) => s.id).toList());
     final audio = await database.getAudioEvents();
     final notes = await database.getNotes();
+    final tagsBySession = await database.getTagsForSessions(completed.map((s) => s.id).toList());
+    final tagLabels = <String, String>{
+      for (final tag in SleepTag.catalog) tag.key: tag.label,
+    };
+    try {
+      final customTags = await CustomSleepTagStore(
+        database.getAppMetadata,
+        database.setAppMetadata,
+      ).load();
+      for (final tag in customTags) {
+        tagLabels[tag.key] = tag.label;
+      }
+    } catch (_) {
+      // Corrupt optional custom-tag metadata must not prevent report generation.
+    }
     final scoreCache = <String, SleepScoreResult>{};
 
     for (final kind in PeriodicReportKind.values) {
@@ -88,7 +105,7 @@ class PeriodicReportService {
               kind: kind, start: cursor, end: end, sessions: selected,
               previousSessions: previous, stages: stages, morning: morning,
               audio: audio, notes: notes, allSessions: completed,
-              scoreCache: scoreCache,
+              scoreCache: scoreCache, tagsBySession: tagsBySession, tagLabels: tagLabels,
             );
             await database.setAppMetadata(metadataPrefix + id, jsonEncode(snapshot));
           }
@@ -143,6 +160,8 @@ class PeriodicReportService {
     required List<Map<String, Object?>> audio, required List<SleepNote> notes,
     required List<SleepSession> allSessions,
     required Map<String, SleepScoreResult> scoreCache,
+    required Map<String, Set<String>> tagsBySession,
+    required Map<String, String> tagLabels,
   }) {
     Map<String, Object?> summarize(List<SleepSession> selected) {
       final metrics = selected.map((s) => SleepSessionMetrics.calculate(session: s, stages: stages[s.id] ?? const [])).toList();
@@ -219,6 +238,41 @@ class PeriodicReportService {
       };
     }
 
+    List<Map<String, Object?>> tagPatternsFor(List<SleepSession> selected) {
+      final durations = <String, double>{};
+      final scores = <String, double>{};
+      final awakeningsBySession = <String, double>{};
+      for (final session in selected) {
+        final metric = SleepSessionMetrics.calculate(
+          session: session,
+          stages: stages[session.id] ?? const [],
+        );
+        final duration = metric.sleepDurationMinutes;
+        if (duration != null && duration > 0) durations[session.id] = duration.toDouble();
+        final score = scoreCache.putIfAbsent(session.id, () =>
+          SleepScoreCalculator.calculateForSession(
+            session: session,
+            historySessions: allSessions,
+            morningReports: morning,
+            stagesBySession: stages,
+          ),
+        ).score;
+        if (score != null && score.isFinite) scores[session.id] = score;
+        final sessionStages = stages[session.id] ?? const <Map<String, Object?>>[];
+        if (sessionStages.isNotEmpty && metric.stageCoveragePercent != null) {
+          awakeningsBySession[session.id] = metric.awakeningCount.toDouble();
+        }
+      }
+      return PeriodicTagPatternAnalyzer.analyze(
+        sessions: selected,
+        tagsBySession: tagsBySession,
+        durationBySession: durations,
+        scoreBySession: scores,
+        awakeningsBySession: awakeningsBySession,
+        tagLabels: tagLabels,
+      );
+    }
+
     final current = summarize(sessions);
     final previous = summarize(previousSessions);
     final ids = sessions.map((s) => s.id).toSet();
@@ -246,6 +300,10 @@ class PeriodicReportService {
       ...current, 'audioEventCount': events.length, 'audioCategories': categories,
       'notes': periodNotes, 'noteCount': periodNotes.length,
       'previous': previous, 'score': current['score'],
+      'tagPatterns': {
+        'current': tagPatternsFor(sessions),
+        'previous': tagPatternsFor(previousSessions),
+      },
     };
 
     List<Map<String, Object?>> weekdayPatterns(List<SleepSession> selected) {
