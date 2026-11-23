@@ -72,23 +72,31 @@ void main() {
     test('uses circular medians for bedtime values across midnight', () {
       final taggedTimes = [1435, 5, 1438, 2];
       final plainTimes = [15, 20, 25, 30];
+      DateTime clockDate(int day, int minute) {
+        final date = start.add(Duration(days: day));
+        return DateTime(date.year, date.month, date.day, minute ~/ 60, minute % 60);
+      }
+      DateTime wakeDate(int day, int minute) {
+        final date = start.add(Duration(days: day + (minute >= 20 * 60 ? 1 : 0)));
+        return DateTime(date.year, date.month, date.day, 8);
+      }
       final sessions = <SleepSession>[
         for (var i = 0; i < 4; i++)
           SleepSession(
             id: 'tag-$i',
-            startedAt: start.add(Duration(days: i)),
-            endedAt: start.add(Duration(days: i, hours: 8)),
-            actualSleepStartedAt: start.add(Duration(days: i, minutes: taggedTimes[i])),
-            actualSleepEndedAt: start.add(Duration(days: i, hours: 8)),
+            startedAt: clockDate(i, taggedTimes[i]),
+            endedAt: wakeDate(i, taggedTimes[i]),
+            actualSleepStartedAt: clockDate(i, taggedTimes[i]),
+            actualSleepEndedAt: wakeDate(i, taggedTimes[i]),
             source: 'apple_health',
           ),
         for (var i = 0; i < 4; i++)
           SleepSession(
             id: 'plain-$i',
-            startedAt: start.add(Duration(days: i + 5)),
-            endedAt: start.add(Duration(days: i + 5, hours: 8)),
-            actualSleepStartedAt: start.add(Duration(days: i + 5, minutes: plainTimes[i])),
-            actualSleepEndedAt: start.add(Duration(days: i + 5, hours: 8)),
+            startedAt: clockDate(i + 5, plainTimes[i]),
+            endedAt: wakeDate(i + 5, plainTimes[i]),
+            actualSleepStartedAt: clockDate(i + 5, plainTimes[i]),
+            actualSleepEndedAt: wakeDate(i + 5, plainTimes[i]),
             source: 'apple_health',
           ),
       ];
