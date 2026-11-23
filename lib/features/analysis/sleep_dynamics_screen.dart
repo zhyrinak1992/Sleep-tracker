@@ -80,6 +80,26 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
   String _number(double? value, String suffix, {int decimals = 1}) =>
     value == null ? 'Нет данных' : value.toStringAsFixed(decimals) + suffix;
 
+  String _clock(int? minute) {
+    if (minute == null) return 'Нет данных';
+    final hour = (minute ~/ 60).toString().padLeft(2, '0');
+    final value = (minute % 60).toString().padLeft(2, '0');
+    return hour + ':' + value;
+  }
+
+  String _clockDelta(int? current, int? previous) {
+    if (current == null || previous == null) return 'Недостаточно данных';
+    var delta = current - previous;
+    if (delta > 720) delta -= 1440;
+    if (delta < -720) delta += 1440;
+    if (delta == 0) return 'Без изменения';
+    return delta > 0
+      ? delta.toString() + ' мин позже'
+      : delta.abs().toString() + ' мин раньше';
+  }
+
+  bool _hasData(List<double?> values) => values.any((value) => value != null);
+
   String _signed(double? value, String suffix, {int decimals = 1}) {
     if (value == null) return 'Нет сопоставимых данных';
     final sign = value > 0 ? '+' : '';
@@ -175,8 +195,51 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
               const Text('Шкала графика — до 12 часов. Пустой столбец означает отсутствие завершённых ночей, а не нулевой сон.',
                 style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4)),
               const SizedBox(height: 16),
-              SizedBox(height: 150, child: _DynamicsChart(values: current.chartValues, period: _period)),
+              SizedBox(height: 150, child: _DynamicsChart(
+                values: current.chartValues, period: _period, maxValue: 720,
+                formatValue: (value) => (value / 60).toStringAsFixed(1) + ' ч',
+              )),
             ])),
+            if (_hasData(current.chartEfficiencyValues)) ...[
+              const SizedBox(height: 10),
+              _DynamicsChartCard(
+                title: 'Эффективность по периодам',
+                values: current.chartEfficiencyValues,
+                period: _period,
+                maxValue: 100,
+                formatValue: (value) => value.toStringAsFixed(0) + '%',
+              ),
+            ],
+            if (_hasData(current.chartAwakeningValues)) ...[
+              const SizedBox(height: 10),
+              _DynamicsChartCard(
+                title: 'Пробуждения по периодам',
+                values: current.chartAwakeningValues,
+                period: _period,
+                maxValue: 10,
+                formatValue: (value) => value.toStringAsFixed(1),
+              ),
+            ],
+            if (_hasData(current.chartQualityValues)) ...[
+              const SizedBox(height: 10),
+              _DynamicsChartCard(
+                title: 'Субъективное качество по периодам',
+                values: current.chartQualityValues,
+                period: _period,
+                maxValue: 5,
+                formatValue: (value) => value.toStringAsFixed(1) + ' / 5',
+              ),
+            ],
+            if (_hasData(current.chartWellbeingValues)) ...[
+              const SizedBox(height: 10),
+              _DynamicsChartCard(
+                title: 'Самочувствие по периодам',
+                values: current.chartWellbeingValues,
+                period: _period,
+                maxValue: 5,
+                formatValue: (value) => value.toStringAsFixed(1) + ' / 5',
+              ),
+            ],
             const SizedBox(height: 12),
             _DynamicsMetricCard(
               title: 'Средняя продолжительность сна',
@@ -216,6 +279,22 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
               samples: current.wellbeingSamples,
               previousValue: _number(previous.averageWellbeing, ' / 5'),
               note: 'Среднее по сохранённым ответам о самочувствии.',
+            ),
+            const SizedBox(height: 10),
+            _DynamicsMetricCard(
+              title: 'Типичное время засыпания',
+              value: _clock(current.typicalBedtimeMinute),
+              samples: current.regularitySamples,
+              previousValue: _clock(previous.typicalBedtimeMinute),
+              note: 'Круговая медиана фактического времени засыпания; ручные и изменённые записи не включаются.',
+            ),
+            const SizedBox(height: 10),
+            _DynamicsMetricCard(
+              title: 'Типичное время пробуждения',
+              value: _clock(current.typicalWakeMinute),
+              samples: current.regularitySamples,
+              previousValue: _clock(previous.typicalWakeMinute),
+              note: 'Круговая медиана фактического времени пробуждения; ручные и изменённые записи не включаются.',
             ),
             const SizedBox(height: 10),
             _DynamicsMetricCard(
@@ -323,6 +402,22 @@ class _RollingComparisonCard extends StatelessWidget {
         previousSamples: previous.wellbeingSamples,
       ),
       _RollingMetric(
+        label: 'Типичное время засыпания',
+        currentValue: _clock(current.typicalBedtimeMinute),
+        previousValue: _clock(previous.typicalBedtimeMinute),
+        change: _clockDelta(current.typicalBedtimeMinute, previous.typicalBedtimeMinute),
+        currentSamples: current.regularitySamples,
+        previousSamples: previous.regularitySamples,
+      ),
+      _RollingMetric(
+        label: 'Типичное время пробуждения',
+        currentValue: _clock(current.typicalWakeMinute),
+        previousValue: _clock(previous.typicalWakeMinute),
+        change: _clockDelta(current.typicalWakeMinute, previous.typicalWakeMinute),
+        currentSamples: current.regularitySamples,
+        previousSamples: previous.regularitySamples,
+      ),
+      _RollingMetric(
         label: 'Разброс засыпания',
         currentValue: number(current.bedtimeDeviationMinutes, ' мин', decimals: 0),
         previousValue: number(previous.bedtimeDeviationMinutes, ' мин', decimals: 0),
@@ -350,6 +445,21 @@ class _RollingComparisonCard extends StatelessWidget {
       ),
     ],
   ));
+
+  static String _clock(int? minute) {
+    if (minute == null) return 'Нет данных';
+    return (minute ~/ 60).toString().padLeft(2, '0') + ':' +
+      (minute % 60).toString().padLeft(2, '0');
+  }
+
+  static String _clockDelta(int? current, int? previous) {
+    if (current == null || previous == null) return 'Недостаточно данных';
+    var delta = current - previous;
+    if (delta > 720) delta -= 1440;
+    if (delta < -720) delta += 1440;
+    if (delta == 0) return 'Без изменения';
+    return delta > 0 ? delta.toString() + ' мин позже' : delta.abs().toString() + ' мин раньше';
+  }
 
   static String _durationDelta(double value) {
     final minutes = value.round().abs();
@@ -419,10 +529,38 @@ class _DynamicsMetricCard extends StatelessWidget {
   ));
 }
 
-class _DynamicsChart extends StatelessWidget {
-  const _DynamicsChart({required this.values, required this.period});
+class _DynamicsChartCard extends StatelessWidget {
+  const _DynamicsChartCard({
+    required this.title, required this.values, required this.period,
+    required this.maxValue, required this.formatValue,
+  });
+  final String title;
   final List<double?> values;
   final SleepDynamicsPeriod period;
+  final double maxValue;
+  final String Function(double) formatValue;
+
+  @override
+  Widget build(BuildContext context) => SectionCard(child: Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+      const SizedBox(height: 14),
+      SizedBox(height: 150, child: _DynamicsChart(
+        values: values, period: period, maxValue: maxValue, formatValue: formatValue,
+      )),
+    ],
+  ));
+}
+
+class _DynamicsChart extends StatelessWidget {
+  const _DynamicsChart({
+    required this.values, required this.period, required this.maxValue, required this.formatValue,
+  });
+  final List<double?> values;
+  final SleepDynamicsPeriod period;
+  final double maxValue;
+  final String Function(double) formatValue;
 
   @override
   Widget build(BuildContext context) {
@@ -431,12 +569,11 @@ class _DynamicsChart extends StatelessWidget {
       SleepDynamicsPeriod.month => const ['1 нед.', '2 нед.', '3 нед.', '4 нед.', '5 нед.'],
       SleepDynamicsPeriod.year => const ['Ян', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'],
     };
-    const maxMinutes = 720.0;
     return Row(crossAxisAlignment: CrossAxisAlignment.end, children: List.generate(values.length, (index) {
       final value = values[index];
-      final height = value == null ? 0.0 : (value / maxMinutes * 105).clamp(0.0, 105.0).toDouble();
+      final height = value == null ? 0.0 : (value / maxValue * 105).clamp(0.0, 105.0).toDouble();
       return Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
-        if (value != null) Text((value / 60).toStringAsFixed(1) + ' ч', style: const TextStyle(fontSize: 9, color: AppTheme.muted)),
+        if (value != null) Text(formatValue(value), style: const TextStyle(fontSize: 9, color: AppTheme.muted)),
         const SizedBox(height: 4),
         Container(
           height: 108,
