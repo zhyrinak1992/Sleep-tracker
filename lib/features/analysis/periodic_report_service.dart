@@ -499,6 +499,55 @@ class PeriodicReportService {
       'rankedInsights': rankedInsights,
     };
 
+    List<Map<String, Object?>> nightlyDetails(List<SleepSession> selected) {
+      final details = <Map<String, Object?>>[];
+      for (final session in selected) {
+        final metric = SleepSessionMetrics.calculate(
+          session: session,
+          stages: stages[session.id] ?? const [],
+        );
+        final score = scoreCache.putIfAbsent(session.id, () =>
+          SleepScoreCalculator.calculateForSession(
+            session: session,
+            historySessions: allSessions,
+            morningReports: morning,
+            stagesBySession: stages,
+          ),
+        ).score;
+        final report = morning[session.id];
+        details.add({
+          'sessionId': session.id,
+          'startedAt': session.startedAt.toIso8601String(),
+          'sleepMinutes': metric.sleepDurationMinutes,
+          'score': score,
+          'efficiency': metric.sleepEfficiencyPercent,
+          'quality': report?['sleep_quality'],
+          'wellbeing': report?['wellbeing'],
+          'awakenings': (stages[session.id] ?? const []).isNotEmpty &&
+              metric.stageCoveragePercent != null ? metric.awakeningCount : null,
+        });
+      }
+      details.sort((a, b) => (a['startedAt'] as String).compareTo(b['startedAt'] as String));
+      return details;
+    }
+
+    List<Map<String, Object?>> weekdayTrend(List<SleepSession> selected) {
+      const names = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+      final result = <Map<String, Object?>>[];
+      for (var weekday = 1; weekday <= 7; weekday++) {
+        final bucket = selected.where((s) => s.startedAt.weekday == weekday).toList();
+        if (bucket.isEmpty) continue;
+        final summary = summarize(bucket);
+        result.add({
+          'label': names[weekday - 1],
+          'sleepMinutes': summary['averageSleepMinutes'],
+          'samples': summary['sleepDurationSamples'],
+          'nights': nightlyDetails(bucket),
+        });
+      }
+      return result;
+    }
+
     List<Map<String, Object?>> weekdayPatterns(List<SleepSession> selected) {
       const names = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
       final patterns = <Map<String, Object?>>[];
@@ -524,6 +573,26 @@ class PeriodicReportService {
       return patterns;
     }
 
+    if (kind == PeriodicReportKind.week) {
+      final days = <Map<String, Object?>>[];
+      for (var day = 0; day < 7; day++) {
+        final dayStart = start.add(Duration(days: day));
+        final dayEnd = dayStart.add(const Duration(days: 1));
+        final daySessions = sessions.where((s) =>
+          !s.startedAt.isBefore(dayStart) && s.startedAt.isBefore(dayEnd)).toList();
+        if (daySessions.isEmpty) continue;
+        final summary = summarize(daySessions);
+        days.add({
+          'label': '${dayStart.day}.${dayStart.month.toString().padLeft(2, '0')}',
+          'sleepMinutes': summary['averageSleepMinutes'],
+          'samples': summary['sleepDurationSamples'],
+          'nights': nightlyDetails(daySessions),
+        });
+      }
+      data['trendPoints'] = days;
+      data['weekdayTrend'] = weekdayTrend(sessions);
+    }
+
     if (kind == PeriodicReportKind.month) {
       final trend = <Map<String, Object?>>[];
       for (var bucket = 0; bucket < 5; bucket++) {
@@ -539,11 +608,17 @@ class PeriodicReportService {
             'dayFrom': bucketStart.day,
             'dayTo': bucketEnd.subtract(const Duration(days: 1)).day,
             ...summarize(bucketSessions),
+            'label': 'Дни ${bucketStart.day}–${bucketEnd.subtract(const Duration(days: 1)).day}',
+            'sleepMinutes': summarize(bucketSessions)['averageSleepMinutes'],
+            'samples': summarize(bucketSessions)['sleepDurationSamples'],
+            'nights': nightlyDetails(bucketSessions),
           });
         }
       }
       data['weeklyTrend'] = trend;
+      data['trendPoints'] = trend;
       data['weekdayPatterns'] = weekdayPatterns(sessions);
+      data['weekdayTrend'] = weekdayTrend(sessions);
     }
 
     if (kind == PeriodicReportKind.year) {
@@ -552,10 +627,22 @@ class PeriodicReportService {
         final monthStart = DateTime(start.year, month);
         final monthEnd = DateTime(start.year, month + 1);
         final monthSessions = allSessions.where((s) => !s.startedAt.isBefore(monthStart) && s.startedAt.isBefore(monthEnd)).toList();
-        if (monthSessions.isNotEmpty) months.add({'month': month, ...summarize(monthSessions)});
+        if (monthSessions.isNotEmpty) {
+          final summary = summarize(monthSessions);
+          months.add({
+            'month': month,
+            'label': PeriodicReportSnapshot.monthName(month),
+            ...summary,
+            'sleepMinutes': summary['averageSleepMinutes'],
+            'samples': summary['sleepDurationSamples'],
+            'nights': nightlyDetails(monthSessions),
+          });
+        }
       }
       data['months'] = months;
+      data['trendPoints'] = months;
       data['weekdayPatterns'] = weekdayPatterns(sessions);
+      data['weekdayTrend'] = weekdayTrend(sessions);
       const minimumMonthNightsForRanking = 3;
       final measurable = months.where((m) => m['averageSleepMinutes'] is num &&
         (m['nights'] as int? ?? 0) >= minimumMonthNightsForRanking).toList();
