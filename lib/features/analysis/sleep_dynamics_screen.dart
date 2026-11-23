@@ -345,7 +345,7 @@ class _RollingComparisonCard extends StatelessWidget {
       const SizedBox(height: 8),
       Text(
         'Последние 30 дней: ' + dateRange(current.start, current.endExclusive) +
-        ' · предыдущие 30 дней: ' + dateRange(previous.start, previous.endExclusive.subtract(const Duration(days: 1))) + '.',
+        ' · предыдущие 30 дней: ' + dateRange(previous.start, previous.endExclusive) + '.',
         style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
       ),
     ],
