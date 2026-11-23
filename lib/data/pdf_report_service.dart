@@ -11,6 +11,18 @@ import '../features/diary/sleep_metric_summary.dart';
 import 'sleep_database.dart';
 
 class PdfReportService {
+  /// Returns the first local calendar date included in a rolling history export.
+  /// The export includes [days] calendar dates, including today; it is not a
+  /// fixed 24-hour duration and therefore remains stable across DST changes.
+  static DateTime historyRangeStart({required DateTime now, required int days}) {
+    if (days <= 0) {
+      throw ArgumentError.value(days, 'days', 'Количество дней должно быть положительным.');
+    }
+    if (days >= 3650) return DateTime.fromMillisecondsSinceEpoch(0);
+    final today = DateTime(now.year, now.month, now.day);
+    return DateTime(today.year, today.month, today.day - days + 1);
+  }
+
 
   /// Exports a user-selected comparison of two date ranges with aggregate
   /// metrics and the actual completed nightly observations behind them.
@@ -44,7 +56,7 @@ class PdfReportService {
       );
     }
 
-    doc.addPage(pw.MultiPage(
+    doc.addPage(pw.MultiPage(maxPages: 1000,
       theme: pw.ThemeData.withFont(base: regular, bold: bold),
       build: (_) => [
         pw.Header(level: 0, child: pw.Text('Sleep Tracker — $title')),
@@ -98,7 +110,7 @@ class PdfReportService {
     final regular = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Regular.ttf'));
     final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));
     final doc = pw.Document();
-    doc.addPage(pw.MultiPage(
+    doc.addPage(pw.MultiPage(maxPages: 1000,
       theme: pw.ThemeData.withFont(base: regular, bold: bold),
       build: (_) => [
         pw.Header(level: 0, child: pw.Text('Sleep Tracker — $title')),
@@ -463,7 +475,7 @@ class PdfReportService {
       'Отсутствующие измерения не заменяются нулями. Показатели являются описательной аналитикой и не устанавливают медицинские диагнозы.',
       style: const pw.TextStyle(fontSize: 8),
     ));
-    doc.addPage(pw.MultiPage(
+    doc.addPage(pw.MultiPage(maxPages: 1000,
       theme: pw.ThemeData.withFont(base: regular, bold: bold),
       build: (_) => content,
     ));
@@ -479,7 +491,7 @@ class PdfReportService {
     }
     final now = DateTime.now();
     final rangeStart = from == null
-        ? (days >= 3650 ? DateTime.fromMillisecondsSinceEpoch(0) : now.subtract(Duration(days: days)))
+        ? historyRangeStart(now: now, days: days)
         : DateTime(from.year, from.month, from.day);
     final rangeEndExclusive = to == null
         ? DateTime(now.year, now.month, now.day + 1)
