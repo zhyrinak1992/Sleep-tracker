@@ -94,7 +94,7 @@ class _SleepPeriodComparisonScreenState extends State<SleepPeriodComparisonScree
     final delta = a - b;
     if (delta.abs() < 0.5) return 'Разброс практически не изменился';
     final amount = delta.abs().round();
-    return delta > 0
+    return delta < 0
         ? 'В периоде A разброс меньше на $amount мин'
         : 'В периоде B разброс меньше на $amount мин';
   }
@@ -268,13 +268,13 @@ class _SleepPeriodComparisonScreenState extends State<SleepPeriodComparisonScree
           ],
           const SizedBox(height: 10),
           _ComparisonCard(title: 'Стабильность времени засыпания',
-            a: _minutes(current.bedtimeDeviationMinutes),
-            b: _minutes(previous.bedtimeDeviationMinutes),
+            a: _minutes(current.bedtimeDeviationMinutes) + ' · n=' + current.regularitySampleCount.toString(),
+            b: _minutes(previous.bedtimeDeviationMinutes) + ' · n=' + previous.regularitySampleCount.toString(),
             change: _variabilityChange(current.bedtimeDeviationMinutes, previous.bedtimeDeviationMinutes)),
           const SizedBox(height: 10),
           _ComparisonCard(title: 'Стабильность времени пробуждения',
-            a: _minutes(current.wakeTimeDeviationMinutes),
-            b: _minutes(previous.wakeTimeDeviationMinutes),
+            a: _minutes(current.wakeTimeDeviationMinutes) + ' · n=' + current.regularitySampleCount.toString(),
+            b: _minutes(previous.wakeTimeDeviationMinutes) + ' · n=' + previous.regularitySampleCount.toString(),
             change: _variabilityChange(current.wakeTimeDeviationMinutes, previous.wakeTimeDeviationMinutes)),
           const SizedBox(height: 10),
           _ComparisonCard(title: 'Записи сна',
@@ -282,7 +282,7 @@ class _SleepPeriodComparisonScreenState extends State<SleepPeriodComparisonScree
             b: '${previous.sessions.length} всего · ${previous.completed} завершено · ${previous.rated} с оценкой',
             change: 'Количество записей сравнивается напрямую'),
           const SizedBox(height: 12),
-          const Text('Стабильность — среднее абсолютное отклонение фактического времени засыпания и пробуждения от кругового среднего; меньшее значение означает более ровный режим. Для расчёта нужно не менее двух завершённых ночей. Сравнение не устанавливает причины изменений, отсутствующие измерения не заменяются нулями.',
+          const Text('Стабильность — медианное абсолютное отклонение фактического времени засыпания и пробуждения; используются только реальные границы сна из неотредактированных автоматических записей. Для расчёта нужно не менее двух таких ночей. Сравнение не устанавливает причины изменений, отсутствующие измерения не заменяются нулями.',
             style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.45)),
         ],
       );
