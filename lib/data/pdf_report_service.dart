@@ -157,8 +157,8 @@ class PdfReportService {
           }
           final withValue = value(current['withTagAverage']);
           final withoutValue = value(current['withoutTagAverage']);
-          final oldWith = average(old['withTagAverage'], suffix: suffix);
-          final oldWithout = average(old['withoutTagAverage'], suffix: suffix);
+          final oldWith = value(old['withTagAverage']);
+          final oldWithout = value(old['withoutTagAverage']);
           final deltaSuffix = metric.key == 'bedtime' || metric.key == 'wakeTime' ? ' мин' : suffix;
           final delta = current['difference'] is num
               ? ' · разница ${(current['difference'] as num) > 0 ? '+' : ''}${(current['difference'] as num).toStringAsFixed(1)}$deltaSuffix'
