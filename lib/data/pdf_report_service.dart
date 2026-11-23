@@ -43,6 +43,12 @@ class PdfReportService {
     final months = snapshot['months'] is List
         ? (snapshot['months'] as List).whereType<Map>().toList()
         : const <Map>[];
+    final weeklyTrend = snapshot['weeklyTrend'] is List
+        ? (snapshot['weeklyTrend'] as List).whereType<Map>().toList()
+        : const <Map>[];
+    final weekdayPatterns = snapshot['weekdayPatterns'] is List
+        ? (snapshot['weekdayPatterns'] as List).whereType<Map>().toList()
+        : const <Map>[];
     const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 
     final regular = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Regular.ttf'));
@@ -53,6 +59,8 @@ class PdfReportService {
       pw.Text('Сохранённый периодический отчёт'),
       pw.SizedBox(height: 12),
       pw.Text('Завершённых ночей: ${snapshot['nights'] ?? 0}'),
+      if (snapshot['kind'] == 'year')
+        pw.Text('Суммарная продолжительность сна: ${duration(snapshot['totalSleepMinutes'])}'),
       pw.Text('Средняя продолжительность сна: ${duration(snapshot['averageSleepMinutes'])} · выборка ${snapshot['sleepDurationSamples'] ?? 0}'),
       pw.Text('Среднее время в постели: ${duration(snapshot['averageTimeInBedMinutes'])} · выборка ${snapshot['timeInBedSamples'] ?? 0}'),
       pw.Text('Эффективность: ${average(snapshot['averageEfficiency'], suffix: '%')} · выборка ${snapshot['efficiencySamples'] ?? 0}'),
@@ -84,17 +92,50 @@ class PdfReportService {
       content.add(pw.SizedBox(height: 14));
       content.add(pw.Header(level: 1, child: pw.Text('Динамика по месяцам')));
       content.add(pw.TableHelper.fromTextArray(
-        headers: ['Месяц', 'Ночей', 'Средний сон'],
-        cellStyle: const pw.TextStyle(fontSize: 8),
-        headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+        headers: ['Месяц', 'Ночей', 'Сон средн.', 'Эффект.', 'Пробужд.', 'Качество', 'Самочувствие'],
+        cellStyle: const pw.TextStyle(fontSize: 7),
+        headerStyle: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold),
         data: months.map((month) => [
           month['month'] is int && (month['month'] as int) >= 1 && (month['month'] as int) <= 12
               ? monthNames[(month['month'] as int) - 1] : '—',
           month['nights']?.toString() ?? '0',
           duration(month['averageSleepMinutes']),
+          average(month['averageEfficiency'], suffix: '%') + ' (' + (month['efficiencySamples'] ?? 0).toString() + ')',
+          average(month['averageAwakenings']) + ' (' + (month['awakeningSamples'] ?? 0).toString() + ')',
+          average(month['averageQuality'], suffix: '/5') + ' (' + (month['qualitySamples'] ?? 0).toString() + ')',
+          average(month['averageWellbeing'], suffix: '/5') + ' (' + (month['wellbeingSamples'] ?? 0).toString() + ')',
         ]).toList(),
       ));
       content.add(pw.Text('Лучший и наиболее сложный месяцы ранжируются по средней продолжительности сна при наличии не менее 3 завершённых ночей в месяце. Это описательный критерий, не медицинская оценка.'));
+    }
+    if (weeklyTrend.isNotEmpty) {
+      content.add(pw.SizedBox(height: 14));
+      content.add(pw.Header(level: 1, child: pw.Text('Динамика внутри месяца')));
+      content.add(pw.TableHelper.fromTextArray(
+        headers: ['Дни месяца', 'Ночей', 'Средний сон'],
+        cellStyle: const pw.TextStyle(fontSize: 8),
+        headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+        data: weeklyTrend.map((bucket) => [
+          '${bucket['dayFrom'] ?? '—'}–${bucket['dayTo'] ?? '—'}',
+          bucket['sleepDurationSamples']?.toString() ?? '0',
+          duration(bucket['averageSleepMinutes']),
+        ]).toList(),
+      ));
+    }
+    if (weekdayPatterns.isNotEmpty) {
+      content.add(pw.SizedBox(height: 14));
+      content.add(pw.Header(level: 1, child: pw.Text('Средняя длительность по дням недели')));
+      content.add(pw.TableHelper.fromTextArray(
+        headers: ['День', 'Ночей', 'Средний сон'],
+        cellStyle: const pw.TextStyle(fontSize: 8),
+        headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+        data: weekdayPatterns.map((pattern) => [
+          pattern['label']?.toString() ?? '—',
+          pattern['samples']?.toString() ?? '0',
+          duration(pattern['averageSleepMinutes']),
+        ]).toList(),
+      ));
+      content.add(pw.Text('Показываются только группы минимум с тремя измерениями; статистика описательная и не устанавливает причины изменений.'));
     }
     if (notes.isNotEmpty) {
       content.add(pw.SizedBox(height: 14));

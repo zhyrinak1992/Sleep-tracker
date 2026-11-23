@@ -15,6 +15,7 @@ class PeriodicReportSnapshot {
   DateTime get endExclusive => DateTime.parse(data['endExclusive'] as String);
   int get nights => data['nights'] as int;
   double? get averageSleepMinutes => (data['averageSleepMinutes'] as num?)?.toDouble();
+  int? get totalSleepMinutes => (data['totalSleepMinutes'] as num?)?.round();
   double? get averageTimeInBedMinutes => (data['averageTimeInBedMinutes'] as num?)?.toDouble();
   double? get averageEfficiency => (data['averageEfficiency'] as num?)?.toDouble();
   double? get averageAwakenings => (data['averageAwakenings'] as num?)?.toDouble();
@@ -154,7 +155,7 @@ class PeriodicReportService {
       }
       return {
         'nights': selected.length,
-        'averageSleepMinutes': avg(durations), 'sleepDurationSamples': durations.length,
+        'averageSleepMinutes': avg(durations), 'totalSleepMinutes': durations.isEmpty ? null : durations.fold<int>(0, (sum, value) => sum + value), 'sleepDurationSamples': durations.length,
         'averageTimeInBedMinutes': avg(timeInBed), 'timeInBedSamples': timeInBed.length,
         'averageEfficiency': avg(efficiencies), 'efficiencySamples': efficiencies.length,
         'averageAwakenings': avg(awakenings), 'awakeningSamples': awakenings.length,
@@ -184,13 +185,61 @@ class PeriodicReportService {
     }).toList();
 
     final data = <String, Object?>{
-      'schemaVersion': 1, 'id': _id(kind, start), 'kind': kind.name,
+      'schemaVersion': 2, 'id': _id(kind, start), 'kind': kind.name,
       'start': start.toIso8601String(), 'endExclusive': end.toIso8601String(),
       'generatedAt': DateTime.now().toIso8601String(),
       ...current, 'audioEventCount': events.length, 'audioCategories': categories,
       'notes': periodNotes, 'noteCount': periodNotes.length,
       'previous': previous, 'score': null,
     };
+
+    List<Map<String, Object?>> weekdayPatterns(List<SleepSession> selected) {
+      const names = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
+      final patterns = <Map<String, Object?>>[];
+      for (var weekday = 1; weekday <= 7; weekday++) {
+        final values = <int>[];
+        for (final session in selected.where((s) => s.startedAt.weekday == weekday)) {
+          final metric = SleepSessionMetrics.calculate(
+            session: session,
+            stages: stages[session.id] ?? const [],
+          );
+          final value = metric.sleepDurationMinutes;
+          if (value != null && value > 0) values.add(value);
+        }
+        if (values.length >= 3) {
+          patterns.add({
+            'weekday': weekday,
+            'label': names[weekday - 1],
+            'samples': values.length,
+            'averageSleepMinutes': values.reduce((a, b) => a + b) / values.length,
+          });
+        }
+      }
+      return patterns;
+    }
+
+    if (kind == PeriodicReportKind.month) {
+      final trend = <Map<String, Object?>>[];
+      for (var bucket = 0; bucket < 5; bucket++) {
+        final bucketStart = start.add(Duration(days: bucket * 7));
+        if (!bucketStart.isBefore(end)) break;
+        final candidateEnd = bucketStart.add(const Duration(days: 7));
+        final bucketEnd = candidateEnd.isBefore(end) ? candidateEnd : end;
+        final bucketSessions = sessions.where((s) =>
+          !s.startedAt.isBefore(bucketStart) && s.startedAt.isBefore(bucketEnd)).toList();
+        if (bucketSessions.isNotEmpty) {
+          trend.add({
+            'bucket': bucket + 1,
+            'dayFrom': bucketStart.day,
+            'dayTo': bucketEnd.subtract(const Duration(days: 1)).day,
+            ...summarize(bucketSessions),
+          });
+        }
+      }
+      data['weeklyTrend'] = trend;
+      data['weekdayPatterns'] = weekdayPatterns(sessions);
+    }
+
     if (kind == PeriodicReportKind.year) {
       final months = <Map<String, Object?>>[];
       for (var month = 1; month <= 12; month++) {
@@ -200,6 +249,7 @@ class PeriodicReportService {
         if (monthSessions.isNotEmpty) months.add({'month': month, ...summarize(monthSessions)});
       }
       data['months'] = months;
+      data['weekdayPatterns'] = weekdayPatterns(sessions);
       const minimumMonthNightsForRanking = 3;
       final measurable = months.where((m) => m['averageSleepMinutes'] is num &&
         (m['nights'] as int? ?? 0) >= minimumMonthNightsForRanking).toList();
