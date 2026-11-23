@@ -110,6 +110,59 @@ void main() {
       expect(impact.merge.hasEnoughSpace, isFalse);
     });
 
+    test('blocks merge when local history is corrupt but keeps full replacement available', () {
+      final archive = {
+        for (final table in BackupRestorePlanner.tableKeys.keys)
+          table: <Map<String, Object?>>[],
+      };
+      archive['app_metadata'] = [
+        {'key': 'sleep_change_history_v1', 'value': 'not-json'},
+      ];
+      final current = {
+        for (final table in BackupRestorePlanner.tableKeys.keys)
+          table: <Map<String, Object?>>[],
+      };
+      current['app_metadata'] = [
+        {'key': 'sleep_change_history_v1', 'value': '{broken'},
+      ];
+
+      final impact = BackupRestorePlanner.calculate(
+        archiveRows: archive,
+        currentRows: current,
+        availableBytes: 100 * 1024 * 1024,
+      );
+
+      expect(impact.merge.canProceed, isFalse);
+      expect(impact.merge.blockedReason, contains('повреждена'));
+      expect(impact.replace.canProceed, isTrue);
+    });
+
+    test('changes the state fingerprint when current record IDs change after preview', () {
+      final archive = {
+        for (final table in BackupRestorePlanner.tableKeys.keys)
+          table: <Map<String, Object?>>[],
+      };
+      final currentA = {
+        for (final table in BackupRestorePlanner.tableKeys.keys)
+          table: <Map<String, Object?>>[],
+      };
+      final currentB = {
+        for (final table in BackupRestorePlanner.tableKeys.keys)
+          table: <Map<String, Object?>>[],
+      };
+      currentA['sleep_sessions'] = [{'id': 'night-a'}];
+      currentB['sleep_sessions'] = [{'id': 'night-b'}];
+
+      final planA = BackupRestorePlanner.calculate(
+        archiveRows: archive, currentRows: currentA, availableBytes: null,
+      );
+      final planB = BackupRestorePlanner.calculate(
+        archiveRows: archive, currentRows: currentB, availableBytes: null,
+      );
+
+      expect(planA.merge.stateFingerprint, isNot(planB.merge.stateFingerprint));
+    });
+
     test('allows unknown free-space state but reports it as unknown', () {
       final empty = {
         for (final table in BackupRestorePlanner.tableKeys.keys)
