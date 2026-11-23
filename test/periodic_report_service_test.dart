@@ -13,6 +13,7 @@ void main() {
           "endExclusive": "2026-11-23T00:00:00.000",
           "nights": 5,
           "averageSleepMinutes": 431.5,
+          "averageTimeInBedMinutes": 472.0,
           "averageEfficiency": 88.2,
           "averageAwakenings": 2.0,
           "averageQuality": 4.0,
@@ -23,6 +24,7 @@ void main() {
       expect(report.kind, 'week');
       expect(report.nights, 5);
       expect(report.averageSleepMinutes, 431.5);
+      expect(report.averageTimeInBedMinutes, 472.0);
       expect(report.averageEfficiency, 88.2);
       expect(report.averageAwakenings, 2.0);
       expect(report.averageQuality, 4.0);
@@ -41,6 +43,7 @@ void main() {
         }
       ''');
       expect(report.averageSleepMinutes, isNull);
+      expect(report.averageTimeInBedMinutes, isNull);
       expect(report.averageEfficiency, isNull);
       expect(report.averageAwakenings, isNull);
       expect(report.averageQuality, isNull);

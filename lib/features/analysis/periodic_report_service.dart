@@ -15,6 +15,7 @@ class PeriodicReportSnapshot {
   DateTime get endExclusive => DateTime.parse(data['endExclusive'] as String);
   int get nights => data['nights'] as int;
   double? get averageSleepMinutes => (data['averageSleepMinutes'] as num?)?.toDouble();
+  double? get averageTimeInBedMinutes => (data['averageTimeInBedMinutes'] as num?)?.toDouble();
   double? get averageEfficiency => (data['averageEfficiency'] as num?)?.toDouble();
   double? get averageAwakenings => (data['averageAwakenings'] as num?)?.toDouble();
   double? get averageQuality => (data['averageQuality'] as num?)?.toDouble();
@@ -50,7 +51,8 @@ class PeriodicReportSnapshot {
 class PeriodicReportService {
   PeriodicReportService(this.database);
   final SleepDatabase database;
-  static const metadataPrefix = 'periodic_report_v1_';
+  static const metadataPrefix = 'periodic_report_v2_';
+  static const legacyMetadataPrefix = 'periodic_report_v1_';
 
   Future<List<PeriodicReportSnapshot>> generateClosedReports({DateTime? now}) async {
     final current = now ?? DateTime.now();
@@ -92,12 +94,25 @@ class PeriodicReportService {
   }
 
   Future<List<PeriodicReportSnapshot>> loadArchive() async {
-    final values = await database.getAppMetadataByPrefix(metadataPrefix);
-    final reports = <PeriodicReportSnapshot>[];
-    for (final value in values.values) {
-      try { reports.add(PeriodicReportSnapshot.decode(value)); } catch (_) {}
+    final legacy = await database.getAppMetadataByPrefix(legacyMetadataPrefix);
+    final current = await database.getAppMetadataByPrefix(metadataPrefix);
+    final byId = <String, PeriodicReportSnapshot>{};
+    for (final value in legacy.values) {
+      try {
+        final report = PeriodicReportSnapshot.decode(value);
+        byId[report.id] = report;
+      } catch (_) {}
     }
-    reports.sort((a, b) => b.start.compareTo(a.start));
+    // The corrected v2 snapshot wins while the v1 entry remains in app_metadata
+    // for backup compatibility and rollback safety.
+    for (final value in current.values) {
+      try {
+        final report = PeriodicReportSnapshot.decode(value);
+        byId[report.id] = report;
+      } catch (_) {}
+    }
+    final reports = byId.values.toList()
+      ..sort((a, b) => b.start.compareTo(a.start));
     return reports;
   }
 
@@ -116,11 +131,12 @@ class PeriodicReportService {
         return list.isEmpty ? null : list.reduce((a, b) => a + b) / list.length;
       }
       final durations = <int>[];
-      for (var i = 0; i < metrics.length; i++) {
-        final measured = metrics[i].sleepDurationMinutes;
-        final fallback = selected[i].duration?.inMinutes;
-        final value = measured ?? fallback;
-        if (value != null && value > 0) durations.add(value);
+      final timeInBed = <int>[];
+      for (final metric in metrics) {
+        final measuredSleep = metric.sleepDurationMinutes;
+        if (measuredSleep != null && measuredSleep > 0) durations.add(measuredSleep);
+        final measuredTimeInBed = metric.timeInBedMinutes;
+        if (measuredTimeInBed != null && measuredTimeInBed > 0) timeInBed.add(measuredTimeInBed);
       }
       final efficiencies = metrics.map((m) => m.sleepEfficiencyPercent).whereType<double>().toList();
       final awakenings = <int>[];
@@ -139,6 +155,7 @@ class PeriodicReportService {
       return {
         'nights': selected.length,
         'averageSleepMinutes': avg(durations), 'sleepDurationSamples': durations.length,
+        'averageTimeInBedMinutes': avg(timeInBed), 'timeInBedSamples': timeInBed.length,
         'averageEfficiency': avg(efficiencies), 'efficiencySamples': efficiencies.length,
         'averageAwakenings': avg(awakenings), 'awakeningSamples': awakenings.length,
         'averageQuality': avg(qualities), 'qualitySamples': qualities.length,
@@ -183,13 +200,16 @@ class PeriodicReportService {
         if (monthSessions.isNotEmpty) months.add({'month': month, ...summarize(monthSessions)});
       }
       data['months'] = months;
-      final measurable = months.where((m) => m['averageSleepMinutes'] is num).toList();
+      const minimumMonthNightsForRanking = 3;
+      final measurable = months.where((m) => m['averageSleepMinutes'] is num &&
+        (m['nights'] as int? ?? 0) >= minimumMonthNightsForRanking).toList();
       if (measurable.isNotEmpty) {
         final sorted = measurable.toList()..sort((a, b) =>
           (a['averageSleepMinutes'] as num).compareTo(b['averageSleepMinutes'] as num));
         data['shortestAverageMonth'] = sorted.first['month'];
         data['longestAverageMonth'] = sorted.last['month'];
-        data['monthRankingCriterion'] = 'Средняя продолжительность сна; только месяцы с доступными данными.';
+        data['monthRankingCriterion'] = 'Средняя продолжительность сна; не менее 3 завершённых ночей в месяце.';
+        data['monthRankingMinimumNights'] = minimumMonthNightsForRanking;
       }
     }
     return PeriodicReportSnapshot(data).data;
