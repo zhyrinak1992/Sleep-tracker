@@ -92,6 +92,10 @@ class _ReportCard extends StatelessWidget {
       ? (report.data['notes'] as List).whereType<Map>().toList() : const <Map>[];
     final months = report.data['months'] is List
       ? (report.data['months'] as List).whereType<Map>().toList() : const <Map>[];
+    final weeklyTrend = report.data['weeklyTrend'] is List
+      ? (report.data['weeklyTrend'] as List).whereType<Map>().toList() : const <Map>[];
+    final weekdayPatterns = report.data['weekdayPatterns'] is List
+      ? (report.data['weekdayPatterns'] as List).whereType<Map>().toList() : const <Map>[];
     final shortest = report.data['shortestAverageMonth'];
     final longest = report.data['longestAverageMonth'];
     return Padding(
@@ -105,6 +109,8 @@ class _ReportCard extends StatelessWidget {
           ]),
           const SizedBox(height: 10),
           _ReportLine(label: 'Завершённых ночей', value: report.nights.toString()),
+          if (report.kind == 'year' && report.totalSleepMinutes != null)
+            _ReportLine(label: 'Суммарная продолжительность сна', value: _formatDuration(report.totalSleepMinutes)),
           _ReportLine(label: 'Средняя продолжительность сна · ' + (report.data['sleepDurationSamples'] ?? 0).toString() + ' измерений', value: duration),
           _ReportLine(label: 'Время в постели · ' + (report.data['timeInBedSamples'] ?? 0).toString() + ' ночей', value: _formatDuration(report.averageTimeInBedMinutes)),
           _ReportLine(label: 'Эффективность · ' + (report.data['efficiencySamples'] ?? 0).toString() + ' ночей', value: average(report.averageEfficiency, '%')),
@@ -143,17 +149,47 @@ class _ReportCard extends StatelessWidget {
             const Text('Динамика по месяцам', style: TextStyle(fontWeight: FontWeight.w600)),
             ...months.map((month) {
               final index = month['month'] as int;
-              final value = (month['averageSleepMinutes'] as num?)?.toDouble();
-              return _ReportLine(label: PeriodicReportSnapshot.monthName(index),
-                value: value == null ? 'Нет данных' : _formatDuration(value));
+              return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                _ReportLine(
+                  label: PeriodicReportSnapshot.monthName(index) + ' · ' + (month['nights'] ?? 0).toString() + ' ночей',
+                  value: _formatDuration(month['averageSleepMinutes']),
+                ),
+                if (month['averageEfficiency'] is num)
+                  _ReportLine(label: '  Эффективность', value: _formatPercent(_number(month['averageEfficiency']))),
+                if (month['averageAwakenings'] is num)
+                  _ReportLine(label: '  Пробуждения', value: _formatNumber(_number(month['averageAwakenings']))),
+                if (month['averageQuality'] is num)
+                  _ReportLine(label: '  Качество сна', value: _formatScale(_number(month['averageQuality']))),
+                if (month['averageWellbeing'] is num)
+                  _ReportLine(label: '  Самочувствие', value: _formatScale(_number(month['averageWellbeing']))),
+              ]);
             }),
             if (shortest is int && longest is int)
               Text(
                 'Меньшая средняя длительность: ' + PeriodicReportSnapshot.monthName(shortest) +
                 '. Большая средняя длительность: ' + PeriodicReportSnapshot.monthName(longest) +
-                '. Критерий — средняя продолжительность, не оценка здоровья.',
+                '. Критерий — средняя продолжительность при наличии не менее 3 ночей в месяце; это не оценка здоровья.',
                 style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
               ),
+          ],
+          if (weeklyTrend.isNotEmpty) ...[
+            const Divider(height: 22),
+            const Text('Динамика внутри месяца', style: TextStyle(fontWeight: FontWeight.w600)),
+            ...weeklyTrend.map((bucket) => _ReportLine(
+              label: 'Дни ' + (bucket['dayFrom'] ?? '').toString() + '–' + (bucket['dayTo'] ?? '').toString() +
+                ' · ' + (bucket['sleepDurationSamples'] ?? 0).toString() + ' ночей',
+              value: _formatDuration(bucket['averageSleepMinutes']),
+            )),
+          ],
+          if (weekdayPatterns.isNotEmpty) ...[
+            const Divider(height: 22),
+            const Text('Средняя длительность по дням недели', style: TextStyle(fontWeight: FontWeight.w600)),
+            ...weekdayPatterns.map((pattern) => _ReportLine(
+              label: (pattern['label'] ?? 'День').toString() + ' · ' + (pattern['samples'] ?? 0).toString() + ' ночей',
+              value: _formatDuration(pattern['averageSleepMinutes']),
+            )),
+            const Text('Показываются только группы минимум с тремя фактическими измерениями; это описательная статистика, а не причинный вывод.',
+              style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4)),
           ],
           const SizedBox(height: 6),
           Text('Выборка: ' + report.nights.toString() + ' ночей. Показатели рассчитываются только при наличии соответствующих измерений.',
