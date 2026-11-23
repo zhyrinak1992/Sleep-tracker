@@ -210,6 +210,9 @@ class BackupService {
     if (selectedPlan.stateFingerprint != previewPlan.stateFingerprint) {
       throw StateError('Данные приложения изменились после предпросмотра. Выберите резервную копию ещё раз, чтобы пересчитать последствия восстановления.');
     }
+    if (selectedPlan.blockedReason != null) {
+      throw StateError(selectedPlan.blockedReason!);
+    }
     if (!selectedPlan.hasEnoughSpace) {
       throw StateError('Недостаточно свободного места для безопасного восстановления. Освободите место и повторите предпросмотр.');
     }
