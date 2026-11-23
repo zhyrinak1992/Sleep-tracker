@@ -280,6 +280,17 @@ class SleepRecordService {
       }
     }
 
+    // On the first run, existing sleep history is a baseline, not a stream
+    // of new achievements. Persist its acknowledgement before the history
+    // marker so concurrent loads cannot mistake the baseline for new records.
+    if (isFirstInitialization && history.isNotEmpty) {
+      celebratedKeys.addAll(history.map(_eventKey));
+      await database.setAppMetadata(
+        _celebratedKey,
+        jsonEncode(celebratedKeys.toList()),
+      );
+    }
+
     if (historyChanged) {
       // Persist even an empty first-run history. Otherwise a user who has no
       // qualifying records yet would be treated as a first-time installation
@@ -287,16 +298,6 @@ class SleepRecordService {
       await database.setAppMetadata(
         _historyKey,
         jsonEncode(history.map((item) => item.toMap()).toList()),
-      );
-    }
-
-    // On the first run, existing sleep history is a baseline, not a stream
-    // of new achievements. Mark that baseline as already celebrated.
-    if (isFirstInitialization && history.isNotEmpty) {
-      celebratedKeys.addAll(history.map(_eventKey));
-      await database.setAppMetadata(
-        _celebratedKey,
-        jsonEncode(celebratedKeys.toList()),
       );
     }
 
