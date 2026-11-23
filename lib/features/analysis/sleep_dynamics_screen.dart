@@ -204,7 +204,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
         'date': date,
         'bedtime': bedtime,
         'wake': wake,
-        'duration': _duration(duration),
+        'duration': _duration(duration.toDouble()),
         'score': score == null ? '—' : score.toStringAsFixed(0),
         'efficiency': calculated.sleepEfficiencyPercent == null ? '—' : calculated.sleepEfficiencyPercent!.toStringAsFixed(1) + '%',
         'awakenings': stages.isEmpty || calculated.stageCoveragePercent == null ? '—' : calculated.awakeningCount.toString(),
