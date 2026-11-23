@@ -102,7 +102,6 @@ class ComparisonSuggestionCandidate {
 
 class ComparisonSuggestionAnalyzer {
   static const minimumNightsPerGroup = 4;
-  static const defaultWindow = Duration(days: 90);
 
   static double thresholdFor(TagSleepMetric metric) => switch (metric) {
     TagSleepMetric.sleepDuration => 20,
