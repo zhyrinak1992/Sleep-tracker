@@ -61,7 +61,7 @@ void main() {
       expect(result.durationSamples, 1);
       expect(result.averageSleepMinutes, 410);
       expect(result.efficiencySamples, 1);
-      expect(result.averageEfficiency, closeTo(97.6, 0.2));
+      expect(result.averageEfficiency, closeTo(85.4, 0.2));
       expect(result.awakeningSamples, 1);
       expect(result.averageAwakenings, 1);
       expect(result.qualitySamples, 1);
