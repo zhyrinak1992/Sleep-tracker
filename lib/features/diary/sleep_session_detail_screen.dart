@@ -160,20 +160,112 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
     final orderedCategories = categoryCounts.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    final rawAnswers = report?['answers_json'];
-    Map<String, dynamic> answers = {};
-    if (rawAnswers is String && rawAnswers.isNotEmpty) {
+    Map<String, dynamic> parseAnswers(Map<String, Object?>? source) {
+      final raw = source?['answers_json'];
+      if (raw is! String || raw.isEmpty) return {};
       try {
-        final decoded = jsonDecode(rawAnswers);
-        if (decoded is Map<String, dynamic>) answers = decoded;
-      } catch (_) {}
+        final decoded = jsonDecode(raw);
+        return decoded is Map<String, dynamic> ? decoded : {};
+      } catch (_) {
+        return {};
+      }
     }
+
+    final currentAnswers = parseAnswers(report);
+    final historySessions = (await widget.database.getSessions(limit: 100))
+        .where((item) => item.id != session.id && !item.isOpen &&
+            item.startedAt.isBefore(session.startedAt))
+        .take(7)
+        .toList();
+    final historyReports = await widget.database.getMorningReportsForSessions(
+      historySessions.map((item) => item.id).toList(),
+    );
+
+    final previousDurations = <double>[];
+    final previousEfficiencies = <double>[];
+    final previousAwakenings = <double>[];
+    for (final previous in historySessions) {
+      final previousStages = await widget.database.getStages(previous.id);
+      final previousMetrics = SleepSessionMetrics.calculate(
+        session: previous,
+        stages: previousStages,
+      );
+      final duration = previousMetrics.sleepDurationMinutes;
+      if (duration != null && duration > 0) previousDurations.add(duration.toDouble());
+      final efficiency = previousMetrics.sleepEfficiencyPercent;
+      if (efficiency != null) previousEfficiencies.add(efficiency);
+      if (previousMetrics.stageBreakdownMinutes.containsKey('Бодрствование')) {
+        previousAwakenings.add(previousMetrics.awakeningCount.toDouble());
+      }
+    }
+
+    final previousQuality = <double>[];
+    final previousWellbeing = <double>[];
+    final previousSleepiness = <double>[];
+    for (final previous in historySessions) {
+      final previousReport = historyReports[previous.id];
+      final quality = previousReport?['sleep_quality'];
+      final wellbeing = previousReport?['wellbeing'];
+      if (quality is num) previousQuality.add(quality.toDouble());
+      if (wellbeing is num) previousWellbeing.add(wellbeing.toDouble());
+      final sleepiness = parseAnswers(previousReport)['sleepiness'];
+      if (sleepiness is num) previousSleepiness.add(sleepiness.toDouble());
+    }
+
+    final currentQuality = report?['sleep_quality'] is num
+        ? (report!['sleep_quality'] as num).toDouble()
+        : null;
+    final currentWellbeing = report?['wellbeing'] is num
+        ? (report!['wellbeing'] as num).toDouble()
+        : null;
+    final currentSleepiness = currentAnswers['sleepiness'] is num
+        ? (currentAnswers['sleepiness'] as num).toDouble()
+        : null;
+    final currentAwakenings = metrics.stageBreakdownMinutes.containsKey('Бодрствование')
+        ? metrics.awakeningCount.toDouble()
+        : null;
 
     String durationLabel(int? minutes) => minutes == null
         ? 'Нет достоверных данных'
         : _duration(Duration(minutes: minutes));
     String ratingLabel(Object? value) =>
         value is num ? value.toInt().toString() + ' из 5' : 'Не заполнено';
+    String formatDuration(double minutes) {
+      final rounded = minutes.round();
+      return (rounded ~/ 60).toString() + ' ч ' +
+          (rounded % 60).toString() + ' мин';
+    }
+    String comparisonText(
+      String label,
+      double? current,
+      List<double> previousValues, {
+      bool isDuration = false,
+      String unit = '',
+      String deltaUnit = '',
+    }) {
+      if (current == null) return label + ': сегодня нет данных.';
+      if (previousValues.length < 3) {
+        return label + ': недостаточно сопоставимых данных (' +
+            previousValues.length.toString() + ' из ' +
+            historySessions.length.toString() + ' предыдущих ночей).';
+      }
+      final average = previousValues.reduce((a, b) => a + b) / previousValues.length;
+      final difference = current - average;
+      String format(double value) => isDuration
+          ? formatDuration(value)
+          : value.toStringAsFixed(1) + unit;
+      final deltaValue = isDuration
+          ? format(difference.abs())
+          : difference.abs().toStringAsFixed(1) + deltaUnit;
+      final delta = difference > 0
+          ? '+' + deltaValue
+          : difference < 0
+              ? '−' + deltaValue
+              : (isDuration ? format(0) : '0.0' + deltaUnit);
+      return label + ': сегодня ' + format(current) +
+          ', среднее ' + format(average) + ', разница ' + delta +
+          ' (n=' + previousValues.length.toString() + ').';
+    }
 
     if (!mounted) return;
     await showDialog<void>(
@@ -204,9 +296,9 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
               ),
               _detailRow(
                 'Зарегистрированные пробуждения',
-                metrics.stageBreakdownMinutes.containsKey('Бодрствование')
-                    ? metrics.awakeningCount.toString()
-                    : 'Нет данных Apple Health',
+                currentAwakenings == null
+                    ? 'Нет данных Apple Health'
+                    : metrics.awakeningCount.toString(),
                 icon: Icons.wb_sunny_outlined,
               ),
               _detailRow(
@@ -228,15 +320,67 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
               const SizedBox(height: 6),
               Text('Качество сна: ' + ratingLabel(report?['sleep_quality'])),
               Text('Ощущение отдыха: ' + ratingLabel(report?['wellbeing'])),
-              Text('Сонливость: ' + ratingLabel(answers['sleepiness'])),
-              if (answers['skipped'] == true)
+              Text('Сонливость: ' + ratingLabel(currentAnswers['sleepiness'])),
+              if (currentAnswers['skipped'] == true)
                 const Padding(
                   padding: EdgeInsets.only(top: 5),
                   child: Text('Субъективная оценка была пропущена.', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
                 ),
+              const Divider(height: 22),
+              const Text('Сравнение с предыдущими ночами', style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 5),
+              Text(
+                'Используются до 7 предыдущих завершённых ночей. В каждом сравнении указано фактическое число доступных наблюдений.',
+                style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
+              ),
+              const SizedBox(height: 8),
+              Text(comparisonText(
+                'Продолжительность сна',
+                metrics.sleepDurationMinutes?.toDouble(),
+                previousDurations,
+                isDuration: true,
+              ), style: const TextStyle(fontSize: 12, height: 1.4)),
+              const SizedBox(height: 5),
+              Text(comparisonText(
+                'Эффективность сна',
+                metrics.sleepEfficiencyPercent,
+                previousEfficiencies,
+                unit: '%',
+                deltaUnit: ' п.п.',
+              ), style: const TextStyle(fontSize: 12, height: 1.4)),
+              const SizedBox(height: 5),
+              Text(comparisonText(
+                'Количество пробуждений',
+                currentAwakenings,
+                previousAwakenings,
+              ), style: const TextStyle(fontSize: 12, height: 1.4)),
+              const SizedBox(height: 5),
+              Text(comparisonText(
+                'Качество сна по утренней оценке',
+                currentQuality,
+                previousQuality,
+                unit: ' из 5',
+                deltaUnit: ' балла',
+              ), style: const TextStyle(fontSize: 12, height: 1.4)),
+              const SizedBox(height: 5),
+              Text(comparisonText(
+                'Ощущение отдыха',
+                currentWellbeing,
+                previousWellbeing,
+                unit: ' из 5',
+                deltaUnit: ' балла',
+              ), style: const TextStyle(fontSize: 12, height: 1.4)),
+              const SizedBox(height: 5),
+              Text(comparisonText(
+                'Сонливость',
+                currentSleepiness,
+                previousSleepiness,
+                unit: ' из 5',
+                deltaUnit: ' балла',
+              ), style: const TextStyle(fontSize: 12, height: 1.4)),
               const SizedBox(height: 10),
               const Text(
-                'Показатели отображаются только при наличии сохранённых данных. Отсутствующие измерения не заменяются расчётными значениями.',
+                'Сравнение описывает личную историю и не устанавливает причинно-следственную связь. Отсутствующие и несопоставимые показатели исключаются.',
                 style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
               ),
               const SizedBox(height: 5),
