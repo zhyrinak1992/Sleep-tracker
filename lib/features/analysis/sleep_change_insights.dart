@@ -100,11 +100,6 @@ class SleepChangeInsights {
           : '${minutes ~/ 60} ч ${minutes % 60} мин';
     }
 
-    String signed(double value, String suffix, {int decimals = 0}) {
-      final sign = value > 0 ? '+' : '';
-      return '$sign${value.toStringAsFixed(decimals)}$suffix';
-    }
-
     add(
       kind: SleepChangeKind.duration, title: 'Средняя длительность сна',
       before: previous.averageSleepMinutes, after: current.averageSleepMinutes,
