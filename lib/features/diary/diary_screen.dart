@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../../data/sleep_database.dart';
 import '../../data/notification_service.dart';
 import '../../models/sleep_session.dart';
+import '../analysis/sleep_score.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/screen_header.dart';
@@ -21,7 +22,7 @@ class DiaryScreen extends StatefulWidget {
 }
 
 class _DiaryScreenState extends State<DiaryScreen> {
-  late Future<List<SleepSession>> _sessions;
+  late Future<_DiaryCalendarData> _diaryData;
   DateTime _visibleMonth = DateTime(DateTime.now().year, DateTime.now().month);
   DateTime _selectedDay = DateUtils.dateOnly(DateTime.now());
   final Set<String> _selectedSessionIds = <String>{};
@@ -30,12 +31,30 @@ class _DiaryScreenState extends State<DiaryScreen> {
   @override
   void initState() {
     super.initState();
-    _sessions = widget.database.getSessions(limit: 1000);
+    _diaryData = _loadDiaryData();
+  }
+
+  Future<_DiaryCalendarData> _loadDiaryData() async {
+    final sessions = await widget.database.getSessions(limit: 1000);
+    final ids = sessions.map((session) => session.id).toList();
+    final reports = await widget.database.getMorningReportsForSessions(ids);
+    final stages = await widget.database.getStagesForSessions(ids);
+    final scores = <String, SleepScoreResult>{};
+    for (final session in sessions) {
+      if (session.isOpen) continue;
+      scores[session.id] = SleepScoreCalculator.calculateForSession(
+        session: session,
+        historySessions: sessions,
+        morningReports: reports,
+        stagesBySession: stages,
+      );
+    }
+    return _DiaryCalendarData(sessions: sessions, scores: scores);
   }
 
   Future<void> _reload() async {
-    setState(() => _sessions = widget.database.getSessions(limit: 1000));
-    await _sessions;
+    setState(() => _diaryData = _loadDiaryData());
+    await _diaryData;
   }
 
   void _toggleSessionSelection(SleepSession session) {
@@ -93,7 +112,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
     )).then((_) => _reload());
   }
 
-  Widget _calendar(List<SleepSession> sessions) {
+  Widget _calendar(List<SleepSession> sessions, Map<String, SleepScoreResult> scores) {
     final first = DateTime(_visibleMonth.year, _visibleMonth.month, 1);
     final leading = first.weekday - 1;
     final days = DateTime(_visibleMonth.year, _visibleMonth.month + 1, 0).day;
@@ -128,10 +147,16 @@ class _DiaryScreenState extends State<DiaryScreen> {
             final hasSession = daySessions.isNotEmpty;
             final selected = DateUtils.isSameDay(date, _selectedDay);
             final hasOpen = daySessions.any((s) => s.isOpen);
-            final rated = daySessions.where((s) => s.morningRating != null).toList();
-            final rating = rated.isEmpty ? null :
-              (rated.map((s) => s.morningRating!).reduce((a, b) => a + b) / rated.length).round();
-            final markerColor = hasOpen ? const Color(0xFF8BC7E8) : _ratingColor(rating);
+            final availableScores = daySessions
+                .map((session) => scores[session.id]?.score)
+                .whereType<double>()
+                .toList();
+            final dayScore = availableScores.isEmpty
+                ? null
+                : availableScores.reduce((a, b) => a + b) / availableScores.length;
+            final markerColor = hasOpen
+                ? const Color(0xFF8BC7E8)
+                : SleepCalendarScorePalette.colorFor(dayScore);
             return Expanded(child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2),
               child: InkWell(
@@ -162,13 +187,14 @@ class _DiaryScreenState extends State<DiaryScreen> {
         )),
         const SizedBox(height: 10),
         Wrap(spacing: 14, runSpacing: 8, alignment: WrapAlignment.center, children: const [
-          _LegendDot(color: Color(0xFFE58B91), label: '1–2'),
-          _LegendDot(color: Color(0xFFE6BC70), label: '3'),
-          _LegendDot(color: AppTheme.teal, label: '4–5'),
+          _LegendDot(color: Color(0xFFE58B91), label: '0–59'),
+          _LegendDot(color: Color(0xFFE6BC70), label: '60–79'),
+          _LegendDot(color: AppTheme.teal, label: '80–100'),
           _LegendDot(color: Color(0xFF8BC7E8), label: 'Идёт'),
+          _LegendDot(color: AppTheme.muted, label: 'Нет балла'),
         ]),
         const SizedBox(height: 6),
-        const Text('Цвет отражает только сохранённую оценку самочувствия. Без оценки цветовая отметка не ставится.',
+        const Text('Цвет отражает рассчитанный балл качества сна 0–100. Если достоверных данных недостаточно, балл не отображается.',
           textAlign: TextAlign.center, style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.35)),
       ],
     ));
@@ -240,10 +266,11 @@ class _DiaryScreenState extends State<DiaryScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<List<SleepSession>>(
-    future: _sessions,
+  Widget build(BuildContext context) => FutureBuilder<_DiaryCalendarData>(
+    future: _diaryData,
     builder: (context, snapshot) {
-      final rows = snapshot.data ?? const <SleepSession>[];
+      final rows = snapshot.data?.sessions ?? const <SleepSession>[];
+      final scores = snapshot.data?.scores ?? const <String, SleepScoreResult>{};
       return RefreshIndicator(
         onRefresh: _reload,
         child: ListView(padding: const EdgeInsets.all(20), children: [
@@ -313,7 +340,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
           if (snapshot.connectionState == ConnectionState.waiting)
             const Center(child: Padding(padding: EdgeInsets.all(28), child: CircularProgressIndicator()))
           else ...[
-            _calendar(rows),
+            _calendar(rows, scores),
             const SizedBox(height: 22),
             _selectedDaySessions(rows),
           ],
@@ -336,4 +363,24 @@ class _LegendDot extends StatelessWidget {
     const SizedBox(width: 5),
     Text(label, style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
   ]);
+}
+
+
+class _DiaryCalendarData {
+  const _DiaryCalendarData({required this.sessions, required this.scores});
+  final List<SleepSession> sessions;
+  final Map<String, SleepScoreResult> scores;
+}
+
+/// Stable calendar bands: poor <60, fair 60–79, good >=80.
+/// A missing score is deliberately neutral rather than treated as zero.
+class SleepCalendarScorePalette {
+  static Color colorFor(double? score) {
+    if (score == null || !score.isFinite || score < 0 || score > 100) {
+      return AppTheme.muted;
+    }
+    if (score < 60) return const Color(0xFFE58B91);
+    if (score < 80) return const Color(0xFFE6BC70);
+    return AppTheme.teal;
+  }
 }
