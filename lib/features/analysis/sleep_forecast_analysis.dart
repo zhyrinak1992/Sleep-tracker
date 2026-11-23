@@ -55,7 +55,7 @@ class SleepForecastAnalysis {
     }
 
     var available = plannedWakeMinute - plannedBedtimeMinute;
-    if (available <= 0) available += 1440;
+    if (available < 0) available += 1440;
 
     final cutoff90 = now.subtract(const Duration(days: 90));
     final recent = sessions.where((session) =>
