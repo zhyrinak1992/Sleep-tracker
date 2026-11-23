@@ -402,10 +402,114 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
               const Text('Оценка качества сна', style: TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 5),
               if (sleepScore.score != null) ...[
-                Text(
-                  sleepScore.score!.round().toString() + ' / 100',
-                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: AppTheme.teal),
-                ),
+                Builder(builder: (context) {
+                  final value = sleepScore.score!.round();
+                  final color = value >= 80
+                      ? AppTheme.teal
+                      : value >= 60 ? AppTheme.accentPink : const Color(0xFFFF8A8A);
+                  return Center(
+                    child: Semantics(
+                      label: 'Оценка качества сна',
+                      value: '$value из 100. Нажмите, чтобы открыть расшифровку.',
+                      button: true,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(60),
+                        onTap: () => showModalBottomSheet<void>(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: AppTheme.surface,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                          ),
+                          builder: (sheetContext) => SafeArea(
+                            child: SingleChildScrollView(
+                              padding: const EdgeInsets.fromLTRB(20, 22, 20, 28),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text('Расшифровка оценки сна', style: TextStyle(
+                                    fontSize: 18, fontWeight: FontWeight.w700,
+                                  )),
+                                  const SizedBox(height: 5),
+                                  Text('Итог: $value из 100. Доступные компоненты нормализованы пропорционально их исходным весам.',
+                                    style: const TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4)),
+                                  const SizedBox(height: 14),
+                                  ...sleepScore.components.map((component) {
+                                    final contribution = sleepScore.contributionPoints(component);
+                                    final effectiveWeight = sleepScore.effectiveWeight(component);
+                                    return Padding(
+                                      padding: const EdgeInsets.only(bottom: 16),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(component.label, style: const TextStyle(fontWeight: FontWeight.w700)),
+                                          const SizedBox(height: 4),
+                                          Text('Фактическое значение: ${component.actualValue}',
+                                            style: const TextStyle(fontSize: 12)),
+                                          Text(
+                                            component.score == null
+                                              ? 'Не учитывается: недостаточно достоверных данных'
+                                              : 'Оценка компонента: ${component.score!.toStringAsFixed(0)} / 100 · исходный вес ${component.weight.toStringAsFixed(0)}% · фактический вес ${effectiveWeight!.toStringAsFixed(1)}% · вклад ${contribution!.toStringAsFixed(1)} балла',
+                                            style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(component.detail, style: const TextStyle(
+                                            color: AppTheme.muted, fontSize: 11, height: 1.4,
+                                          )),
+                                        ],
+                                      ),
+                                    );
+                                  }),
+                                  const Text('Отсутствующие показатели не заменяются нулями. Это описательная статистика, а не медицинское заключение.',
+                                    style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(5),
+                          child: TweenAnimationBuilder<double>(
+                        tween: Tween<double>(begin: 0, end: value / 100),
+                        duration: const Duration(milliseconds: 900),
+                        curve: Curves.easeOutCubic,
+                        builder: (context, progress, child) => SizedBox(
+                          width: 108,
+                          height: 108,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              SizedBox.expand(
+                                child: CircularProgressIndicator(
+                                  value: progress,
+                                  strokeWidth: 8,
+                                  strokeCap: StrokeCap.round,
+                                  backgroundColor: Colors.white.withValues(alpha: 0.10),
+                                  valueColor: AlwaysStoppedAnimation<Color>(color),
+                                ),
+                              ),
+                              child!,
+                            ],
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(value.toString(), style: TextStyle(
+                              fontSize: 29, fontWeight: FontWeight.w800, color: color,
+                            )),
+                            const Text('/ 100', style: TextStyle(
+                              color: AppTheme.muted, fontSize: 11,
+                            )),
+                          ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+                }),
                 Text(
                   'Учтено компонентов: ${sleepScore.availableComponents} из 4 · исходный вес доступных данных: ${sleepScore.availableWeight.toStringAsFixed(0)}%. Недостающие веса пропорционально перераспределены.',
                   style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
@@ -423,10 +527,15 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                   padding: const EdgeInsets.only(bottom: 9),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(
-                      component.label + ' · ${component.weight.toStringAsFixed(0)}% веса · ' +
-                        (component.score == null ? 'нет данных' : component.score!.toStringAsFixed(0) + ' / 100'),
+                      component.label + ' · ${component.weight.toStringAsFixed(0)}% исходного веса · ' +
+                        (component.score == null ? 'не учтено' : component.score!.toStringAsFixed(0) + ' / 100'),
                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                     ),
+                    Text('Фактическое значение: ${component.actualValue}',
+                      style: const TextStyle(fontSize: 11)),
+                    if (sleepScore.contributionPoints(component) != null)
+                      Text('Вклад в итог: ${sleepScore.contributionPoints(component)!.toStringAsFixed(1)} балла',
+                        style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
                     Text(component.detail, style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.35)),
                   ]),
                 )).toList(),
