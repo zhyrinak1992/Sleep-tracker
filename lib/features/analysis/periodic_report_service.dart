@@ -15,6 +15,7 @@ class PeriodicReportSnapshot {
   DateTime get endExclusive => DateTime.parse(data['endExclusive'] as String);
   int get nights => data['nights'] as int;
   double? get averageSleepMinutes => (data['averageSleepMinutes'] as num?)?.toDouble();
+  double? get averageTimeInBedMinutes => (data['averageTimeInBedMinutes'] as num?)?.toDouble();
   double? get averageEfficiency => (data['averageEfficiency'] as num?)?.toDouble();
   double? get averageAwakenings => (data['averageAwakenings'] as num?)?.toDouble();
   double? get averageQuality => (data['averageQuality'] as num?)?.toDouble();
@@ -116,11 +117,12 @@ class PeriodicReportService {
         return list.isEmpty ? null : list.reduce((a, b) => a + b) / list.length;
       }
       final durations = <int>[];
-      for (var i = 0; i < metrics.length; i++) {
-        final measured = metrics[i].sleepDurationMinutes;
-        final fallback = selected[i].duration?.inMinutes;
-        final value = measured ?? fallback;
-        if (value != null && value > 0) durations.add(value);
+      final timeInBed = <int>[];
+      for (final metric in metrics) {
+        final measuredSleep = metric.sleepDurationMinutes;
+        if (measuredSleep != null && measuredSleep > 0) durations.add(measuredSleep);
+        final measuredTimeInBed = metric.timeInBedMinutes;
+        if (measuredTimeInBed != null && measuredTimeInBed > 0) timeInBed.add(measuredTimeInBed);
       }
       final efficiencies = metrics.map((m) => m.sleepEfficiencyPercent).whereType<double>().toList();
       final awakenings = <int>[];
@@ -139,6 +141,7 @@ class PeriodicReportService {
       return {
         'nights': selected.length,
         'averageSleepMinutes': avg(durations), 'sleepDurationSamples': durations.length,
+        'averageTimeInBedMinutes': avg(timeInBed), 'timeInBedSamples': timeInBed.length,
         'averageEfficiency': avg(efficiencies), 'efficiencySamples': efficiencies.length,
         'averageAwakenings': avg(awakenings), 'awakeningSamples': awakenings.length,
         'averageQuality': avg(qualities), 'qualitySamples': qualities.length,
