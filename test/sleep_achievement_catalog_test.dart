@@ -68,7 +68,7 @@ void main() {
     });
 
     test('does not count multiple sessions on one date as multiple streak days', () {
-      final start = DateTime(2026, 1, 1, 22);
+      final start = DateTime(2026, 1, 2, 22);
       final sessions = [
         _session(id: 1),
         SleepSession(
@@ -80,7 +80,7 @@ void main() {
 
       final earned = SleepAchievementCatalog.evaluate(sessions);
 
-      expect(earned, contains('streak_three') == false);
+      expect(earned, isNot(contains('streak_three')));
     });
 
     test('does not unlock anything for an empty history', () {
