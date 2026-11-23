@@ -105,7 +105,7 @@ class PdfReportService {
       content.add(pw.SizedBox(height: 14));
       content.add(pw.Header(level: 1, child: pw.Text('Динамика по месяцам')));
       content.add(pw.TableHelper.fromTextArray(
-        headers: ['Месяц', 'Ночей', 'Сон средн.', 'Эффект.', 'Пробужд.', 'Качество', 'Самочувствие'],
+        headers: ['Месяц', 'Ночей', 'Сон средн.', 'Оценка', 'Эффект.', 'Пробужд.', 'Качество', 'Самочувствие'],
         cellStyle: const pw.TextStyle(fontSize: 7),
         headerStyle: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold),
         data: months.map((month) => [
@@ -113,6 +113,8 @@ class PdfReportService {
               ? monthNames[(month['month'] as int) - 1] : '—',
           month['nights']?.toString() ?? '0',
           duration(month['averageSleepMinutes']),
+          (month['score'] is Map && (month['score'] as Map)['average'] is num)
+            ? ((month['score'] as Map)['average'] as num).toStringAsFixed(0) + ' / 100' : '—',
           average(month['averageEfficiency'], suffix: '%') + ' (' + (month['efficiencySamples'] ?? 0).toString() + ')',
           average(month['averageAwakenings']) + ' (' + (month['awakeningSamples'] ?? 0).toString() + ')',
           average(month['averageQuality'], suffix: '/5') + ' (' + (month['qualitySamples'] ?? 0).toString() + ')',
