@@ -418,6 +418,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _backupPreviewRow(String label, int count) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Row(
+      children: [
+        Expanded(child: Text(label)),
+        Text('$count', style: const TextStyle(fontWeight: FontWeight.w600)),
+      ],
+    ),
+  );
+
+  String _formatBackupBytes(int bytes) {
+    const units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+    var value = bytes.toDouble();
+    var unit = 0;
+    while (value >= 1024 && unit < units.length - 1) {
+      value /= 1024;
+      unit++;
+    }
+    return '${value.toStringAsFixed(unit == 0 ? 0 : 1)} ${units[unit]}';
+  }
+
+  Widget _restoreImpactSection(String title, BackupRestorePlan plan, {required bool merge}) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 5),
+          if (merge) ...[
+            _backupPreviewRow('Новых записей будет добавлено', plan.recordsToAdd),
+            _backupPreviewRow('Дубликатов будет пропущено', plan.duplicatesToSkip),
+            _backupPreviewRow('Новых записей истории', plan.historyEntriesToMerge),
+          ] else ...[
+            _backupPreviewRow('Записей будет загружено из архива', plan.recordsToAdd),
+            _backupPreviewRow('Текущих записей будет заменено', plan.currentRecordsToReplace),
+          ],
+          _backupPreviewRow('Аудиофайлов будет восстановлено', plan.audioFilesToRestore),
+          _backupPreviewRow('Отсутствующих аудиовложений', plan.missingAudioFiles),
+          const SizedBox(height: 4),
+          Text('Оценка дополнительного места с резервом: ${_formatBackupBytes(plan.requiredBytesEstimate)}',
+            style: const TextStyle(fontSize: 11)),
+          if (plan.blockedReason != null)
+            Text(plan.blockedReason!,
+              style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.w600)),
+          if (plan.availableBytes == null)
+            const Text('Свободное место проверить не удалось. Перед продолжением убедитесь, что на устройстве достаточно места.',
+              style: TextStyle(color: AppTheme.muted, fontSize: 11))
+          else ...[
+            Text('Свободно на накопителе: ${_formatBackupBytes(plan.availableBytes!)}',
+              style: const TextStyle(fontSize: 11)),
+            if (!plan.hasEnoughSpace)
+              const Text('Недостаточно места. Этот вариант восстановления временно недоступен.',
+                style: TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.w600)),
+          ],
+        ],
+      ),
+    );
+  }
+
   Future<void> _restoreBackup() async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -470,11 +530,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Отмена')),
             OutlinedButton(
-              onPressed: replacePlan.hasEnoughSpace ? () => Navigator.pop(dialogContext, false) : null,
+              onPressed: replacePlan.canProceed ? () => Navigator.pop(dialogContext, false) : null,
               child: const Text('Полная замена'),
             ),
             FilledButton(
-              onPressed: mergePlan.hasEnoughSpace ? () => Navigator.pop(dialogContext, true) : null,
+              onPressed: mergePlan.canProceed ? () => Navigator.pop(dialogContext, true) : null,
               child: const Text('Объединить'),
             ),
           ],
