@@ -119,6 +119,8 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
                 final records = recordSnapshot.data!;
                 final score = records.bestSleepScore;
                 final awakenings = records.fewestAwakenings;
+                final history = records.history.toList()
+                  ..sort((a, b) => b.achievedAt.compareTo(a.achievedAt));
                 Widget recordLine({
                   required IconData icon,
                   required String title,
@@ -169,6 +171,46 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
                       'Рекорды учитывают только завершённые ночи и достоверные измерения. История улучшений сохраняется отдельно.',
                       style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.35),
                     ),
+                    if (history.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      const Divider(height: 1),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'История улучшений',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      ...history.map((event) {
+                        final isScore = event.type == 'sleep_score';
+                        final label = isScore ? 'SleepScore' : 'Пробуждения';
+                        final value = isScore
+                            ? '${event.value.toInt()} из 100'
+                            : '${event.value.toInt()}';
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              Icon(
+                                isScore ? Icons.stars_rounded : Icons.nights_stay_outlined,
+                                size: 16,
+                                color: AppTheme.teal,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '$label: $value',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ),
+                              Text(
+                                DateFormat('d MMM yyyy', 'ru').format(event.achievedAt),
+                                style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
                   ],
                 );
               },
