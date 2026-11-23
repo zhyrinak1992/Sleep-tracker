@@ -37,7 +37,24 @@ void main() {
       }), isNull);
     });
 
-    test('repairs partially invalid persisted history even when valid count is unchanged', () {
+    test('keeps valid persisted history unchanged', () {
+      final event = SleepRecordEvent(
+        type: 'sleep_score',
+        sessionId: 'night-valid',
+        value: 91,
+        achievedAt: DateTime.utc(2026, 11, 20, 7),
+      ).toMap();
+      final decoded = SleepRecordService.decodePersistedHistory(
+        jsonEncode([event]),
+      );
+
+      expect(decoded.events, hasLength(1));
+      expect(decoded.needsRewrite, isFalse);
+    });
+
+    test(
+      'repairs partially invalid history even when valid count is unchanged',
+      () {
       final valid = SleepRecordEvent(
         type: 'sleep_score',
         sessionId: 'night-1',
@@ -51,7 +68,8 @@ void main() {
       expect(decoded.events, hasLength(1));
       expect(decoded.events.single.sessionId, 'night-1');
       expect(decoded.needsRewrite, isTrue);
-    });
+      },
+    );
 
     test('marks empty first-run history for persistence', () {
       final decoded = SleepRecordService.decodePersistedHistory(null);
