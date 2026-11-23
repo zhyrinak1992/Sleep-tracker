@@ -118,8 +118,8 @@ void main() {
       expect(details.averageAwakenings, 1);
       expect(details.averageQuality, 4);
       expect(details.averageWellbeing, 5);
-      expect(details.typicalBedtimeMinute, 23 * 60 + 10);
-      expect(details.typicalWakeMinute, 6 * 60 + 10);
+      expect(details.typicalBedtimeMinute, isNull);
+      expect(details.typicalWakeMinute, isNull);
       expect(details.audio.eventCount, 1);
       expect(details.audio.nightsWithEvents, 1);
       expect(details.audio.categoryCounts, {'snore': 1});
