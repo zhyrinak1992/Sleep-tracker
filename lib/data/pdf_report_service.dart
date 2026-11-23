@@ -51,6 +51,15 @@ class PdfReportService {
     final weekdayPatterns = snapshot['weekdayPatterns'] is List
         ? (snapshot['weekdayPatterns'] as List).whereType<Map>().toList()
         : const <Map>[];
+    final tagPatterns = snapshot['tagPatterns'] is Map
+        ? Map<String, Object?>.from(snapshot['tagPatterns'] as Map)
+        : <String, Object?>{};
+    final currentTagPatterns = tagPatterns['current'] is List
+        ? (tagPatterns['current'] as List).whereType<Map>().toList()
+        : const <Map>[];
+    final previousTagPatterns = tagPatterns['previous'] is List
+        ? (tagPatterns['previous'] as List).whereType<Map>().toList()
+        : const <Map>[];
     const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 
     final regular = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Regular.ttf'));
@@ -93,6 +102,45 @@ class PdfReportService {
       content.add(pw.Text('Пробуждения: ${average(previous['averageAwakenings'])}'));
       content.add(pw.Text('Субъективное качество: ${average(previous['averageQuality'], suffix: ' / 5')}'));
       content.add(pw.Text('Самочувствие: ${average(previous['averageWellbeing'], suffix: ' / 5')}'));
+    }
+    if (currentTagPatterns.isNotEmpty) {
+      content.add(pw.SizedBox(height: 14));
+      content.add(pw.Header(level: 1, child: pw.Text('Персональные закономерности по отметкам')));
+      content.add(pw.Text('Сравнение ночей с каждой отметкой и без неё. Наблюдаемая связь не доказывает причинность; для разницы требуется минимум 4 измерения в каждой группе.'));
+      for (final rawPattern in currentTagPatterns) {
+        final pattern = Map<String, Object?>.from(rawPattern);
+        final key = pattern['tagKey'];
+        final metrics = pattern['metrics'] is Map
+            ? Map<String, Object?>.from(pattern['metrics'] as Map)
+            : <String, Object?>{};
+        final oldMatches = previousTagPatterns.where((item) => item['tagKey'] == key).toList();
+        final oldMetrics = oldMatches.isEmpty || oldMatches.first['metrics'] is! Map
+            ? <String, Object?>{}
+            : Map<String, Object?>.from(oldMatches.first['metrics'] as Map);
+        content.add(pw.SizedBox(height: 7));
+        content.add(pw.Text('${pattern['label'] ?? key} · с отметкой: ${pattern['withTagNights'] ?? 0} ночей; без отметки: ${pattern['withoutTagNights'] ?? 0} ночей',
+          style: pw.TextStyle(fontWeight: pw.FontWeight.bold)));
+        for (final metric in ['duration', 'score', 'awakenings']) {
+          final current = metrics[metric] is Map
+              ? Map<String, Object?>.from(metrics[metric] as Map)
+              : <String, Object?>{};
+          final old = oldMetrics[metric] is Map
+              ? Map<String, Object?>.from(oldMetrics[metric] as Map)
+              : <String, Object?>{};
+          final suffix = metric == 'duration' ? ' мин' : metric == 'score' ? ' балла' : ' эпиз.';
+          final label = metric == 'duration' ? 'Продолжительность' : metric == 'score' ? 'Оценка сна' : 'Пробуждения';
+          final withValue = average(current['withTagAverage'], suffix: suffix);
+          final withoutValue = average(current['withoutTagAverage'], suffix: suffix);
+          final oldWith = average(old['withTagAverage'], suffix: suffix);
+          final oldWithout = average(old['withoutTagAverage'], suffix: suffix);
+          final delta = current['difference'] is num
+              ? ' · разница ${(current['difference'] as num) > 0 ? '+' : ''}${(current['difference'] as num).toStringAsFixed(1)}$suffix'
+              : ' · недостаточно данных для разницы';
+          content.add(pw.Text('$label: с отметкой $withValue (n=${current['withTagSamples'] ?? 0}); без отметки $withoutValue (n=${current['withoutTagSamples'] ?? 0})$delta'));
+          content.add(pw.Text('Предыдущий период: с отметкой $oldWith; без отметки $oldWithout',
+            style: const pw.TextStyle(fontSize: 8)));
+        }
+      }
     }
     if (categories.isNotEmpty) {
       content.add(pw.SizedBox(height: 14));
