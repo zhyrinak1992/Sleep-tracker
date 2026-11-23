@@ -6,13 +6,14 @@ void main() {
     test('decodes a saved weekly report and exposes its period values', () {
       final report = PeriodicReportSnapshot.decode('''
         {
-          "schemaVersion": 1,
+          "schemaVersion": 2,
           "id": "week_2026-11-16",
           "kind": "week",
           "start": "2026-11-16T00:00:00.000",
           "endExclusive": "2026-11-23T00:00:00.000",
           "nights": 5,
           "averageSleepMinutes": 431.5,
+          "totalSleepMinutes": 2157,
           "averageTimeInBedMinutes": 472.0,
           "averageEfficiency": 88.2,
           "averageAwakenings": 2.0,
@@ -24,6 +25,7 @@ void main() {
       expect(report.kind, 'week');
       expect(report.nights, 5);
       expect(report.averageSleepMinutes, 431.5);
+      expect(report.totalSleepMinutes, 2157);
       expect(report.averageTimeInBedMinutes, 472.0);
       expect(report.averageEfficiency, 88.2);
       expect(report.averageAwakenings, 2.0);
@@ -43,6 +45,7 @@ void main() {
         }
       ''');
       expect(report.averageSleepMinutes, isNull);
+      expect(report.totalSleepMinutes, isNull);
       expect(report.averageTimeInBedMinutes, isNull);
       expect(report.averageEfficiency, isNull);
       expect(report.averageAwakenings, isNull);
