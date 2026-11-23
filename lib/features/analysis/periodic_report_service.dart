@@ -51,7 +51,8 @@ class PeriodicReportSnapshot {
 class PeriodicReportService {
   PeriodicReportService(this.database);
   final SleepDatabase database;
-  static const metadataPrefix = 'periodic_report_v1_';
+  static const metadataPrefix = 'periodic_report_v2_';
+  static const legacyMetadataPrefix = 'periodic_report_v1_';
 
   Future<List<PeriodicReportSnapshot>> generateClosedReports({DateTime? now}) async {
     final current = now ?? DateTime.now();
@@ -93,12 +94,25 @@ class PeriodicReportService {
   }
 
   Future<List<PeriodicReportSnapshot>> loadArchive() async {
-    final values = await database.getAppMetadataByPrefix(metadataPrefix);
-    final reports = <PeriodicReportSnapshot>[];
-    for (final value in values.values) {
-      try { reports.add(PeriodicReportSnapshot.decode(value)); } catch (_) {}
+    final legacy = await database.getAppMetadataByPrefix(legacyMetadataPrefix);
+    final current = await database.getAppMetadataByPrefix(metadataPrefix);
+    final byId = <String, PeriodicReportSnapshot>{};
+    for (final value in legacy.values) {
+      try {
+        final report = PeriodicReportSnapshot.decode(value);
+        byId[report.id] = report;
+      } catch (_) {}
     }
-    reports.sort((a, b) => b.start.compareTo(a.start));
+    // The corrected v2 snapshot wins while the v1 entry remains in app_metadata
+    // for backup compatibility and rollback safety.
+    for (final value in current.values) {
+      try {
+        final report = PeriodicReportSnapshot.decode(value);
+        byId[report.id] = report;
+      } catch (_) {}
+    }
+    final reports = byId.values.toList()
+      ..sort((a, b) => b.start.compareTo(a.start));
     return reports;
   }
 
