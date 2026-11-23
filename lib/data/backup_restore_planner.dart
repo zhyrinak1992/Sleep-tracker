@@ -141,9 +141,17 @@ class BackupRestorePlanner {
       final keys = tableKeys[table]!;
       final currentKeys = _keys(current, keys);
       if (table == 'app_metadata') {
-        final archiveState = archive.map((row) => {'key': row['key'], 'value': row['value']}).toList()
+        Map<String, Object?> metadataFingerprint(Map<String, Object?> row) {
+          final key = row['key'];
+          return {
+            'key': key,
+            if (key == 'sleep_change_history_v1' || key == 'comparison_suggestion_history_v1')
+              'value': row['value'],
+          };
+        }
+        final archiveState = archive.map(metadataFingerprint).toList()
           ..sort((a, b) => (a['key'] as String).compareTo(b['key'] as String));
-        final currentState = current.map((row) => {'key': row['key'], 'value': row['value']}).toList()
+        final currentState = current.map(metadataFingerprint).toList()
           ..sort((a, b) => (a['key'] as String).compareTo(b['key'] as String));
         (fingerprintBasis['archive'] as Map<String, Object?>)[table] = archiveState;
         (fingerprintBasis['current'] as Map<String, Object?>)[table] = currentState;
