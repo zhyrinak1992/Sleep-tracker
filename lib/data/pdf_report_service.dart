@@ -24,7 +24,7 @@ class PdfReportService {
       final minutes = number(value);
       if (minutes == null) return 'Нет данных';
       final rounded = minutes.round();
-      return '\${rounded ~/ 60} ч \${rounded.remainder(60)} мин';
+      return '${rounded ~/ 60} ч ${rounded.remainder(60)} мин';
     }
     String average(Object? value, {String suffix = ''}) {
       final parsed = number(value);
@@ -51,32 +51,32 @@ class PdfReportService {
       pw.Header(level: 0, child: pw.Text('Sleep Tracker — $title')),
       pw.Text('Сохранённый периодический отчёт'),
       pw.SizedBox(height: 12),
-      pw.Text('Завершённых ночей: \${snapshot['nights'] ?? 0}'),
-      pw.Text('Средняя продолжительность сна: \${duration(snapshot['averageSleepMinutes'])} · выборка \${snapshot['sleepDurationSamples'] ?? 0}'),
-      pw.Text('Среднее время в постели: \${duration(snapshot['averageTimeInBedMinutes'])} · выборка \${snapshot['timeInBedSamples'] ?? 0}'),
-      pw.Text('Эффективность: \${average(snapshot['averageEfficiency'], suffix: '%')} · выборка \${snapshot['efficiencySamples'] ?? 0}'),
-      pw.Text('Пробуждения: \${average(snapshot['averageAwakenings'])} · выборка \${snapshot['awakeningSamples'] ?? 0}'),
-      pw.Text('Субъективное качество: \${average(snapshot['averageQuality'], suffix: ' / 5')} · оценок \${snapshot['qualitySamples'] ?? 0}'),
-      pw.Text('Самочувствие: \${average(snapshot['averageWellbeing'], suffix: ' / 5')} · оценок \${snapshot['wellbeingSamples'] ?? 0}'),
-      pw.Text('Звуковых событий: \${snapshot['audioEventCount'] ?? 0}'),
-      pw.Text('Заметок: \${snapshot['noteCount'] ?? 0}'),
+      pw.Text('Завершённых ночей: ${snapshot['nights'] ?? 0}'),
+      pw.Text('Средняя продолжительность сна: ${duration(snapshot['averageSleepMinutes'])} · выборка ${snapshot['sleepDurationSamples'] ?? 0}'),
+      pw.Text('Среднее время в постели: ${duration(snapshot['averageTimeInBedMinutes'])} · выборка ${snapshot['timeInBedSamples'] ?? 0}'),
+      pw.Text('Эффективность: ${average(snapshot['averageEfficiency'], suffix: '%')} · выборка ${snapshot['efficiencySamples'] ?? 0}'),
+      pw.Text('Пробуждения: ${average(snapshot['averageAwakenings'])} · выборка ${snapshot['awakeningSamples'] ?? 0}'),
+      pw.Text('Субъективное качество: ${average(snapshot['averageQuality'], suffix: ' / 5')} · оценок ${snapshot['qualitySamples'] ?? 0}'),
+      pw.Text('Самочувствие: ${average(snapshot['averageWellbeing'], suffix: ' / 5')} · оценок ${snapshot['wellbeingSamples'] ?? 0}'),
+      pw.Text('Звуковых событий: ${snapshot['audioEventCount'] ?? 0}'),
+      pw.Text('Заметок: ${snapshot['noteCount'] ?? 0}'),
     ];
     if (previous.isNotEmpty) {
       content.add(pw.SizedBox(height: 14));
       content.add(pw.Header(level: 1, child: pw.Text('Сравнение с предыдущим периодом')));
-      content.add(pw.Text('Завершённых ночей: \${previous['nights'] ?? 0}'));
-      content.add(pw.Text('Средняя продолжительность сна: \${duration(previous['averageSleepMinutes'])}'));
-      content.add(pw.Text('Среднее время в постели: \${duration(previous['averageTimeInBedMinutes'])}'));
-      content.add(pw.Text('Эффективность: \${average(previous['averageEfficiency'], suffix: '%')}'));
-      content.add(pw.Text('Пробуждения: \${average(previous['averageAwakenings'])}'));
-      content.add(pw.Text('Субъективное качество: \${average(previous['averageQuality'], suffix: ' / 5')}'));
-      content.add(pw.Text('Самочувствие: \${average(previous['averageWellbeing'], suffix: ' / 5')}'));
+      content.add(pw.Text('Завершённых ночей: ${previous['nights'] ?? 0}'));
+      content.add(pw.Text('Средняя продолжительность сна: ${duration(previous['averageSleepMinutes'])}'));
+      content.add(pw.Text('Среднее время в постели: ${duration(previous['averageTimeInBedMinutes'])}'));
+      content.add(pw.Text('Эффективность: ${average(previous['averageEfficiency'], suffix: '%')}'));
+      content.add(pw.Text('Пробуждения: ${average(previous['averageAwakenings'])}'));
+      content.add(pw.Text('Субъективное качество: ${average(previous['averageQuality'], suffix: ' / 5')}'));
+      content.add(pw.Text('Самочувствие: ${average(previous['averageWellbeing'], suffix: ' / 5')}'));
     }
     if (categories.isNotEmpty) {
       content.add(pw.SizedBox(height: 14));
       content.add(pw.Header(level: 1, child: pw.Text('Категории звуковых событий')));
       for (final entry in categories.entries) {
-        content.add(pw.Text('\${entry.key}: \${entry.value}'));
+        content.add(pw.Text('${entry.key}: ${entry.value}'));
       }
     }
     if (months.isNotEmpty) {
@@ -102,7 +102,7 @@ class PdfReportService {
         final text = note['text'] as String? ?? '';
         content.add(pw.Padding(
           padding: const pw.EdgeInsets.only(bottom: 6),
-          child: pw.Text('\${date == null ? '' : DateFormat('dd.MM.yyyy').format(date)}: $text',
+          child: pw.Text('${date == null ? '' : DateFormat('dd.MM.yyyy').format(date)}: $text',
             style: const pw.TextStyle(fontSize: 8)),
         ));
       }
@@ -119,7 +119,7 @@ class PdfReportService {
       build: (_) => content,
     ));
     final dir = await getTemporaryDirectory();
-    final file = File(p.join(dir.path, 'SleepTracker-periodic-\${DateTime.now().millisecondsSinceEpoch}.pdf'));
+    final file = File(p.join(dir.path, 'SleepTracker-periodic-${DateTime.now().millisecondsSinceEpoch}.pdf'));
     await file.writeAsBytes(await doc.save(), flush: true);
     await Share.shareXFiles([XFile(file.path, mimeType: 'application/pdf')], subject: 'Sleep Tracker — $title');
   }
