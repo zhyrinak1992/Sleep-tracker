@@ -49,16 +49,8 @@ class _AudioEventAnalysisCardState extends State<AudioEventAnalysisCard> {
     return '$minutes мин ${remainder.toString().padLeft(2, '0')} с';
   }
 
-  String _categoryLabel(String value) => switch (value) {
-    'unknown' => 'Неопределённый звук',
-    'snoring' => 'Храп',
-    'cough' => 'Кашель',
-    'breathing' => 'Дыхание',
-    'speech' => 'Речь',
-    'animal' => 'Животные',
-    'environment' => 'Окружающие звуки',
-    _ => value,
-  };
+  String _categoryLabel(String value) =>
+      value == 'unknown' ? 'Неопределённый звук' : value;
 
   @override
   Widget build(BuildContext context) => FutureBuilder<List<Map<String, Object?>>>(
