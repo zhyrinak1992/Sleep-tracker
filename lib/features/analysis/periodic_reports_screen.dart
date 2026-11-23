@@ -169,10 +169,15 @@ class _ReportCard extends StatelessWidget {
             const Text('Динамика по месяцам', style: TextStyle(fontWeight: FontWeight.w600)),
             ...months.map((month) {
               final index = month['month'] as int;
+              final monthScore = month['score'] is Map ? Map<String, Object?>.from(month['score'] as Map) : <String, Object?>{};
               return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 _ReportLine(
                   label: PeriodicReportSnapshot.monthName(index) + ' · ' + (month['nights'] ?? 0).toString() + ' ночей',
                   value: _formatDuration(month['averageSleepMinutes']),
+                ),
+                _ReportLine(
+                  label: '  Оценка сна · ' + (monthScore['samples'] ?? 0).toString() + ' ночей',
+                  value: monthScore['average'] is num ? (monthScore['average'] as num).toStringAsFixed(0) + ' / 100' : 'Нет данных',
                 ),
                 if (month['averageEfficiency'] is num)
                   _ReportLine(label: '  Эффективность · ' + (month['efficiencySamples'] ?? 0).toString() + ' измерений', value: _formatPercent(_number(month['averageEfficiency']))),
