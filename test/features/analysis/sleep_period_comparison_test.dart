@@ -2,8 +2,23 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sleep_tracker/features/analysis/sleep_period_comparison.dart';
 import 'package:sleep_tracker/models/sleep_session.dart';
 
-SleepSession session(String id, DateTime start, {DateTime? end, int? rating}) =>
-    SleepSession(id: id, startedAt: start, endedAt: end, morningRating: rating);
+SleepSession session(
+  String id,
+  DateTime start, {
+  DateTime? end,
+  int? rating,
+  String source = 'manual',
+  DateTime? actualStart,
+  DateTime? actualEnd,
+}) => SleepSession(
+  id: id,
+  startedAt: start,
+  endedAt: end,
+  morningRating: rating,
+  source: source,
+  actualSleepStartedAt: actualStart,
+  actualSleepEndedAt: actualEnd,
+);
 
 void main() {
   group('SleepPeriodComparison', () {
@@ -39,8 +54,10 @@ void main() {
 
     test('compares bedtime and wake-time regularity across midnight', () {
       final data = [
-        session('a', DateTime(2026, 11, 1, 22), end: DateTime(2026, 11, 2, 6)),
-        session('b', DateTime(2026, 11, 2, 22, 10), end: DateTime(2026, 11, 3, 6, 10)),
+        session('a', DateTime(2026, 11, 1, 22), end: DateTime(2026, 11, 2, 6), source: 'health',
+          actualStart: DateTime(2026, 11, 1, 23, 55), actualEnd: DateTime(2026, 11, 2, 6, 55)),
+        session('b', DateTime(2026, 11, 2, 22, 10), end: DateTime(2026, 11, 3, 6, 10), source: 'health',
+          actualStart: DateTime(2026, 11, 3, 0, 5), actualEnd: DateTime(2026, 11, 3, 7, 5)),
         session('open', DateTime(2026, 11, 3, 22)),
       ];
       final result = SleepPeriodComparison.summarize(
@@ -52,7 +69,7 @@ void main() {
 
     test('does not invent regularity with fewer than two completed nights', () {
       final result = SleepPeriodComparison.summarize(
-        [session('only', DateTime(2026, 11, 1, 23), end: DateTime(2026, 11, 2, 7))],
+        [session('only', DateTime(2026, 11, 1, 23), end: DateTime(2026, 11, 2, 7), source: 'health', actualStart: DateTime(2026, 11, 1, 23, 30), actualEnd: DateTime(2026, 11, 2, 6, 30))],
         DateTime(2026, 11, 1), DateTime(2026, 11, 1));
       expect(result.regularitySampleCount, 1);
       expect(result.bedtimeDeviationMinutes, isNull);
