@@ -165,12 +165,18 @@ class ComparisonSuggestionStore {
   ) {
     if (candidate.fingerprint == previous.candidate.fingerprint) return false;
     final old = previous.candidate;
-    final added = math.max(0, candidate.withNights - old.withNights) +
-        math.max(0, candidate.withoutNights - old.withoutNights);
+    final oldIds = {...old.withSessionIds, ...old.withoutSessionIds};
+    final currentIds = {...candidate.withSessionIds, ...candidate.withoutSessionIds};
+    final newlyObserved = currentIds.difference(oldIds).length;
     final requiredGrowth = math.max(3, (old.withNights + old.withoutNights) * 0.2).ceil();
+    if (newlyObserved >= requiredGrowth) return true;
+
+    // Never compare raw deltas across different metrics or units.
+    if (candidate.metric != old.metric ||
+        candidate.withNights < 6 || candidate.withoutNights < 6) return false;
     final materialDifference = (candidate.difference - old.difference).abs() >=
-        candidate.threshold * 0.5;
-    return added >= requiredGrowth || materialDifference;
+        candidate.threshold;
+    return materialDifference;
   }
 
   /// Returns the current pending card or creates one new, highest-priority card.
