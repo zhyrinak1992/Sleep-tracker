@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../data/sleep_database.dart';
 import '../../models/sleep_session.dart';
+import '../diary/sleep_session_detail_screen.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import 'sleep_achievement_service.dart';
@@ -19,6 +21,7 @@ class SleepAchievementsCard extends StatefulWidget {
 class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
   late Future<SleepAchievementState> _state;
   late Future<SleepRecordState> _records;
+  bool _celebrationsScheduled = false;
 
   @override
   void initState() {
@@ -33,6 +36,79 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
     if (!identical(oldWidget.sessions, widget.sessions)) {
       _state = SleepAchievementService.instance.load(widget.sessions);
       _records = SleepRecordService.instance.load();
+      _celebrationsScheduled = false;
+    }
+  }
+
+  Future<void> _showRecordCelebration(SleepRecordEvent event) async {
+    if (!mounted) return;
+    final isScore = event.type == 'sleep_score';
+    final title = isScore ? 'Новый рекорд SleepScore!' : 'Новый рекорд пробуждений!';
+    final value = isScore ? '${event.value.toInt()} из 100' : '${event.value.toInt()} за ночь';
+    final date = DateFormat('d MMMM yyyy', 'ru').format(event.achievedAt);
+    final openNight = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF202746),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.65, end: 1),
+              duration: const Duration(milliseconds: 650),
+              curve: Curves.elasticOut,
+              builder: (context, scale, child) => Transform.scale(scale: scale, child: child),
+              child: Container(
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [AppTheme.teal.withValues(alpha: 0.95), const Color(0xFF5368C8)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [BoxShadow(color: AppTheme.teal.withValues(alpha: 0.25), blurRadius: 24)],
+                ),
+                child: Icon(isScore ? Icons.stars_rounded : Icons.nights_stay_rounded, size: 48, color: Colors.white),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text(value, textAlign: TextAlign.center, style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700, color: AppTheme.teal)),
+            const SizedBox(height: 8),
+            Text(date, style: const TextStyle(color: AppTheme.muted)),
+            const SizedBox(height: 12),
+            const Text('Отличный результат! Эта ночь теперь отмечена в вашей истории достижений.', textAlign: TextAlign.center, style: TextStyle(height: 1.4)),
+          ],
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Позже')),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            icon: const Icon(Icons.nightlight_round),
+            label: const Text('Открыть эту ночь'),
+          ),
+        ],
+      ),
+    );
+    if (openNight == true && mounted) {
+      final database = SleepDatabase.instance;
+      final session = await database.getSessionById(event.sessionId);
+      if (!mounted) return;
+      if (session == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Запись этой ночи больше недоступна.')),
+        );
+        return;
+      }
+      await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => SleepSessionDetailScreen(database: database, session: session),
+      ));
     }
   }
 
@@ -117,6 +193,15 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
                   );
                 }
                 final records = recordSnapshot.data!;
+                if (!_celebrationsScheduled && records.newRecords.isNotEmpty) {
+                  _celebrationsScheduled = true;
+                  WidgetsBinding.instance.addPostFrameCallback((_) async {
+                    for (final event in records.newRecords) {
+                      if (!mounted) break;
+                      await _showRecordCelebration(event);
+                    }
+                  });
+                }
                 final score = records.bestSleepScore;
                 final awakenings = records.fewestAwakenings;
                 final history = records.history.toList()
