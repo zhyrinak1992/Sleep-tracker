@@ -43,6 +43,7 @@ class PdfReportService {
     final months = snapshot['months'] is List
         ? (snapshot['months'] as List).whereType<Map>().toList()
         : const <Map>[];
+    const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 
     final regular = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Regular.ttf'));
     final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));
@@ -87,12 +88,13 @@ class PdfReportService {
         cellStyle: const pw.TextStyle(fontSize: 8),
         headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
         data: months.map((month) => [
-          month['month']?.toString() ?? '—',
+          month['month'] is int && (month['month'] as int) >= 1 && (month['month'] as int) <= 12
+              ? monthNames[(month['month'] as int) - 1] : '—',
           month['nights']?.toString() ?? '0',
           duration(month['averageSleepMinutes']),
         ]).toList(),
       ));
-      content.add(pw.Text('Лучший и наиболее сложный месяцы ранжируются только по средней продолжительности сна. Это описательный критерий, не медицинская оценка.'));
+      content.add(pw.Text('Лучший и наиболее сложный месяцы ранжируются по средней продолжительности сна при наличии не менее 3 завершённых ночей в месяце. Это описательный критерий, не медицинская оценка.'));
     }
     if (notes.isNotEmpty) {
       content.add(pw.SizedBox(height: 14));
