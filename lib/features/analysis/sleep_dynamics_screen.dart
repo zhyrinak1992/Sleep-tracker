@@ -7,6 +7,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/screen_header.dart';
 import '../../widgets/section_card.dart';
 import 'sleep_dynamics_analysis.dart';
+import 'sleep_score.dart';
 
 class SleepDynamicsScreen extends StatefulWidget {
   const SleepDynamicsScreen({super.key, required this.database});
@@ -20,6 +21,7 @@ class _DynamicsData {
   final List<SleepSession> sessions;
   final Map<String, List<Map<String, Object?>>> stages;
   final Map<String, Map<String, Object?>> morning;
+  final Map<String, SleepScoreResult> scoreCache;
 }
 
 class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
@@ -38,7 +40,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
     final ids = sessions.where((s) => s.endedAt != null).map((s) => s.id).toList();
     final stages = await widget.database.getStagesForSessions(ids);
     final morning = await widget.database.getMorningReportsForSessions(ids);
-    return _DynamicsData(sessions: sessions, stages: stages, morning: morning);
+    return _DynamicsData(sessions: sessions, stages: stages, morning: morning, scoreCache: <String, SleepScoreResult>{});
   }
 
   void _refresh() => setState(() => _future = _load());
@@ -58,6 +60,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
       start: start,
       endExclusive: end,
       period: period,
+      scoreCache: data.scoreCache,
     );
 
   String _periodTitle(DateTime start) {
@@ -186,6 +189,16 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
                 formatValue: (value) => (value / 60).toStringAsFixed(1) + ' ч',
               )),
             ])),
+            if (_hasData(current.chartScoreValues)) ...[
+              const SizedBox(height: 10),
+              _DynamicsChartCard(
+                title: 'Оценка качества сна 0–100',
+                values: current.chartScoreValues,
+                period: _period,
+                maxValue: 100,
+                formatValue: (value) => value.toStringAsFixed(0) + ' / 100',
+              ),
+            ],
             if (_hasData(current.chartEfficiencyValues)) ...[
               const SizedBox(height: 10),
               _DynamicsChartCard(
@@ -233,6 +246,14 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
               samples: current.durationSamples,
               previousValue: _duration(previous.averageSleepMinutes),
               note: 'Завершённых ночей: ' + current.completedCount.toString() + '. Для длительности используются доступные фазы/фактические границы, а при их отсутствии — сохранённый интервал ночной сессии.',
+            ),
+            const SizedBox(height: 10),
+            _DynamicsMetricCard(
+              title: 'Средняя оценка качества сна',
+              value: _number(current.averageSleepScore, ' / 100', decimals: 0),
+              samples: current.scoreSamples,
+              previousValue: _number(previous.averageSleepScore, ' / 100', decimals: 0),
+              note: 'Веса 40/30/20/10. В расчёт каждой ночи входят только доступные компоненты; личный диапазон длительности использует предшествующие 90 дней. При недостатке данных оценка не рассчитывается.',
             ),
             const SizedBox(height: 10),
             _DynamicsMetricCard(
@@ -346,6 +367,16 @@ class _RollingComparisonCard extends StatelessWidget {
           : _durationDelta(current.averageSleepMinutes! - previous.averageSleepMinutes!),
         currentSamples: current.durationSamples,
         previousSamples: previous.durationSamples,
+      ),
+      _RollingMetric(
+        label: 'Оценка качества сна',
+        currentValue: number(current.averageSleepScore, ' / 100', decimals: 0),
+        previousValue: number(previous.averageSleepScore, ' / 100', decimals: 0),
+        change: current.averageSleepScore == null || previous.averageSleepScore == null
+          ? 'Недостаточно данных'
+          : signed(current.averageSleepScore! - previous.averageSleepScore!, ' балла', decimals: 0),
+        currentSamples: current.scoreSamples,
+        previousSamples: previous.scoreSamples,
       ),
       _RollingMetric(
         label: 'Эффективность',
