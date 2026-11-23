@@ -329,7 +329,7 @@ class _SleepChangeHistoryChartScreenState extends State<SleepChangeHistoryChartS
                       style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
                     const SizedBox(height: 10),
                     LayoutBuilder(builder: (context, constraints) {
-                      final chartWidth = math.max(constraints.maxWidth, snapshots.length * 58.0);
+                      final chartWidth = math.max(constraints.maxWidth, snapshots.length * 58.0).toDouble();
                       final pointWidth = chartWidth / snapshots.length;
                       return SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
