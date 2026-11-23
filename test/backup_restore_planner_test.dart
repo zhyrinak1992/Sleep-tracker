@@ -116,7 +116,7 @@ void main() {
           table: <Map<String, Object?>>[],
       };
       archive['app_metadata'] = [
-        {'key': 'sleep_change_history_v1', 'value': 'not-json'},
+        {'key': 'sleep_change_history_v1', 'value': '[]'},
       ];
       final current = {
         for (final table in BackupRestorePlanner.tableKeys.keys)
