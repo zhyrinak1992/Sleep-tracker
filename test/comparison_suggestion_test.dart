@@ -24,6 +24,8 @@ ComparisonSuggestionCandidate candidate({
   threshold: 0.5,
   priority: priority,
   fingerprint: fingerprint,
+  withSessionIds: List.generate(withNights, (i) => 'with-$i'),
+  withoutSessionIds: List.generate(withoutNights, (i) => 'without-$i'),
 );
 
 void main() {
