@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
@@ -872,6 +873,60 @@ class SleepDatabase {
 
   Future<void> setAppMetadata(String key, String value) async {
     await (await database).insert('app_metadata', {'key': key, 'value': value}, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Returns immutable snapshots of automatically generated rolling sleep-change comparisons.
+  /// The metadata row is part of exportSnapshot(), so history is included in manual backups.
+  Future<List<Map<String, Object?>>> getSleepChangeHistory() async {
+    final raw = await getAppMetadata('sleep_change_history_v1');
+    if (raw == null || raw.isEmpty) return const [];
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) {
+      throw const FormatException('История изменений сна повреждена.');
+    }
+    return decoded.whereType<Map>().map((row) => Map<String, Object?>.from(row)).toList();
+  }
+
+  /// Appends a new monthly snapshot or a transparent revision when source data changed.
+  /// Previous revisions are retained; identical fingerprints are never duplicated.
+  Future<bool> saveSleepChangeHistorySnapshot(Map<String, Object?> snapshot) async {
+    final periodKey = snapshot['periodKey'];
+    final fingerprint = snapshot['fingerprint'];
+    if (periodKey is! String || periodKey.isEmpty ||
+        fingerprint is! String || fingerprint.isEmpty) {
+      throw ArgumentError('У снимка истории отсутствует ключ периода или отпечаток данных.');
+    }
+    final db = await database;
+    return db.transaction((txn) async {
+      final rows = await txn.query('app_metadata', columns: ['value'],
+        where: 'key = ?', whereArgs: ['sleep_change_history_v1'], limit: 1);
+      final raw = rows.isEmpty ? null : rows.first['value'] as String?;
+      final history = <Map<String, Object?>>[];
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is! List) throw const FormatException('История изменений сна повреждена; запись отменена без перезаписи.');
+        for (final row in decoded) {
+          if (row is! Map) throw const FormatException('Некорректная запись истории; запись отменена без перезаписи.');
+          history.add(Map<String, Object?>.from(row));
+        }
+      }
+      final samePeriod = history.where((item) => item['periodKey'] == periodKey).toList();
+      if (samePeriod.any((item) => item['fingerprint'] == fingerprint)) return false;
+      final latestVersion = samePeriod.fold<int>(0, (value, item) {
+        final version = item['version'];
+        return version is int && version > value ? version : value;
+      });
+      final stored = Map<String, Object?>.from(snapshot)
+        ..['version'] = latestVersion + 1
+        ..['supersedesVersion'] = latestVersion == 0 ? null : latestVersion
+        ..['revisionReason'] = latestVersion == 0 ? 'Первичный снимок месяца' : 'Изменились исходные данные или состав сопоставимых наблюдений';
+      history.add(stored);
+      await txn.insert('app_metadata', {
+        'key': 'sleep_change_history_v1',
+        'value': jsonEncode(history),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      return true;
+    });
   }
 
   /// Returns namespaced metadata entries without exposing unrelated app settings.
