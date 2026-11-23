@@ -55,7 +55,7 @@ class SleepScoreResult {
       'awakenings': 20,
       'subjectiveQuality': 10,
     },
-    'methodVersion': 1,
+    'methodVersion': 2,
   };
 }
 
