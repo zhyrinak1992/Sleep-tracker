@@ -180,8 +180,22 @@ class _ReportCard extends StatelessWidget {
                       style: const TextStyle(fontSize: 11, height: 1.4)),
                     Text('Оценка сна: ' + formatMetric('score', ' балла'),
                       style: const TextStyle(fontSize: 11, height: 1.4)),
-                    Text('Пробуждения: ' + formatMetric('awakenings', ' эпиз.'),
-                      style: const TextStyle(fontSize: 11, height: 1.4)),
+                    for (final item in const <(String, String, String)>[
+                      ('awakenings', 'Пробуждения', ' эпиз.'),
+                      ('efficiency', 'Эффективность сна', '%'),
+                      ('sleepLatency', 'Засыпание · задержка', ' мин'),
+                      ('subjectiveQuality', 'Субъективное качество', ' / 5'),
+                      ('wellbeing', 'Утреннее самочувствие', ' / 5'),
+                      ('heartRate', 'Пульс', ' уд/мин'),
+                      ('respiratoryRate', 'Частота дыхания', ' вдох/мин'),
+                      ('bloodOxygen', 'Насыщение кислородом', '%'),
+                      ('hrv', 'Вариабельность пульса SDNN', ' мс'),
+                      ('roomTemperature', 'Температура спальни', ' °C'),
+                      ('roomHumidity', 'Влажность спальни', '%'),
+                    ])
+                      if (metrics.containsKey(item.$1))
+                        Text(item.$2 + ': ' + formatMetric(item.$1, item.$3),
+                          style: const TextStyle(fontSize: 11, height: 1.4)),
                   ]),
                 );
               }).toList(),
