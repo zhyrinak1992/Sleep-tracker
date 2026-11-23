@@ -240,6 +240,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   SleepSession? _latest;
   bool _loading = true;
   bool _refreshing = false;
+  bool _refreshRequested = false;
   ComparisonSuggestionRecord? _comparisonSuggestion;
   Map<String, String> _suggestionTagLabels = const {};
   Timer? _suggestionExpiryTimer;
@@ -300,10 +301,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _refresh() async {
-    if (_refreshing) return;
+    if (_refreshing) {
+      _refreshRequested = true;
+      return;
+    }
     _refreshing = true;
     try {
-      await _refreshInternal();
+      do {
+        _refreshRequested = false;
+        await _refreshInternal();
+      } while (_refreshRequested && mounted);
     } finally {
       _refreshing = false;
     }
@@ -631,7 +638,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               database: widget.database,
               record: _comparisonSuggestion!,
               tagLabels: _suggestionTagLabels,
-              onProcessed: () => _refresh(),
+              onProcessed: () {
+                if (mounted) setState(() => _comparisonSuggestion = null);
+                _refresh();
+              },
             ),
           ],
           Container(
