@@ -138,7 +138,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
         final previousStart = SleepDynamicsAnalysis.previousPeriodStart(start, _period);
         final current = _summarize(data, start, end, _period);
         final previous = _summarize(data, previousStart, start, _period);
-        final currentPeriodStart = SleepDynamicsAnalysis.periodStart(todayStart, _period);
+        final currentPeriodStart = SleepDynamicsAnalysis.periodStart(DateTime(today.year, today.month, today.day), _period);
 
         return ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
