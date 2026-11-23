@@ -20,6 +20,7 @@ import 'sleep_period_comparison_screen.dart';
 import 'tag_sleep_comparison_card.dart';
 import 'sleep_regularity_analysis.dart';
 import 'sleep_achievements_card.dart';
+import 'audio_event_analysis_card.dart';
 import '../diary/sleep_session_detail_screen.dart';
 
 class AnalysisScreen extends StatefulWidget {
@@ -271,8 +272,14 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             WeatherAnalysisCard(database: widget.database, sessions: current.sessions),
             const SizedBox(height: 14),
             _ClimateSummary(database: widget.database),
+            const SizedBox(height: 14),
+            AudioEventAnalysisCard(
+              database: widget.database,
+              currentSessions: current.sessions,
+              previousSessions: previous.sessions,
+            ),
             const SizedBox(height: 12),
-            const Text('Фазы сна, пульс, дыхание и звуковые события появятся в аналитике после подключения соответствующих источников. Сейчас они не учитываются и не заменяются условными значениями.', style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.45)),
+            const Text('Подробные физиологические измерения и сравнение периодов доступны в разделе «Моё здоровье». Фазы сна и показатели отдельной ночи — в карточке этой ночи.', style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.45)),
           ],
         ],
       );
