@@ -147,16 +147,16 @@ class _DiaryScreenState extends State<DiaryScreen> {
             final hasSession = daySessions.isNotEmpty;
             final selected = DateUtils.isSameDay(date, _selectedDay);
             final hasOpen = daySessions.any((s) => s.isOpen);
-            final availableScores = daySessions
-                .map((session) => scores[session.id]?.score)
-                .whereType<double>()
-                .toList();
-            final dayScore = availableScores.isEmpty
-                ? null
-                : availableScores.reduce((a, b) => a + b) / availableScores.length;
-            final markerColor = hasOpen
-                ? const Color(0xFF8BC7E8)
-                : SleepCalendarScorePalette.colorFor(dayScore);
+            final markerDots = daySessions.map((session) {
+              final color = session.isOpen
+                  ? const Color(0xFF8BC7E8)
+                  : SleepCalendarScorePalette.colorFor(scores[session.id]?.score);
+              return Container(
+                width: 5,
+                height: 5,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+              );
+            }).toList();
             return Expanded(child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2),
               child: InkWell(
@@ -175,10 +175,19 @@ class _DiaryScreenState extends State<DiaryScreen> {
                       fontWeight: selected || hasSession ? FontWeight.bold : FontWeight.normal,
                     )),
                     const SizedBox(height: 4),
-                    Container(width: 5, height: 5, decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: hasSession ? markerColor : Colors.transparent,
-                    )),
+                    SizedBox(
+                      height: 9,
+                      width: 28,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Wrap(
+                          spacing: 2,
+                          runSpacing: 1,
+                          alignment: WrapAlignment.center,
+                          children: markerDots,
+                        ),
+                      ),
+                    ),
                   ]),
                 ),
               ),
@@ -194,7 +203,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
           _LegendDot(color: AppTheme.muted, label: 'Нет балла'),
         ]),
         const SizedBox(height: 6),
-        const Text('Цвет отражает рассчитанный балл качества сна 0–100. Если достоверных данных недостаточно, балл не отображается.',
+        const Text('Каждая точка — отдельная ночная сессия. Цвет отражает балл качества сна 0–100; при недостатке данных используется нейтральная отметка.',
           textAlign: TextAlign.center, style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.35)),
       ],
     ));
