@@ -36,6 +36,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
   SleepDynamicsPeriod _period = SleepDynamicsPeriod.week;
   int _rollingDays = 30;
   String _metricGroup = 'all';
+  bool _historySaveFailed = false;
   bool _showGroup(String group) => _metricGroup == 'all' || _metricGroup == group;
 
   DateTime _anchor = DateTime.now();
@@ -52,7 +53,13 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
     final stages = await widget.database.getStagesForSessions(ids);
     final morning = await widget.database.getMorningReportsForSessions(ids);
     final data = _DynamicsData(sessions: sessions, stages: stages, morning: morning, scoreCache: <String, SleepScoreResult>{});
-    await _recordMonthlyChangeSnapshot(data);
+    try {
+      await _recordMonthlyChangeSnapshot(data);
+      _historySaveFailed = false;
+    } catch (_) {
+      // A history-write problem must not prevent access to the live analytics.
+      _historySaveFailed = true;
+    }
     return data;
   }
 
@@ -471,6 +478,11 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
               subtitle: 'Долгосрочные изменения по сохранённым ночам',
               icon: Icons.show_chart_rounded,
             ),
+            if (_historySaveFailed) ...[
+              const SizedBox(height: 8),
+              const SectionCard(child: Text('Текущая аналитика доступна, но сохранить снимок истории главных изменений не удалось. Проверьте свободное место и резервную копию данных.',
+                style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4))),
+            ],
             const SizedBox(height: 10),
             OutlinedButton.icon(
               onPressed: () => _exportDynamics(data, current, previous, start, end),
