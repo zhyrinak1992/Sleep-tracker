@@ -41,6 +41,19 @@ class SleepChangeItem {
   final String description;
 
   double get significance => delta.abs() / threshold;
+
+  Map<String, Object?> toMap() => {
+    'kind': kind.name,
+    'title': title,
+    'previousValue': previousValue,
+    'currentValue': currentValue,
+    'delta': delta,
+    'unit': unit,
+    'previousSamples': previousSamples,
+    'currentSamples': currentSamples,
+    'threshold': threshold,
+    'description': description,
+  };
 }
 
 class SleepChangeInsights {

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -11,6 +13,7 @@ import '../../widgets/section_card.dart';
 import 'sleep_dynamics_analysis.dart';
 import 'sleep_change_insights.dart';
 import 'sleep_change_insights_card.dart';
+import 'sleep_change_history_screens.dart';
 import 'sleep_score.dart';
 
 class SleepDynamicsScreen extends StatefulWidget {
@@ -33,6 +36,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
   SleepDynamicsPeriod _period = SleepDynamicsPeriod.week;
   int _rollingDays = 30;
   String _metricGroup = 'all';
+  bool _historySaveFailed = false;
   bool _showGroup(String group) => _metricGroup == 'all' || _metricGroup == group;
 
   DateTime _anchor = DateTime.now();
@@ -48,7 +52,93 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
     final ids = sessions.where((s) => s.endedAt != null).map((s) => s.id).toList();
     final stages = await widget.database.getStagesForSessions(ids);
     final morning = await widget.database.getMorningReportsForSessions(ids);
-    return _DynamicsData(sessions: sessions, stages: stages, morning: morning, scoreCache: <String, SleepScoreResult>{});
+    final data = _DynamicsData(sessions: sessions, stages: stages, morning: morning, scoreCache: <String, SleepScoreResult>{});
+    try {
+      await _recordMonthlyChangeSnapshot(data);
+      _historySaveFailed = false;
+    } catch (_) {
+      // A history-write problem must not prevent access to the live analytics.
+      _historySaveFailed = true;
+    }
+    return data;
+  }
+
+  Future<void> _recordMonthlyChangeSnapshot(_DynamicsData data) async {
+    final now = DateTime.now();
+    final ranges = SleepDynamicsAnalysis.rollingThirtyDayRanges(now);
+    final current = _summarize(data, ranges.currentStart, ranges.currentEndExclusive, SleepDynamicsPeriod.month);
+    final previous = _summarize(data, ranges.previousStart, ranges.previousEndExclusive, SleepDynamicsPeriod.month);
+    final insights = SleepChangeInsights.calculate(current: current, previous: previous);
+
+    // SleepScore for nights in these windows may use earlier history as its baseline.
+    // Include the full available source set in the fingerprint so a changed historical
+    // baseline creates a transparent new revision instead of silently changing scores.
+    final fingerprintSessions = data.sessions.toList()
+      ..sort((a, b) => a.id.compareTo(b.id));
+    final ids = fingerprintSessions.map((session) => session.id).toSet();
+    final sortedStages = data.stages.entries
+      .where((entry) => ids.contains(entry.key)).toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    final sortedMorning = data.morning.entries
+      .where((entry) => ids.contains(entry.key)).toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    final source = <String, Object?>{
+      'sessions': fingerprintSessions.map((session) => {
+        'id': session.id,
+        'startedAt': session.startedAt.toIso8601String(),
+        'endedAt': session.endedAt?.toIso8601String(),
+        'updatedAt': session.updatedAt?.toIso8601String(),
+        'actualSleepStartedAt': session.actualSleepStartedAt?.toIso8601String(),
+        'actualSleepEndedAt': session.actualSleepEndedAt?.toIso8601String(),
+        'morningRating': session.morningRating,
+        'source': session.source,
+        'userEdited': session.userEdited,
+      }).toList(),
+      'stages': sortedStages.map((entry) => {
+        'sessionId': entry.key,
+        'rows': entry.value.map((row) => Map<String, Object?>.from(row)).toList(),
+      }).toList(),
+      'morning': sortedMorning.map((entry) => {
+        'sessionId': entry.key,
+        'report': Map<String, Object?>.from(entry.value),
+      }).toList(),
+    };
+    final fingerprint = _stableFingerprint(jsonEncode(source));
+    final periodKey = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+    await widget.database.saveSleepChangeHistorySnapshot({
+      'periodKey': periodKey,
+      'generatedAt': now.toIso8601String(),
+      'currentStart': ranges.currentStart.toIso8601String(),
+      'currentEndExclusive': ranges.currentEndExclusive.toIso8601String(),
+      'previousStart': ranges.previousStart.toIso8601String(),
+      'previousEndExclusive': ranges.previousEndExclusive.toIso8601String(),
+      'fingerprint': fingerprint,
+      'hasComparableData': insights.hasComparableData,
+      'summary': insights.personalSummary,
+      'mainChangeStatus': !insights.hasComparableData
+          ? 'insufficient_data'
+          : insights.mainChange == null ? 'no_clear_change' : 'selected',
+      'mainChange': insights.mainChange?.toMap(),
+      'notableChanges': insights.items.map((item) => item.toMap()).toList(),
+      'sampleCounts': {
+        'duration': {'previous': previous.durationSamples, 'current': current.durationSamples},
+        'score': {'previous': previous.scoreSamples, 'current': current.scoreSamples},
+        'efficiency': {'previous': previous.efficiencySamples, 'current': current.efficiencySamples},
+        'awakenings': {'previous': previous.awakeningSamples, 'current': current.awakeningSamples},
+        'quality': {'previous': previous.qualitySamples, 'current': current.qualitySamples},
+        'wellbeing': {'previous': previous.wellbeingSamples, 'current': current.wellbeingSamples},
+        'regularity': {'previous': previous.regularitySamples, 'current': current.regularitySamples},
+      },
+    });
+  }
+
+  String _stableFingerprint(String value) {
+    var hash = 0x811c9dc5;
+    for (final byte in utf8.encode(value)) {
+      hash ^= byte;
+      hash = (hash * 0x01000193) & 0xffffffff;
+    }
+    return hash.toRadixString(16).padLeft(16, '0');
   }
 
   void _refresh() => setState(() => _future = _load());
@@ -388,6 +478,11 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
               subtitle: 'Долгосрочные изменения по сохранённым ночам',
               icon: Icons.show_chart_rounded,
             ),
+            if (_historySaveFailed) ...[
+              const SizedBox(height: 8),
+              const SectionCard(child: Text('Текущая аналитика доступна, но сохранить снимок истории главных изменений не удалось. Проверьте свободное место и резервную копию данных.',
+                style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4))),
+            ],
             const SizedBox(height: 10),
             OutlinedButton.icon(
               onPressed: () => _exportDynamics(data, current, previous, start, end),
@@ -426,6 +521,21 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
                 ),
               ),
             ],
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => SleepChangeHistoryScreen(database: widget.database),
+              )),
+              icon: const Icon(Icons.history_rounded),
+              label: const Text('История главных изменений'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => SleepChangeHistoryChartScreen(database: widget.database),
+              )),
+              icon: const Icon(Icons.timeline_rounded),
+              label: const Text('График изменений по месяцам'),
+            ),
             const SizedBox(height: 18),
             const Text('Показатели аналитики', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),

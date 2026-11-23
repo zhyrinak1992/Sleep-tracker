@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
@@ -6,6 +7,7 @@ import 'dart:io';
 import '../models/sleep_session.dart';
 import '../models/sleep_tag.dart';
 import '../models/sleep_note.dart';
+import 'sleep_change_history.dart';
 
 class SleepDatabase {
   SleepDatabase._();
@@ -298,9 +300,38 @@ class SleepDatabase {
         if (exists.isEmpty) await txn.insert('sleep_notes', row);
       }
       for (final row in rowsByTable['app_metadata']!) {
-        final exists = await txn.query('app_metadata', columns: ['key'],
-            where: 'key = ?', whereArgs: [row['key']], limit: 1);
-        if (exists.isEmpty) await txn.insert('app_metadata', row);
+        final key = row['key'] as String;
+        final exists = await txn.query('app_metadata', columns: ['value'],
+            where: 'key = ?', whereArgs: [key], limit: 1);
+        if (key == 'sleep_change_history_v1') {
+          final localRaw = exists.isEmpty ? null : exists.first['value'] as String?;
+          final importedRaw = row['value'] as String? ?? '[]';
+          final localHistory = <Map<String, Object?>>[];
+          if (localRaw != null && localRaw.isNotEmpty) {
+            final decoded = jsonDecode(localRaw);
+            if (decoded is! List) throw const FormatException('Локальная история изменений повреждена; объединение отменено.');
+            for (final item in decoded) {
+              if (item is! Map) throw const FormatException('Локальная история изменений содержит некорректную запись; объединение отменено.');
+              localHistory.add(Map<String, Object?>.from(item));
+            }
+          }
+          final importedHistory = jsonDecode(importedRaw);
+          if (importedHistory is! List) throw const FormatException('История изменений в резервной копии повреждена; объединение отменено.');
+          var mergedHistory = localHistory;
+          for (final item in importedHistory) {
+            if (item is! Map) throw const FormatException('Резервная копия содержит некорректную запись истории; объединение отменено.');
+            final result = SleepChangeHistoryRecords.append(
+              mergedHistory, Map<String, Object?>.from(item),
+            );
+            mergedHistory = result.records.toList();
+          }
+          await txn.insert('app_metadata', {
+            'key': key,
+            'value': jsonEncode(mergedHistory),
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        } else if (exists.isEmpty) {
+          await txn.insert('app_metadata', row);
+        }
       }
       for (final table in ['sleep_stages', 'sleep_metrics', 'audio_events', 'climate_samples']) {
         for (final row in rowsByTable[table]!) {
@@ -872,6 +903,45 @@ class SleepDatabase {
 
   Future<void> setAppMetadata(String key, String value) async {
     await (await database).insert('app_metadata', {'key': key, 'value': value}, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Returns immutable snapshots of automatically generated rolling sleep-change comparisons.
+  /// The metadata row is part of exportSnapshot(), so history is included in manual backups.
+  Future<List<Map<String, Object?>>> getSleepChangeHistory() async {
+    final raw = await getAppMetadata('sleep_change_history_v1');
+    if (raw == null || raw.isEmpty) return const [];
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) {
+      throw const FormatException('История изменений сна повреждена.');
+    }
+    return decoded.whereType<Map>().map((row) => Map<String, Object?>.from(row)).toList();
+  }
+
+  /// Appends a new monthly snapshot or a transparent revision when source data changed.
+  /// Previous revisions are retained; identical fingerprints are never duplicated.
+  Future<bool> saveSleepChangeHistorySnapshot(Map<String, Object?> snapshot) async {
+    final db = await database;
+    return db.transaction((txn) async {
+      final rows = await txn.query('app_metadata', columns: ['value'],
+        where: 'key = ?', whereArgs: ['sleep_change_history_v1'], limit: 1);
+      final raw = rows.isEmpty ? null : rows.first['value'] as String?;
+      final history = <Map<String, Object?>>[];
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is! List) throw const FormatException('История изменений сна повреждена; запись отменена без перезаписи.');
+        for (final row in decoded) {
+          if (row is! Map) throw const FormatException('Некорректная запись истории; запись отменена без перезаписи.');
+          history.add(Map<String, Object?>.from(row));
+        }
+      }
+      final update = SleepChangeHistoryRecords.append(history, snapshot);
+      if (!update.changed) return false;
+      await txn.insert('app_metadata', {
+        'key': 'sleep_change_history_v1',
+        'value': jsonEncode(update.records),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      return true;
+    });
   }
 
   /// Returns namespaced metadata entries without exposing unrelated app settings.
