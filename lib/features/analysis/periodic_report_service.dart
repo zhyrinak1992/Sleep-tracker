@@ -56,12 +56,13 @@ class PeriodicReportSnapshot {
 class PeriodicReportService {
   PeriodicReportService(this.database);
   final SleepDatabase database;
-  static const metadataPrefix = 'periodic_report_v7_';
-  static const previousMetadataPrefix = 'periodic_report_v6_';
-  static const olderMetadataPrefix = 'periodic_report_v5_';
-  static const olderMetadataPrefixV2 = 'periodic_report_v4_';
-  static const olderMetadataPrefixV3 = 'periodic_report_v3_';
-  static const olderMetadataPrefixV4 = 'periodic_report_v2_';
+  static const metadataPrefix = 'periodic_report_v8_';
+  static const previousMetadataPrefix = 'periodic_report_v7_';
+  static const olderMetadataPrefix = 'periodic_report_v6_';
+  static const olderMetadataPrefixV2 = 'periodic_report_v5_';
+  static const olderMetadataPrefixV3 = 'periodic_report_v4_';
+  static const olderMetadataPrefixV4 = 'periodic_report_v3_';
+  static const olderMetadataPrefixV5 = 'periodic_report_v2_';
   static const legacyMetadataPrefix = 'periodic_report_v1_';
 
   Future<List<PeriodicReportSnapshot>> generateClosedReports({DateTime? now}) async {
@@ -130,6 +131,7 @@ class PeriodicReportService {
     final olderV2 = await database.getAppMetadataByPrefix(olderMetadataPrefixV2);
     final olderV3 = await database.getAppMetadataByPrefix(olderMetadataPrefixV3);
     final olderV4 = await database.getAppMetadataByPrefix(olderMetadataPrefixV4);
+    final olderV5 = await database.getAppMetadataByPrefix(olderMetadataPrefixV5);
     final current = await database.getAppMetadataByPrefix(metadataPrefix);
     final byId = <String, PeriodicReportSnapshot>{};
     for (final value in legacy.values) {
@@ -138,7 +140,13 @@ class PeriodicReportService {
         byId[report.id] = report;
       } catch (_) {}
     }
-    // New v7 snapshots win; older v1-v6 snapshots remain readable and intact.
+    // New v8 snapshots win; older v1-v7 snapshots remain readable and intact.
+    for (final value in olderV5.values) {
+      try {
+        final report = PeriodicReportSnapshot.decode(value);
+        byId[report.id] = report;
+      } catch (_) {}
+    }
     for (final value in olderV4.values) {
       try {
         final report = PeriodicReportSnapshot.decode(value);
@@ -382,6 +390,83 @@ class PeriodicReportService {
 
     final current = summarize(sessions);
     final previous = summarize(previousSessions);
+    final currentTagPatterns = tagPatternsFor(sessions);
+    final previousTagPatterns = tagPatternsFor(previousSessions);
+    final rankedInsights = <Map<String, Object?>>[];
+    const insightMetricLabels = <String, String>{
+      'duration': 'Продолжительность сна',
+      'score': 'Оценка сна',
+      'awakenings': 'Пробуждения',
+      'efficiency': 'Эффективность сна',
+      'sleepLatency': 'Задержка засыпания',
+      'subjectiveQuality': 'Субъективное качество',
+      'wellbeing': 'Утреннее самочувствие',
+      'bedtime': 'Время засыпания',
+      'wakeTime': 'Время пробуждения',
+      'heartRate': 'Пульс',
+      'respiratoryRate': 'Частота дыхания',
+      'bloodOxygen': 'Насыщение кислородом',
+      'hrv': 'Вариабельность пульса SDNN',
+      'roomTemperature': 'Температура датчика',
+      'roomHumidity': 'Влажность датчика',
+    };
+    for (final rawPattern in currentTagPatterns) {
+      final pattern = Map<String, Object?>.from(rawPattern);
+      final tagKey = pattern['tagKey'];
+      final currentMetrics = pattern['metrics'] is Map
+        ? Map<String, Object?>.from(pattern['metrics'] as Map) : <String, Object?>{};
+      final oldMatches = previousTagPatterns.where((item) => item['tagKey'] == tagKey).toList();
+      final oldMetrics = oldMatches.isNotEmpty && oldMatches.first['metrics'] is Map
+        ? Map<String, Object?>.from(oldMatches.first['metrics'] as Map) : <String, Object?>{};
+      for (final entry in currentMetrics.entries) {
+        if (entry.value is! Map || !insightMetricLabels.containsKey(entry.key)) continue;
+        final metric = Map<String, Object?>.from(entry.value as Map);
+        final difference = metric['difference'];
+        if (metric['isSufficient'] != true || difference is! num || difference == 0) continue;
+        final old = oldMetrics[entry.key] is Map
+          ? Map<String, Object?>.from(oldMetrics[entry.key] as Map) : <String, Object?>{};
+        final oldDifference = old['difference'];
+        final repeated = old['isSufficient'] == true && oldDifference is num &&
+          oldDifference != 0 && (oldDifference > 0) == (difference > 0);
+        final withAverage = metric['withTagAverage'];
+        final withoutAverage = metric['withoutTagAverage'];
+        final baseline = withoutAverage is num ? withoutAverage.abs() : 0.0;
+        final relativeDifference = baseline > 0
+          ? difference.abs() / baseline * 100 : null;
+        final withSamples = metric['withTagSamples'] as int? ?? 0;
+        final withoutSamples = metric['withoutTagSamples'] as int? ?? 0;
+        rankedInsights.add({
+          'tagKey': tagKey,
+          'tagLabel': pattern['label'] ?? tagKey,
+          'metricKey': entry.key,
+          'metricLabel': insightMetricLabels[entry.key],
+          'withTagAverage': withAverage,
+          'withoutTagAverage': withoutAverage,
+          'difference': difference,
+          'withTagSamples': withSamples,
+          'withoutTagSamples': withoutSamples,
+          'evidenceNights': withSamples < withoutSamples ? withSamples : withoutSamples,
+          'relativeDifferencePercent': relativeDifference,
+          'previousDifference': oldDifference,
+          'repeatsPreviousPeriod': repeated,
+          'withTagObservations': metric['withTagObservations'] ?? const [],
+          'withoutTagObservations': metric['withoutTagObservations'] ?? const [],
+        });
+      }
+    }
+    rankedInsights.sort((a, b) {
+      final repeatOrder = ((b['repeatsPreviousPeriod'] == true) ? 1 : 0)
+        .compareTo((a['repeatsPreviousPeriod'] == true) ? 1 : 0);
+      if (repeatOrder != 0) return repeatOrder;
+      final evidenceOrder = (b['evidenceNights'] as int).compareTo(a['evidenceNights'] as int);
+      if (evidenceOrder != 0) return evidenceOrder;
+      final aMagnitude = (a['relativeDifferencePercent'] as num?)?.toDouble() ?? 0;
+      final bMagnitude = (b['relativeDifferencePercent'] as num?)?.toDouble() ?? 0;
+      return bMagnitude.compareTo(aMagnitude);
+    });
+    for (var i = 0; i < rankedInsights.length; i++) {
+      rankedInsights[i]['rank'] = i + 1;
+    }
     final ids = sessions.map((s) => s.id).toSet();
     final events = audio.where((event) {
       final sessionId = event['session_id'];
@@ -401,16 +486,17 @@ class PeriodicReportService {
     }).toList();
 
     final data = <String, Object?>{
-      'schemaVersion': 6, 'id': _id(kind, start), 'kind': kind.name,
+      'schemaVersion': 7, 'id': _id(kind, start), 'kind': kind.name,
       'start': start.toIso8601String(), 'endExclusive': end.toIso8601String(),
       'generatedAt': DateTime.now().toIso8601String(),
       ...current, 'audioEventCount': events.length, 'audioCategories': categories,
       'notes': periodNotes, 'noteCount': periodNotes.length,
       'previous': previous, 'score': current['score'],
       'tagPatterns': {
-        'current': tagPatternsFor(sessions),
-        'previous': tagPatternsFor(previousSessions),
+        'current': currentTagPatterns,
+        'previous': previousTagPatterns,
       },
+      'rankedInsights': rankedInsights,
     };
 
     List<Map<String, Object?>> weekdayPatterns(List<SleepSession> selected) {

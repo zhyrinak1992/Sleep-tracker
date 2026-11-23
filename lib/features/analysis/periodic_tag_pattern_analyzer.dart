@@ -33,10 +33,22 @@ class PeriodicTagPatternAnalyzer {
         'awakenings': awakeningsBySession,
         ...additionalMetrics,
       }.entries) {
-        final withValues = withTag.map((s) => entry.value[s.id])
-          .whereType<double>().where((v) => v.isFinite).toList();
-        final withoutValues = withoutTag.map((s) => entry.value[s.id])
-          .whereType<double>().where((v) => v.isFinite).toList();
+        final withObservations = withTag
+          .where((s) => entry.value[s.id] != null && entry.value[s.id]!.isFinite)
+          .map((s) => <String, Object?>{
+            'sessionId': s.id,
+            'startedAt': s.startedAt.toIso8601String(),
+            'value': entry.value[s.id],
+          }).toList();
+        final withoutObservations = withoutTag
+          .where((s) => entry.value[s.id] != null && entry.value[s.id]!.isFinite)
+          .map((s) => <String, Object?>{
+            'sessionId': s.id,
+            'startedAt': s.startedAt.toIso8601String(),
+            'value': entry.value[s.id],
+          }).toList();
+        final withValues = withObservations.map((item) => item['value'] as double).toList();
+        final withoutValues = withoutObservations.map((item) => item['value'] as double).toList();
         double? average(List<double> values) {
           if (values.isEmpty) return null;
           if (!circularMetricKeys.contains(entry.key)) {
@@ -73,6 +85,8 @@ class PeriodicTagPatternAnalyzer {
                 : withAverage - withoutAverage) : null,
           'withTagSamples': withValues.length,
           'withoutTagSamples': withoutValues.length,
+          'withTagObservations': withObservations,
+          'withoutTagObservations': withoutObservations,
           'isSufficient': sufficient,
         };
       }

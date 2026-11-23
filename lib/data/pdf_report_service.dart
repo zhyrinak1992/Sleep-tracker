@@ -103,6 +103,37 @@ class PdfReportService {
       content.add(pw.Text('Субъективное качество: ${average(previous['averageQuality'], suffix: ' / 5')}'));
       content.add(pw.Text('Самочувствие: ${average(previous['averageWellbeing'], suffix: ' / 5')}'));
     }
+    final rankedInsights = snapshot['rankedInsights'] is List
+        ? (snapshot['rankedInsights'] as List).whereType<Map>().toList()
+        : const <Map>[];
+    if (rankedInsights.isNotEmpty) {
+      content.add(pw.SizedBox(height: 14));
+      content.add(pw.Header(level: 1, child: pw.Text('Что чаще связано с изменениями сна')));
+      content.add(pw.Text('Ранжирование по повторяемости, объёму выборки и размеру различия. Это статистические наблюдения, а не доказательство причин.'));
+      for (final raw in rankedInsights.take(12)) {
+        final insight = Map<String, Object?>.from(raw);
+        final key = insight['metricKey'] as String? ?? '';
+        String shown(Object? rawValue) {
+          if (rawValue is! num) return 'Нет данных';
+          if (key == 'duration' || key == 'sleepLatency') {
+            final value = rawValue.round();
+            return '${value ~/ 60} ч ${value % 60} мин';
+          }
+          if (key == 'bedtime' || key == 'wakeTime') {
+            final minute = rawValue.round() % 1440;
+            return '${(minute ~/ 60).toString().padLeft(2, '0')}:${(minute % 60).toString().padLeft(2, '0')}';
+          }
+          return rawValue.toStringAsFixed(1);
+        }
+        final difference = insight['difference'] as num? ?? 0;
+        final delta = key == 'bedtime' || key == 'wakeTime'
+          ? ((difference > 0 ? 'позже на ' : 'раньше на ') + difference.abs().round().toString() + ' мин')
+          : ((difference > 0 ? 'выше на ' : 'ниже на ') + shown(difference.abs()));
+        content.add(pw.Text(
+          '${insight['rank']}. ${insight['tagLabel']} — ${insight['metricLabel']}: $delta; с отметкой ${shown(insight['withTagAverage'])} (n=${insight['withTagSamples']}); без отметки ${shown(insight['withoutTagAverage'])} (n=${insight['withoutTagSamples']})${insight['repeatsPreviousPeriod'] == true ? '; повторяется в предыдущем периоде' : ''}.',
+        ));
+      }
+    }
     if (currentTagPatterns.isNotEmpty) {
       content.add(pw.SizedBox(height: 14));
       content.add(pw.Header(level: 1, child: pw.Text('Персональные закономерности по отметкам')));

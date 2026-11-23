@@ -67,6 +67,10 @@ void main() {
       final quality = Map<String, Object?>.from(metrics['subjectiveQuality'] as Map);
       expect(quality['withTagAverage'], 2);
       expect(quality['withoutTagAverage'], 4);
+      final observations = quality['withTagObservations'] as List;
+      expect(observations, hasLength(4));
+      expect((observations.first as Map)['sessionId'], 'tag-0');
+      expect((observations.first as Map)['value'], 2);
     });
 
     test('uses circular medians for bedtime values across midnight', () {

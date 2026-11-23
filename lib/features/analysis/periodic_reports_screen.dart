@@ -104,6 +104,8 @@ class _ReportCard extends StatelessWidget {
       ? (tagPatterns['current'] as List).whereType<Map>().toList() : const <Map>[];
     final previousTagPatterns = tagPatterns['previous'] is List
       ? (tagPatterns['previous'] as List).whereType<Map>().toList() : const <Map>[];
+    final rankedInsights = report.data['rankedInsights'] is List
+      ? (report.data['rankedInsights'] as List).whereType<Map>().toList() : const <Map>[];
     final scoreComponents = score['components'] is Map ? Map<String, Object?>.from(score['components'] as Map) : <String, Object?>{};
     final previousScore = previous['score'] is Map ? Map<String, Object?>.from(previous['score'] as Map) : <String, Object?>{};
     final shortest = report.data['shortestAverageMonth'];
@@ -135,6 +137,104 @@ class _ReportCard extends StatelessWidget {
               );
             }).toList(),
           ),
+          if (rankedInsights.isNotEmpty) ...[
+            const Divider(height: 22),
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              initiallyExpanded: true,
+              title: const Text('Что чаще связано с изменениями сна', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+              subtitle: const Text('Ранжирование по повторяемости, объёму выборки и размеру различия', style: TextStyle(fontSize: 11)),
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'Это статистические наблюдения, а не доказательство причин. Повторяющимся считается сходное направление различия в двух соседних периодах. Сравниваются ночи с выбранной отметкой и без неё.',
+                    style: TextStyle(fontSize: 11, height: 1.4, color: AppTheme.muted),
+                  ),
+                ),
+                ...rankedInsights.map((rawInsight) {
+                  final insight = Map<String, Object?>.from(rawInsight);
+                  final metricKey = insight['metricKey'] as String? ?? '';
+                  final difference = insight['difference'] as num? ?? 0;
+                  final withAverage = insight['withTagAverage'];
+                  final withoutAverage = insight['withoutTagAverage'];
+                  final samplesWith = insight['withTagSamples'] ?? 0;
+                  final samplesWithout = insight['withoutTagSamples'] ?? 0;
+                  String display(Object? raw) {
+                    if (raw is! num) return 'нет данных';
+                    if (metricKey == 'duration' || metricKey == 'sleepLatency') {
+                      final minutes = raw.round();
+                      return '${minutes ~/ 60} ч ${minutes % 60} мин';
+                    }
+                    if (metricKey == 'bedtime' || metricKey == 'wakeTime') {
+                      final minute = raw.round().remainder(1440);
+                      return '${(minute ~/ 60).toString().padLeft(2, '0')}:${(minute % 60).toString().padLeft(2, '0')}';
+                    }
+                    const suffixes = {
+                      'score': ' / 100', 'awakenings': ' эпиз.',
+                      'efficiency': '%', 'subjectiveQuality': ' / 5',
+                      'wellbeing': ' / 5', 'heartRate': ' уд/мин',
+                      'respiratoryRate': ' вдох/мин', 'bloodOxygen': '%',
+                      'hrv': ' мс', 'roomTemperature': ' °C',
+                      'roomHumidity': '%',
+                    };
+                    return raw.toStringAsFixed(1) + (suffixes[metricKey] ?? '');
+                  }
+                  String deltaText() {
+                    if (metricKey == 'bedtime' || metricKey == 'wakeTime') {
+                      final mins = difference.round().abs();
+                      return (difference > 0 ? 'позже на ' : 'раньше на ') + mins.toString() + ' мин';
+                    }
+                    return (difference > 0 ? 'выше на ' : 'ниже на ') + display(difference.abs());
+                  }
+                  final repeated = insight['repeatsPreviousPeriod'] == true;
+                  final withObservations = insight['withTagObservations'] is List
+                    ? (insight['withTagObservations'] as List).whereType<Map>().toList() : const <Map>[];
+                  final withoutObservations = insight['withoutTagObservations'] is List
+                    ? (insight['withoutTagObservations'] as List).whereType<Map>().toList() : const <Map>[];
+                  Widget observations(String title, List<Map> values) => Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11)),
+                      ...values.map((item) {
+                        final date = DateTime.tryParse(item['startedAt'] as String? ?? '');
+                        final dateText = date == null ? 'Дата неизвестна' :
+                          '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
+                        return _ReportLine(label: dateText, value: display(item['value']));
+                      }),
+                    ]),
+                  );
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 7),
+                    child: ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      childrenPadding: const EdgeInsets.only(left: 10, right: 4, bottom: 8),
+                      title: Text(
+                        '${insight['rank']}. ${insight['tagLabel']} · ${insight['metricLabel']}',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Text(
+                        '${deltaText()} · выборки $samplesWith / $samplesWithout ночей' +
+                        (repeated ? ' · повторяется' : ' · только текущий период'),
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      children: [
+                        _ReportLine(label: 'С отметкой', value: display(withAverage) + ' · n=$samplesWith'),
+                        _ReportLine(label: 'Без отметки', value: display(withoutAverage) + ' · n=$samplesWithout'),
+                        if (insight['previousDifference'] is num)
+                          _ReportLine(
+                            label: 'Разница в предыдущем периоде',
+                            value: (insight['previousDifference'] as num).toStringAsFixed(1),
+                          ),
+                        observations('Ночи с отметкой', withObservations),
+                        observations('Ночи без отметки', withoutObservations),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ],
           if (currentTagPatterns.isNotEmpty) ...[
             const Divider(height: 22),
             ExpansionTile(
