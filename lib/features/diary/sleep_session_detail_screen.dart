@@ -507,7 +507,8 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                         ),
                       ),
                     ),
-                  );
+                  ),
+                );
                 }),
                 Text(
                   'Учтено компонентов: ${sleepScore.availableComponents} из 4 · исходный вес доступных данных: ${sleepScore.availableWeight.toStringAsFixed(0)}%. Недостающие веса пропорционально перераспределены.',
