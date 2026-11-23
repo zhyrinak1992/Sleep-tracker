@@ -55,19 +55,19 @@ void main() {
     test(
       'repairs partially invalid history even when valid count is unchanged',
       () {
-      final valid = SleepRecordEvent(
-        type: 'sleep_score',
-        sessionId: 'night-1',
-        value: 92,
-        achievedAt: DateTime.utc(2026, 11, 20, 7),
-      ).toMap();
-      final decoded = SleepRecordService.decodePersistedHistory(
-        '[${jsonEncode(valid)},{"type":"unknown"}]',
-      );
+        final valid = SleepRecordEvent(
+          type: 'sleep_score',
+          sessionId: 'night-1',
+          value: 92,
+          achievedAt: DateTime.utc(2026, 11, 20, 7),
+        ).toMap();
+        final decoded = SleepRecordService.decodePersistedHistory(
+          '[${jsonEncode(valid)},{"type":"unknown"}]',
+        );
 
-      expect(decoded.events, hasLength(1));
-      expect(decoded.events.single.sessionId, 'night-1');
-      expect(decoded.needsRewrite, isTrue);
+        expect(decoded.events, hasLength(1));
+        expect(decoded.events.single.sessionId, 'night-1');
+        expect(decoded.needsRewrite, isTrue);
       },
     );
 
