@@ -3,6 +3,7 @@ import '../../data/sleep_database.dart';
 import '../../models/sleep_session.dart';
 import '../../models/sleep_note.dart';
 import '../diary/sleep_session_metrics.dart';
+import 'sleep_score.dart';
 
 enum PeriodicReportKind { week, month, year }
 
@@ -139,6 +140,34 @@ class PeriodicReportService {
         final measuredTimeInBed = metric.timeInBedMinutes;
         if (measuredTimeInBed != null && measuredTimeInBed > 0) timeInBed.add(measuredTimeInBed);
       }
+      final nightlyScores = selected.map((session) =>
+        SleepScoreCalculator.calculateForSession(
+          session: session,
+          historySessions: allSessions,
+          morningReports: morning,
+          stagesBySession: stages,
+        ),
+      ).toList();
+      final scoreValues = nightlyScores.map((item) => item.score).whereType<double>().toList();
+      final scoreComponents = <String, Map<String, Object?>>{};
+      for (final key in ['duration', 'efficiency', 'awakenings', 'subjectiveQuality']) {
+        final componentValues = <double>[];
+        String? label;
+        double? weight;
+        for (final score in nightlyScores) {
+          for (final component in score.components.where((item) => item.key == key)) {
+            label = component.label;
+            weight = component.weight;
+            if (component.score != null) componentValues.add(component.score!);
+          }
+        }
+        scoreComponents[key] = {
+          'label': label,
+          'weight': weight,
+          'average': avg(componentValues),
+          'samples': componentValues.length,
+        };
+      }
       final efficiencies = metrics.map((m) => m.sleepEfficiencyPercent).whereType<double>().toList();
       final awakenings = <int>[];
       for (var i = 0; i < selected.length; i++) {
@@ -161,6 +190,12 @@ class PeriodicReportService {
         'averageAwakenings': avg(awakenings), 'awakeningSamples': awakenings.length,
         'averageQuality': avg(qualities), 'qualitySamples': qualities.length,
         'averageWellbeing': avg(wellbeing), 'wellbeingSamples': wellbeing.length,
+        'score': {
+          'average': avg(scoreValues),
+          'samples': scoreValues.length,
+          'components': scoreComponents,
+          'availableWeightAverage': avg(nightlyScores.map((item) => item.availableWeight)),
+        },
       };
     }
 
