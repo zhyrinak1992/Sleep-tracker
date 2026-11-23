@@ -67,6 +67,7 @@ class PeriodicReportService {
     final morning = await database.getMorningReportsForSessions(completed.map((s) => s.id).toList());
     final audio = await database.getAudioEvents();
     final notes = await database.getNotes();
+    final scoreCache = <String, SleepScoreResult>{};
 
     for (final kind in PeriodicReportKind.values) {
       final first = _periodStart(completed.first.startedAt, kind);
@@ -85,6 +86,7 @@ class PeriodicReportService {
               kind: kind, start: cursor, end: end, sessions: selected,
               previousSessions: previous, stages: stages, morning: morning,
               audio: audio, notes: notes, allSessions: completed,
+              scoreCache: scoreCache,
             );
             await database.setAppMetadata(metadataPrefix + id, jsonEncode(snapshot));
           }
@@ -125,6 +127,7 @@ class PeriodicReportService {
     required Map<String, Map<String, Object?>> morning,
     required List<Map<String, Object?>> audio, required List<SleepNote> notes,
     required List<SleepSession> allSessions,
+    required Map<String, SleepScoreResult> scoreCache,
   }) {
     Map<String, Object?> summarize(List<SleepSession> selected) {
       final metrics = selected.map((s) => SleepSessionMetrics.calculate(session: s, stages: stages[s.id] ?? const [])).toList();
@@ -141,11 +144,13 @@ class PeriodicReportService {
         if (measuredTimeInBed != null && measuredTimeInBed > 0) timeInBed.add(measuredTimeInBed);
       }
       final nightlyScores = selected.map((session) =>
-        SleepScoreCalculator.calculateForSession(
-          session: session,
-          historySessions: allSessions,
-          morningReports: morning,
-          stagesBySession: stages,
+        scoreCache.putIfAbsent(session.id, () =>
+          SleepScoreCalculator.calculateForSession(
+            session: session,
+            historySessions: allSessions,
+            morningReports: morning,
+            stagesBySession: stages,
+          ),
         ),
       ).toList();
       final scoreValues = nightlyScores.map((item) => item.score).whereType<double>().toList();
