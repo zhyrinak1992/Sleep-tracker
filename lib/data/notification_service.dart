@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_local_timezone/flutter_local_timezone.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
@@ -8,6 +9,15 @@ class NotificationService {
   static final instance = NotificationService._();
   final _plugin = FlutterLocalNotificationsPlugin();
   bool _ready = false;
+  static const String _sleepStartPayload = 'sleep_start_offer';
+  static const int _deferredSleepOfferId = 5099;
+  final ValueNotifier<bool> sleepStartRequested = ValueNotifier<bool>(false);
+
+  void _handleNotificationResponse(NotificationResponse response) {
+    if (response.payload == _sleepStartPayload) {
+      sleepStartRequested.value = true;
+    }
+  }
 
   Future<void> initialize() async {
     if (_ready) return;
@@ -18,9 +28,18 @@ class NotificationService {
       iOS: DarwinInitializationSettings(requestAlertPermission: true, requestBadgePermission: true, requestSoundPermission: true),
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
     );
-    await _plugin.initialize(settings);
+    await _plugin.initialize(
+      settings,
+      onDidReceiveNotificationResponse: _handleNotificationResponse,
+    );
     await _plugin.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
       ?.requestPermissions(alert: true, badge: true, sound: true);
+    final launchDetails = await _plugin.getNotificationAppLaunchDetails();
+    final launchResponse = launchDetails?.notificationResponse;
+    if (launchDetails?.didNotificationLaunchApp == true &&
+        launchResponse?.payload == _sleepStartPayload) {
+      sleepStartRequested.value = true;
+    }
     _ready = true;
   }
 
@@ -69,9 +88,39 @@ class NotificationService {
             android: AndroidNotificationDetails('sleep_night', 'Ночное наблюдение', importance: Importance.defaultImportance, priority: Priority.defaultPriority),
           ),
           androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          payload: _sleepStartPayload,
         );
       }
     }
+  }
+
+
+  /// Повторное предложение начать ночное наблюдение после выбора «Отложить».
+  /// Отсрочка действует 30 минут; открытие уведомления передаёт управление
+  /// приложению, где пользователь подтверждает запуск.
+  Future<void> deferSleepStart() async {
+    await initialize();
+    // Replace the next half-hourly reminder with one clear deferred offer.
+    await cancelNextMidnightAttempt();
+    await _plugin.cancel(_deferredSleepOfferId);
+    final scheduled = tz.TZDateTime.now(tz.local).add(const Duration(minutes: 30));
+    await _plugin.zonedSchedule(
+      _deferredSleepOfferId,
+      'Ночное наблюдение отложено',
+      'Готовы начать наблюдение за сном? Откройте Sleep Tracker.',
+      scheduled,
+      const NotificationDetails(
+        iOS: DarwinNotificationDetails(presentAlert: true, presentSound: true),
+        android: AndroidNotificationDetails(
+          'sleep_night',
+          'Ночное наблюдение',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: _sleepStartPayload,
+    );
   }
 
   Future<void> cancelNextMidnightAttempt() async {
@@ -142,6 +191,7 @@ class NotificationService {
     await _plugin.zonedSchedule(notificationId, 'Скоро очистка корзины', 'Через 24 часа одна или несколько ночей будут удалены из корзины окончательно.', tz.TZDateTime.from(reminderAt, tz.local), details, androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle);
   }
   Future<void> cancelNightReminders() async {
+    await _plugin.cancel(_deferredSleepOfferId);
     // Remove legacy repeating IDs from previous app versions.
     for (var id = 4200; id <= 4213; id++) {
       await _plugin.cancel(id);
