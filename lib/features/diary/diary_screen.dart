@@ -146,7 +146,6 @@ class _DiaryScreenState extends State<DiaryScreen> {
             final daySessions = byDay[_day(date)] ?? const <SleepSession>[];
             final hasSession = daySessions.isNotEmpty;
             final selected = DateUtils.isSameDay(date, _selectedDay);
-            final hasOpen = daySessions.any((s) => s.isOpen);
             final markerDots = daySessions.map((session) {
               final color = session.isOpen
                   ? const Color(0xFF8BC7E8)
