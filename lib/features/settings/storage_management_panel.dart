@@ -46,8 +46,14 @@ class _StorageManagementPanelState extends State<StorageManagementPanel> {
   }
 
   Future<void> _changeThreshold(int value) async {
-    await StorageService.instance.setWarningThreshold(value);
-    if (mounted) setState(() => _threshold = value);
+    try {
+      await StorageService.instance.setWarningThreshold(value);
+      if (mounted) setState(() => _threshold = value);
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось сохранить порог предупреждения: $error')),
+      );
+    }
   }
 
   Future<void> _clearCache(StorageSnapshot snapshot) async {
