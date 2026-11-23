@@ -70,6 +70,26 @@ class SleepRecordService {
 
   static final instance = SleepRecordService._();
   static const _historyKey = 'sleep_records_history_v1';
+  static const _celebratedKey = 'sleep_records_celebrated_v1';
+
+  String _eventKey(SleepRecordEvent event) =>
+      '${event.type}|${event.sessionId}|${event.value}';
+
+  Future<void> markCelebrated(SleepRecordEvent event) async {
+    final database = SleepDatabase.instance;
+    final raw = await database.getAppMetadata(_celebratedKey);
+    final keys = <String>{};
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) keys.addAll(decoded.whereType<String>());
+      } on FormatException {
+        // Rebuild the marker list if metadata is malformed.
+      }
+    }
+    keys.add(_eventKey(event));
+    await database.setAppMetadata(_celebratedKey, jsonEncode(keys.toList()));
+  }
 
   /// Calculates records from source sleep data and persists only record events
   /// in app_metadata. Existing sleep tables and backup schema remain unchanged.
@@ -89,6 +109,17 @@ class SleepRecordService {
     final morningReports = await database.getMorningReportsForSessions(ids);
 
     final raw = await database.getAppMetadata(_historyKey);
+    final isFirstInitialization = raw == null || raw.isEmpty;
+    final celebratedRaw = await database.getAppMetadata(_celebratedKey);
+    final celebratedKeys = <String>{};
+    if (celebratedRaw != null && celebratedRaw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(celebratedRaw);
+        if (decoded is List) celebratedKeys.addAll(decoded.whereType<String>());
+      } on FormatException {
+        // An invalid celebration marker must not affect sleep data.
+      }
+    }
     final history = <SleepRecordEvent>[];
     if (raw != null && raw.isNotEmpty) {
       try {
@@ -137,7 +168,9 @@ class SleepRecordService {
             achievedAt: session.endedAt!,
           );
           history.add(event);
-          newRecords.add(event);
+          if (!isFirstInitialization && !celebratedKeys.contains(eventKey)) {
+            newRecords.add(event);
+          }
           knownEvents.add(eventKey);
           bestScore = value;
         }
