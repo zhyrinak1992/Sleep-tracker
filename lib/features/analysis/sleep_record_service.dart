@@ -65,6 +65,47 @@ class SleepRecordHistoryDecode {
 /// Rebuilds the sequence of personal records from the current source data.
 /// A session contributes at most one candidate per metric; corrected or
 /// deleted sessions therefore cannot leave stale record events behind.
+List<SleepRecordEvent> findNewSleepRecordEvents({
+  required List<SleepRecordEvent> previousHistory,
+  required List<SleepRecordEvent> currentHistory,
+  required Set<String> celebratedKeys,
+  required bool isFirstInitialization,
+}) {
+  if (isFirstInitialization) return const [];
+
+  String key(SleepRecordEvent event) =>
+      '${event.type}|${event.sessionId}|${event.value}';
+  String sessionMetric(SleepRecordEvent event) =>
+      '${event.type}|${event.sessionId}';
+
+  final previousKeys = previousHistory.map(key).toSet();
+  final previousSessionMetrics = previousHistory.map(sessionMetric).toSet();
+  final previousLatestByType = <String, DateTime>{};
+  for (final event in previousHistory) {
+    final current = previousLatestByType[event.type];
+    if (current == null || event.achievedAt.isAfter(current)) {
+      previousLatestByType[event.type] = event.achievedAt;
+    }
+  }
+
+  final result = <SleepRecordEvent>[];
+  for (final event in currentHistory) {
+    final eventKey = key(event);
+    if (celebratedKeys.contains(eventKey)) continue;
+
+    // A persisted but unacknowledged event is a pending celebration. This
+    // recovers correctly after the app closes before its dialog is dismissed.
+    final wasPending = previousKeys.contains(eventKey);
+    final isNewerRecord = !previousKeys.contains(eventKey) &&
+        !previousSessionMetrics.contains(sessionMetric(event)) &&
+        (previousLatestByType[event.type] == null ||
+            event.achievedAt.isAfter(previousLatestByType[event.type]!));
+
+    if (wasPending || isNewerRecord) result.add(event);
+  }
+  return List.unmodifiable(result);
+}
+
 List<SleepRecordEvent> buildSleepRecordHistory(
   Iterable<SleepRecordEvent> candidates,
 ) {
@@ -259,18 +300,6 @@ class SleepRecordService {
     }
     final decodedHistory = decodePersistedHistory(raw);
     final previousHistory = decodedHistory.events;
-    final previousKeys = previousHistory.map(_eventKey).toSet();
-    final previousSessionMetrics = previousHistory
-        .map((event) => '${event.type}|${event.sessionId}')
-        .toSet();
-    final previousLatestByType = <String, DateTime>{};
-    for (final event in previousHistory) {
-      final current = previousLatestByType[event.type];
-      if (current == null || event.achievedAt.isAfter(current)) {
-        previousLatestByType[event.type] = event.achievedAt;
-      }
-    }
-
     final candidates = <SleepRecordEvent>[];
     for (final session in sessions) {
       final stages = stagesBySession[session.id] ?? const <Map<String, Object?>>[];
@@ -314,24 +343,14 @@ class SleepRecordService {
     final historyChanged = decodedHistory.needsRewrite ||
         !_sameHistory(previousHistory, history);
 
-    // Recover only genuinely newer records. A changed value for an existing
-    // session, or an older record promoted after deletion, is a recalculation,
-    // not a new achievement deserving a celebration.
-    final newRecords = <SleepRecordEvent>[];
-    if (!isFirstInitialization) {
-      for (final event in history) {
-        final previousLatest = previousLatestByType[event.type];
-        final sessionMetric = '${event.type}|${event.sessionId}';
-        final isNewSessionRecord = !previousKeys.contains(_eventKey(event)) &&
-            !previousSessionMetrics.contains(sessionMetric) &&
-            (previousLatest == null ||
-                event.achievedAt.isAfter(previousLatest));
-        if (isNewSessionRecord &&
-            !celebratedKeys.contains(_eventKey(event))) {
-          newRecords.add(event);
-        }
-      }
-    }
+    // Recover unacknowledged persisted events as well as genuinely newer
+    // records; corrected or promoted historical nights are not celebrated.
+    final newRecords = findNewSleepRecordEvents(
+      previousHistory: previousHistory,
+      currentHistory: history,
+      celebratedKeys: celebratedKeys,
+      isFirstInitialization: isFirstInitialization,
+    );
 
     // On the first run, existing sleep history is a baseline, not a stream
     // of new achievements. Persist its acknowledgement before the history
