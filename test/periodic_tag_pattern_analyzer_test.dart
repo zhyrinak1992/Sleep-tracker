@@ -1,0 +1,91 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:sleep_tracker/features/analysis/periodic_tag_pattern_analyzer.dart';
+import 'package:sleep_tracker/models/sleep_session.dart';
+
+SleepSession _session(String id, DateTime start) => SleepSession(
+  id: id,
+  startedAt: start,
+  endedAt: start.add(const Duration(hours: 7)),
+  source: 'apple_health:test',
+  createdAt: start,
+  updatedAt: start,
+);
+
+void main() {
+  group('PeriodicTagPatternAnalyzer', () {
+    final start = DateTime(2026, 1, 1);
+
+    test('compares tagged and untagged nights with independent metric samples', () {
+      final sessions = <SleepSession>[
+        for (var i = 0; i < 4; i++) _session('tag-$i', start.add(Duration(days: i))),
+        for (var i = 0; i < 4; i++) _session('plain-$i', start.add(Duration(days: i + 5))),
+      ];
+      final result = PeriodicTagPatternAnalyzer.analyze(
+        sessions: sessions,
+        tagsBySession: {
+          for (var i = 0; i < 4; i++) 'tag-$i': {'caffeine'},
+        },
+        durationBySession: {
+          for (var i = 0; i < 4; i++) 'tag-$i': 360,
+          for (var i = 0; i < 4; i++) 'plain-$i': 420,
+        },
+        scoreBySession: {
+          for (var i = 0; i < 4; i++) 'tag-$i': 65,
+          for (var i = 0; i < 4; i++) 'plain-$i': 80,
+        },
+        awakeningsBySession: {
+          for (var i = 0; i < 4; i++) 'tag-$i': 3,
+          for (var i = 0; i < 4; i++) 'plain-$i': 1,
+        },
+        tagLabels: {'caffeine': 'Кофеин'},
+      );
+
+      expect(result, hasLength(1));
+      final pattern = result.single;
+      expect(pattern['label'], 'Кофеин');
+      expect(pattern['withTagNights'], 4);
+      expect(pattern['withoutTagNights'], 4);
+      final metrics = Map<String, Object?>.from(pattern['metrics'] as Map);
+      final duration = Map<String, Object?>.from(metrics['duration'] as Map);
+      expect(duration['withTagAverage'], 360);
+      expect(duration['withoutTagAverage'], 420);
+      expect(duration['difference'], -60);
+      expect(duration['isSufficient'], isTrue);
+    });
+
+    test('does not convert missing values to zero or publish weak comparisons', () {
+      final sessions = <SleepSession>[
+        for (var i = 0; i < 3; i++) _session('tag-$i', start.add(Duration(days: i))),
+        for (var i = 0; i < 5; i++) _session('plain-$i', start.add(Duration(days: i + 5))),
+      ];
+      final result = PeriodicTagPatternAnalyzer.analyze(
+        sessions: sessions,
+        tagsBySession: {
+          for (var i = 0; i < 3; i++) 'tag-$i': {'stress'},
+        },
+        durationBySession: {
+          'tag-0': 400,
+          'tag-1': 410,
+          'plain-0': 420,
+          'plain-1': 430,
+          'plain-2': 440,
+          'plain-3': 450,
+        },
+        scoreBySession: const {},
+        awakeningsBySession: const {},
+        tagLabels: const {},
+      );
+
+      final metrics = Map<String, Object?>.from(result.single['metrics'] as Map);
+      final duration = Map<String, Object?>.from(metrics['duration'] as Map);
+      expect(duration['withTagSamples'], 2);
+      expect(duration['withoutTagSamples'], 4);
+      expect(duration['withTagAverage'], 405);
+      expect(duration['difference'], isNull);
+      expect(duration['isSufficient'], isFalse);
+      final score = Map<String, Object?>.from(metrics['score'] as Map);
+      expect(score['withTagAverage'], isNull);
+      expect(score['withoutTagAverage'], isNull);
+    });
+  });
+}
