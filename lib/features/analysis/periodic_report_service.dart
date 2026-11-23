@@ -53,7 +53,8 @@ class PeriodicReportSnapshot {
 class PeriodicReportService {
   PeriodicReportService(this.database);
   final SleepDatabase database;
-  static const metadataPrefix = 'periodic_report_v2_';
+  static const metadataPrefix = 'periodic_report_v3_';
+  static const previousMetadataPrefix = 'periodic_report_v2_';
   static const legacyMetadataPrefix = 'periodic_report_v1_';
 
   Future<List<PeriodicReportSnapshot>> generateClosedReports({DateTime? now}) async {
@@ -99,6 +100,7 @@ class PeriodicReportService {
 
   Future<List<PeriodicReportSnapshot>> loadArchive() async {
     final legacy = await database.getAppMetadataByPrefix(legacyMetadataPrefix);
+    final previous = await database.getAppMetadataByPrefix(previousMetadataPrefix);
     final current = await database.getAppMetadataByPrefix(metadataPrefix);
     final byId = <String, PeriodicReportSnapshot>{};
     for (final value in legacy.values) {
@@ -107,8 +109,13 @@ class PeriodicReportService {
         byId[report.id] = report;
       } catch (_) {}
     }
-    // The corrected v2 snapshot wins while the v1 entry remains in app_metadata
-    // for backup compatibility and rollback safety.
+    // New v3 snapshots win; older v1/v2 snapshots remain readable and intact.
+    for (final value in previous.values) {
+      try {
+        final report = PeriodicReportSnapshot.decode(value);
+        byId[report.id] = report;
+      } catch (_) {}
+    }
     for (final value in current.values) {
       try {
         final report = PeriodicReportSnapshot.decode(value);
@@ -225,7 +232,7 @@ class PeriodicReportService {
     }).toList();
 
     final data = <String, Object?>{
-      'schemaVersion': 2, 'id': _id(kind, start), 'kind': kind.name,
+      'schemaVersion': 3, 'id': _id(kind, start), 'kind': kind.name,
       'start': start.toIso8601String(), 'endExclusive': end.toIso8601String(),
       'generatedAt': DateTime.now().toIso8601String(),
       ...current, 'audioEventCount': events.length, 'audioCategories': categories,
