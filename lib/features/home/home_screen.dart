@@ -6,10 +6,8 @@ import '../../data/notification_service.dart';
 import '../../data/audio_observation_service.dart';
 import '../../data/sleep_database.dart';
 import '../../data/comparison_suggestion_store.dart';
-import '../../data/sleep_tag.dart';
 import '../../models/sleep_tag.dart';
 import '../analysis/tag_sleep_comparison.dart';
-import '../analysis/tag_combination_suggestions.dart';
 import '../diary/sleep_session_metrics.dart';
 import 'comparison_suggestion_analyzer.dart';
 import 'comparison_suggestion_card.dart';
@@ -241,6 +239,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   SleepSession? _open;
   SleepSession? _latest;
   bool _loading = true;
+  bool _refreshing = false;
   ComparisonSuggestionRecord? _comparisonSuggestion;
   Map<String, String> _suggestionTagLabels = const {};
   Timer? _suggestionExpiryTimer;
@@ -301,6 +300,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _refresh() async {
+    if (_refreshing) return;
+    _refreshing = true;
+    try {
+      await _refreshInternal();
+    } finally {
+      _refreshing = false;
+    }
+  }
+
+  Future<void> _refreshInternal() async {
     final open = await widget.database.getOpenSession();
     final sessions = await widget.database.getSessions(limit: 10000);
     ComparisonSuggestionRecord? suggestion;
