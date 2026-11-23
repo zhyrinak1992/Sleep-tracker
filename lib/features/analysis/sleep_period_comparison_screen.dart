@@ -169,7 +169,7 @@ class _SleepPeriodComparisonScreenState extends State<SleepPeriodComparisonScree
           const Text('Сравнение произвольных периодов',
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
-          const Text('Выберите любые два диапазона дат. Помимо длительности и оценки, сравнивается стабильность времени засыпания и пробуждения. Для этих показателей используется круговая статистика, корректно учитывающая переход через полночь.',
+          const Text('Выберите любые два диапазона дат. Сравниваются длительность, эффективность, пробуждения, утренние оценки, звуковые события и регулярность фактического времени сна. Для каждого показателя отображается собственный размер выборки; время сравнивается с учётом перехода через полночь.',
             style: TextStyle(color: AppTheme.muted, height: 1.4)),
           const SizedBox(height: 18),
           SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -192,14 +192,14 @@ class _SleepPeriodComparisonScreenState extends State<SleepPeriodComparisonScree
             )),
           ])),
           const SizedBox(height: 14),
-          _ComparisonCard(title: 'Средняя длительность', a: _duration(current.averageDurationMinutes),
-            b: _duration(previous.averageDurationMinutes),
+          _ComparisonCard(title: 'Средняя длительность', a: _duration(current.averageDurationMinutes) + ' · n=' + current.completed.toString(),
+            b: _duration(previous.averageDurationMinutes) + ' · n=' + previous.completed.toString(),
             change: durationDelta == null ? 'Недостаточно данных' :
               '${durationDelta > 0 ? '+' : ''}${_duration(durationDelta.abs())} · ${_change(durationPercent, percentage: true)}'),
           const SizedBox(height: 10),
           _ComparisonCard(title: 'Средняя оценка самочувствия',
-            a: current.averageRating == null ? 'Нет оценок' : '${current.averageRating!.toStringAsFixed(1)} / 5',
-            b: previous.averageRating == null ? 'Нет оценок' : '${previous.averageRating!.toStringAsFixed(1)} / 5',
+            a: current.averageRating == null ? 'Нет оценок' : '${current.averageRating!.toStringAsFixed(1)} / 5 · n=${current.rated}',
+            b: previous.averageRating == null ? 'Нет оценок' : '${previous.averageRating!.toStringAsFixed(1)} / 5 · n=${previous.rated}',
             change: _change(ratingDelta)),
           _ComparisonCard(
             title: 'Эффективность сна',
@@ -282,7 +282,7 @@ class _SleepPeriodComparisonScreenState extends State<SleepPeriodComparisonScree
             b: '${previous.sessions.length} всего · ${previous.completed} завершено · ${previous.rated} с оценкой',
             change: 'Количество записей сравнивается напрямую'),
           const SizedBox(height: 12),
-          const Text('Стабильность — медианное абсолютное отклонение фактического времени засыпания и пробуждения; используются только реальные границы сна из неотредактированных автоматических записей. Для расчёта нужно не менее двух таких ночей. Сравнение не устанавливает причины изменений, отсутствующие измерения не заменяются нулями.',
+          const Text('Стабильность — медианное абсолютное отклонение фактического времени засыпания и пробуждения от круговой медианы. В выборку регулярности входят только записи с фактическими границами сна, не отмеченные как ручные или изменённые; нужно не менее двух таких ночей. Длительность в карточке отражает сохранённый интервал ночной сессии. Отсутствующие измерения не заменяются нулями. Сравнение не устанавливает причины изменений, отсутствующие измерения не заменяются нулями.',
             style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.45)),
         ],
       );
