@@ -203,7 +203,7 @@ void main() {
       expect(findNewSleepRecordEvents(
         previousHistory: previous,
         currentHistory: [previous.single, newRecord],
-        celebratedKeys: const {},
+        celebratedKeys: {'sleep_score|night-old|90'},
         isFirstInitialization: false,
       ), [newRecord]);
       expect(findNewSleepRecordEvents(
