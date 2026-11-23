@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -20,7 +22,8 @@ String _formatPeriod(Object? start, Object? end) {
   final a = DateTime.tryParse(start);
   final b = DateTime.tryParse(end);
   if (a == null || b == null) return 'Период не указан';
-  return '${DateFormat('d MMM', 'ru').format(a.toLocal())} — ${DateFormat('d MMM yyyy', 'ru').format(b.toLocal().subtract(const Duration(days: 1)))}';
+  final lastDay = DateTime(b.year, b.month, b.day - 1);
+  return '${DateFormat('d MMM', 'ru').format(a.toLocal())} — ${DateFormat('d MMM yyyy', 'ru').format(lastDay)}';
 }
 
 String _formatHistoryDelta(Map<String, Object?> change) {
@@ -325,21 +328,42 @@ class _SleepChangeHistoryChartScreenState extends State<SleepChangeHistoryChartS
                     Text('Изменение, ${unit.isEmpty ? 'без единиц' : unit}. Положительные и отрицательные значения показываются по разные стороны нулевой линии.',
                       style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
                     const SizedBox(height: 10),
-                    SizedBox(
-                      height: 142,
-                      child: LayoutBuilder(builder: (context, constraints) => GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTapUp: (details) {
-                          final index = (details.localPosition.dx / constraints.maxWidth * snapshots.length)
-                            .floor().clamp(0, snapshots.length - 1);
-                          if (values[index] != null) _openSnapshot(all, snapshots[index]);
-                        },
-                        child: CustomPaint(
-                          size: Size(constraints.maxWidth, 142),
-                          painter: _ChangeSeriesPainter(values),
+                    LayoutBuilder(builder: (context, constraints) {
+                      final chartWidth = math.max(constraints.maxWidth, snapshots.length * 58.0);
+                      final pointWidth = chartWidth / snapshots.length;
+                      return SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: SizedBox(
+                          width: chartWidth,
+                          child: Column(children: [
+                            SizedBox(
+                              height: 112,
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTapUp: (details) {
+                                  final index = (details.localPosition.dx / chartWidth * snapshots.length)
+                                    .floor().clamp(0, snapshots.length - 1);
+                                  if (values[index] != null) _openSnapshot(all, snapshots[index]);
+                                },
+                                child: CustomPaint(
+                                  size: Size(chartWidth, 112),
+                                  painter: _ChangeSeriesPainter(values),
+                                ),
+                              ),
+                            ),
+                            Row(children: [
+                              for (final snapshot in snapshots)
+                                SizedBox(
+                                  width: pointWidth,
+                                  child: Text(snapshot['periodKey'] as String? ?? '',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(fontSize: 9, color: AppTheme.muted)),
+                                ),
+                            ]),
+                          ]),
                         ),
-                      )),
-                    ),
+                      );
+                    }),
                     Wrap(
                       spacing: 8,
                       runSpacing: 4,
