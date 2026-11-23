@@ -83,8 +83,8 @@ void main() {
       expect(result.chartAwakeningValues[1], 1);
       expect(result.chartQualityValues[1], 4);
       expect(result.chartWellbeingValues[1], 5);
-      expect(result.typicalBedtimeMinute, 23 * 60 + 10);
-      expect(result.typicalWakeMinute, 6 * 60 + 10);
+      expect(result.typicalBedtimeMinute, isNull);
+      expect(result.typicalWakeMinute, isNull);
     });
 
     test('does not turn missing phase coverage into zero efficiency or zero awakenings', () {
