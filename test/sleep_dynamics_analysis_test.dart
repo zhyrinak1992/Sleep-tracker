@@ -34,6 +34,21 @@ void main() {
       );
     });
 
+    test('builds equal rolling windows for 7, 30, 90 and 365 calendar days', () {
+      final now = DateTime(2026, 11, 23, 17, 45);
+      for (final days in [7, 30, 90, 365]) {
+        final ranges = SleepDynamicsAnalysis.rollingRanges(now, days);
+        expect(ranges.currentEndExclusive.difference(ranges.currentStart).inDays, days);
+        expect(ranges.previousEndExclusive.difference(ranges.previousStart).inDays, days);
+        expect(ranges.previousEndExclusive, ranges.currentStart);
+        expect(ranges.currentEndExclusive, DateTime(2026, 11, 24));
+      }
+      expect(
+        () => SleepDynamicsAnalysis.rollingRanges(now, 0),
+        throwsArgumentError,
+      );
+    });
+
     test('maps chart buckets to exact calendar ranges including the short fifth week', () {
       final week = SleepDynamicsAnalysis.bucketRange(
         DateTime(2026, 11, 23), SleepDynamicsPeriod.week, 6);
