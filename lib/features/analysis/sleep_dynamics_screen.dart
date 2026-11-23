@@ -28,6 +28,7 @@ class _DynamicsData {
 class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
   late Future<_DynamicsData> _future;
   SleepDynamicsPeriod _period = SleepDynamicsPeriod.week;
+  int _rollingDays = 30;
   DateTime _anchor = DateTime.now();
 
   @override
@@ -232,7 +233,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
         }
         final data = snapshot.data!;
         final today = DateTime.now();
-        final rolling = SleepDynamicsAnalysis.rollingThirtyDayRanges(today);
+        final rolling = SleepDynamicsAnalysis.rollingRanges(today, _rollingDays);
         final rollingCurrent = _summarize(data, rolling.currentStart, rolling.currentEndExclusive, SleepDynamicsPeriod.month);
         final rollingPrevious = _summarize(data, rolling.previousStart, rolling.previousEndExclusive, SleepDynamicsPeriod.month);
 
@@ -252,7 +253,21 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
               icon: Icons.show_chart_rounded,
             ),
             const SizedBox(height: 10),
+            const Text('Сравнение равных скользящих периодов', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            const SizedBox(height: 8),
+            SegmentedButton<int>(
+              segments: const [
+                ButtonSegment(value: 7, label: Text('7 дн.')),
+                ButtonSegment(value: 30, label: Text('30 дн.')),
+                ButtonSegment(value: 90, label: Text('90 дн.')),
+                ButtonSegment(value: 365, label: Text('365 дн.')),
+              ],
+              selected: {_rollingDays},
+              onSelectionChanged: (value) => setState(() => _rollingDays = value.first),
+            ),
+            const SizedBox(height: 8),
             _RollingComparisonCard(
+              days: _rollingDays,
               current: rollingCurrent,
               previous: rollingPrevious,
               dateRange: _dateRange,
@@ -452,6 +467,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
 
 class _RollingComparisonCard extends StatelessWidget {
   const _RollingComparisonCard({
+    required this.days,
     required this.current,
     required this.previous,
     required this.dateRange,
@@ -459,6 +475,7 @@ class _RollingComparisonCard extends StatelessWidget {
     required this.number,
     required this.signed,
   });
+  final int days;
   final SleepDynamicsSummary current;
   final SleepDynamicsSummary previous;
   final String Function(DateTime, DateTime) dateRange;
@@ -470,10 +487,10 @@ class _RollingComparisonCard extends StatelessWidget {
   Widget build(BuildContext context) => SectionCard(child: Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      const Text('Скользящее сравнение 30 + 30 дней', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+      Text('Скользящее сравнение $days + $days дней', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
       const SizedBox(height: 5),
-      const Text('Последние 30 календарных дней сопоставляются с непосредственно предшествующими 30 днями.',
-        style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4)),
+      Text('Последние $days календарных дней сопоставляются с непосредственно предшествующими $days днями.',
+        style: const TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4)),
       const SizedBox(height: 12),
       _RollingMetric(
         label: 'Средняя длительность сна',
@@ -573,8 +590,8 @@ class _RollingComparisonCard extends StatelessWidget {
       ),
       const SizedBox(height: 8),
       Text(
-        'Последние 30 дней: ' + dateRange(current.start, current.endExclusive) +
-        ' · предыдущие 30 дней: ' + dateRange(previous.start, previous.endExclusive) + '.',
+        'Последние $days дней: ' + dateRange(current.start, current.endExclusive) +
+        ' · предыдущие $days дней: ' + dateRange(previous.start, previous.endExclusive) + '.',
         style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
       ),
     ],
