@@ -172,7 +172,7 @@ class ComparisonSuggestionStore {
     if (newlyObserved >= requiredGrowth) return true;
 
     // Never compare raw deltas across different metrics or units.
-    if (candidate.metric != old.metric ||
+    if (candidate.metric != old.metric || candidate.pValue >= 0.05 ||
         candidate.withNights < 6 || candidate.withoutNights < 6) return false;
     final materialDifference = (candidate.difference - old.difference).abs() >=
         candidate.threshold;
