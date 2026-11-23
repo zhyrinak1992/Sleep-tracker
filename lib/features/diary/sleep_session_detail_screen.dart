@@ -173,7 +173,7 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
     }
 
     final currentAnswers = parseAnswers(report);
-    final scoreCutoff = session.startedAt.subtract(const Duration(days: 90));
+    final scoreCutoff = session.startedAt.subtract(const Duration(days: 100));
     final priorSessions = (await widget.database.getSessions(limit: 365))
         .where((item) => item.id != session.id && !item.isOpen &&
             item.startedAt.isBefore(session.startedAt) &&
@@ -195,6 +195,15 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
       morningReports: scoreReports,
       stagesBySession: scoreStages,
     );
+
+    final previousSleepScores = historySessions.map((previous) =>
+      SleepScoreCalculator.calculateForSession(
+        session: previous,
+        historySessions: priorSessions,
+        morningReports: scoreReports,
+        stagesBySession: scoreStages,
+      ).score,
+    ).whereType<double>().toList();
 
     final previousDurations = <double>[];
     final previousEfficiencies = <double>[];
@@ -354,6 +363,14 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                 metrics.sleepDurationMinutes?.toDouble(),
                 previousDurations,
                 isDuration: true,
+              ), style: const TextStyle(fontSize: 12, height: 1.4)),
+              const SizedBox(height: 5),
+              Text(comparisonText(
+                'Оценка качества сна 0–100',
+                sleepScore.score,
+                previousSleepScores,
+                unit: ' балла',
+                deltaUnit: ' балла',
               ), style: const TextStyle(fontSize: 12, height: 1.4)),
               const SizedBox(height: 5),
               Text(comparisonText(
