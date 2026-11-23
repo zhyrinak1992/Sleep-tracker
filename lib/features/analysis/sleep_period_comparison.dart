@@ -1,5 +1,4 @@
 import '../../models/sleep_session.dart';
-import 'sleep_analytics.dart';
 import 'audio_event_analysis.dart';
 import '../diary/sleep_session_metrics.dart';
 import 'sleep_regularity_analysis.dart';
@@ -49,7 +48,7 @@ class SleepPeriodComparison {
     final completed = selected.where((session) =>
       session.duration != null && session.duration!.inMinutes > 0).toList();
     final rated = selected.where((session) => session.morningRating != null).toList();
-    final regularity = SleepAnalytics.regularity(completed);
+    final regularity = SleepRegularityAnalysis.calculate(completed);
     return SleepRangeSummary(
       start: from,
       endExclusive: until,
@@ -60,9 +59,9 @@ class SleepPeriodComparison {
         completed.fold<int>(0, (sum, item) => sum + item.duration!.inMinutes) / completed.length,
       averageRating: rated.isEmpty ? null :
         rated.fold<int>(0, (sum, item) => sum + item.morningRating!) / rated.length,
-      bedtimeDeviationMinutes: regularity.bedtimeDeviationMinutes,
-      wakeTimeDeviationMinutes: regularity.wakeTimeDeviationMinutes,
-      regularitySampleCount: regularity.sampleCount,
+      bedtimeDeviationMinutes: regularity.bedtimeMad,
+      wakeTimeDeviationMinutes: regularity.wakeMad,
+      regularitySampleCount: regularity.nights.length,
     );
   }
 
