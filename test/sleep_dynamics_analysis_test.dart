@@ -71,6 +71,34 @@ void main() {
       );
     });
 
+
+    test('keeps rolling windows on local calendar midnights across DST boundaries', () {
+      // Run this test under a DST-observing local timezone (CI sets Europe/Berlin).
+      final ranges = SleepDynamicsAnalysis.rollingRanges(DateTime(2026, 4, 2, 12), 7);
+      expect(ranges.currentStart, DateTime(2026, 3, 27));
+      expect(ranges.currentEndExclusive, DateTime(2026, 4, 3));
+      expect(ranges.previousStart, DateTime(2026, 3, 20));
+      expect(ranges.previousEndExclusive, DateTime(2026, 3, 27));
+      for (final boundary in [
+        ranges.currentStart,
+        ranges.currentEndExclusive,
+        ranges.previousStart,
+        ranges.previousEndExclusive,
+      ]) {
+        expect(boundary.hour, 0);
+        expect(boundary.minute, 0);
+      }
+    });
+
+    test('keeps weekly chart bucket boundaries at local midnight across DST', () {
+      final week = SleepDynamicsAnalysis.bucketRange(
+        DateTime(2026, 3, 23), SleepDynamicsPeriod.week, 6);
+      expect(week.start, DateTime(2026, 3, 29));
+      expect(week.endExclusive, DateTime(2026, 3, 30));
+      expect(week.start.hour, 0);
+      expect(week.endExclusive.hour, 0);
+    });
+
     test('uses only available samples for efficiency, awakenings and morning ratings', () {
       final session = SleepSession(
         id: 'night-1',
