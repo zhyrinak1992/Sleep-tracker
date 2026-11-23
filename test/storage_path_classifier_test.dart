@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sleep_tracker/data/storage_path_classifier.dart';
+import 'package:sleep_tracker/data/storage_service.dart';
 
 void main() {
   group('StoragePathClassifier', () {
@@ -14,6 +15,15 @@ void main() {
       cachePath: cache,
       temporaryPath: temporary,
     );
+
+    test('warning threshold choices are exactly 500 MB, 1 GB and 2 GB', () {
+      expect(StorageService.defaultWarningThreshold, 1024 * 1024 * 1024);
+      expect(StorageService.allowedWarningThresholds, {
+        500 * 1024 * 1024,
+        1024 * 1024 * 1024,
+        2 * 1024 * 1024 * 1024,
+      });
+    });
 
     test('counts SQLite database and sidecar files as database storage', () {
       expect(classify(p.join(documents, 'sleep_tracker.sqlite')), StorageFileCategory.database);
