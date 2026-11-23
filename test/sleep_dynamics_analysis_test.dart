@@ -70,6 +70,8 @@ void main() {
       expect(result.completedCount, 1);
       expect(result.durationSamples, 1);
       expect(result.averageSleepMinutes, 410);
+      expect(result.scoreSamples, 1);
+      expect(result.averageSleepScore, isNotNull);
       expect(result.efficiencySamples, 1);
       expect(result.averageEfficiency, closeTo(85.4, 0.2));
       expect(result.awakeningSamples, 1);
@@ -79,6 +81,7 @@ void main() {
       expect(result.wellbeingSamples, 1);
       expect(result.averageWellbeing, 5);
       expect(result.chartValues[1], 410);
+      expect(result.chartScoreValues[1], isNotNull);
       expect(result.chartEfficiencyValues[1], closeTo(85.4, 0.2));
       expect(result.chartAwakeningValues[1], 1);
       expect(result.chartQualityValues[1], 4);
@@ -102,6 +105,9 @@ void main() {
         period: SleepDynamicsPeriod.week,
       );
       expect(result.averageSleepMinutes, 480);
+      expect(result.averageSleepScore, isNull);
+      expect(result.scoreSamples, 0);
+      expect(result.chartScoreValues[1], isNull);
       expect(result.averageEfficiency, isNull);
       expect(result.efficiencySamples, 0);
       expect(result.averageAwakenings, isNull);

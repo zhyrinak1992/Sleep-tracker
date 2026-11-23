@@ -1,6 +1,7 @@
 import '../../models/sleep_session.dart';
 import '../diary/sleep_session_metrics.dart';
 import 'sleep_regularity_analysis.dart';
+import 'sleep_score.dart';
 
 enum SleepDynamicsPeriod { week, month, year }
 
@@ -12,6 +13,8 @@ class SleepDynamicsSummary {
     required this.completedCount,
     required this.averageSleepMinutes,
     required this.durationSamples,
+    required this.averageSleepScore,
+    required this.scoreSamples,
     required this.averageEfficiency,
     required this.efficiencySamples,
     required this.averageAwakenings,
@@ -26,6 +29,7 @@ class SleepDynamicsSummary {
     required this.typicalBedtimeMinute,
     required this.typicalWakeMinute,
     required this.chartValues,
+    required this.chartScoreValues,
     required this.chartEfficiencyValues,
     required this.chartAwakeningValues,
     required this.chartQualityValues,
@@ -38,6 +42,8 @@ class SleepDynamicsSummary {
   final int completedCount;
   final double? averageSleepMinutes;
   final int durationSamples;
+  final double? averageSleepScore;
+  final int scoreSamples;
   final double? averageEfficiency;
   final int efficiencySamples;
   final double? averageAwakenings;
@@ -52,6 +58,7 @@ class SleepDynamicsSummary {
   final int? typicalBedtimeMinute;
   final int? typicalWakeMinute;
   final List<double?> chartValues;
+  final List<double?> chartScoreValues;
   final List<double?> chartEfficiencyValues;
   final List<double?> chartAwakeningValues;
   final List<double?> chartQualityValues;
@@ -112,6 +119,7 @@ class SleepDynamicsAnalysis {
     required DateTime start,
     required DateTime endExclusive,
     required SleepDynamicsPeriod period,
+    Map<String, SleepScoreResult>? scoreCache,
   }) {
     final from = DateTime(start.year, start.month, start.day);
     final until = DateTime(endExclusive.year, endExclusive.month, endExclusive.day);
@@ -128,6 +136,8 @@ class SleepDynamicsAnalysis {
     final awakenings = <double>[];
     final qualities = <double>[];
     final wellbeing = <double>[];
+    final sleepScores = <double>[];
+    final cache = scoreCache ?? <String, SleepScoreResult>{};
     final bucketCount = switch (period) {
       SleepDynamicsPeriod.week => 7,
       SleepDynamicsPeriod.month => 5,
@@ -135,6 +145,8 @@ class SleepDynamicsAnalysis {
     };
     final bucketTotals = List<double>.filled(bucketCount, 0);
     final bucketSamples = List<int>.filled(bucketCount, 0);
+    final bucketScoreTotals = List<double>.filled(bucketCount, 0);
+    final bucketScoreSamples = List<int>.filled(bucketCount, 0);
     final bucketEfficiencyTotals = List<double>.filled(bucketCount, 0);
     final bucketEfficiencySamples = List<int>.filled(bucketCount, 0);
     final bucketAwakeningTotals = List<double>.filled(bucketCount, 0);
@@ -147,6 +159,17 @@ class SleepDynamicsAnalysis {
     for (final session in completed) {
       final stages = stagesBySession[session.id] ?? const <Map<String, Object?>>[];
       final metrics = SleepSessionMetrics.calculate(session: session, stages: stages);
+      final score = cache.putIfAbsent(session.id, () =>
+        SleepScoreCalculator.calculateForSession(
+          session: session,
+          historySessions: sessions,
+          morningReports: morningReports,
+          stagesBySession: stagesBySession,
+        ),
+      ).score;
+      if (score != null) {
+        sleepScores.add(score);
+      }
       final bucket = switch (period) {
         SleepDynamicsPeriod.week => session.startedAt.weekday - 1,
         SleepDynamicsPeriod.month => ((session.startedAt.day - 1) ~/ 7).clamp(0, 4),
@@ -159,6 +182,10 @@ class SleepDynamicsAnalysis {
         durations.add(duration.toDouble());
         bucketTotals[bucket] += duration;
         bucketSamples[bucket]++;
+      }
+      if (score != null) {
+        bucketScoreTotals[bucket] += score;
+        bucketScoreSamples[bucket]++;
       }
       final efficiency = metrics.sleepEfficiencyPercent;
       if (efficiency != null && efficiency.isFinite) {
@@ -196,6 +223,7 @@ class SleepDynamicsAnalysis {
       List<double?>.generate(bucketCount, (index) =>
         samples[index] == 0 ? null : totals[index] / samples[index]);
     final chartDurations = chart(bucketTotals, bucketSamples);
+    final chartScores = chart(bucketScoreTotals, bucketScoreSamples);
     final chartEfficiency = chart(bucketEfficiencyTotals, bucketEfficiencySamples);
     final chartAwakenings = chart(bucketAwakeningTotals, bucketAwakeningSamples);
     final chartQuality = chart(bucketQualityTotals, bucketQualitySamples);
@@ -208,6 +236,8 @@ class SleepDynamicsAnalysis {
       completedCount: completed.length,
       averageSleepMinutes: average(durations),
       durationSamples: durations.length,
+      averageSleepScore: average(sleepScores),
+      scoreSamples: sleepScores.length,
       averageEfficiency: average(efficiencies),
       efficiencySamples: efficiencies.length,
       averageAwakenings: average(awakenings),
@@ -222,6 +252,7 @@ class SleepDynamicsAnalysis {
       typicalBedtimeMinute: regularity.nights.length < 2 ? null : regularity.typicalBedtimeMinute,
       typicalWakeMinute: regularity.nights.length < 2 ? null : regularity.typicalWakeMinute,
       chartValues: chartDurations,
+      chartScoreValues: chartScores,
       chartEfficiencyValues: chartEfficiency,
       chartAwakeningValues: chartAwakenings,
       chartQualityValues: chartQuality,
