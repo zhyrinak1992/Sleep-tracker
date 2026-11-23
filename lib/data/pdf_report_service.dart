@@ -132,8 +132,8 @@ class PdfReportService {
           'respiratoryRate': ('Частота дыхания', ' вдох/мин'),
           'bloodOxygen': ('Насыщение кислородом', '%'),
           'hrv': ('Вариабельность пульса SDNN', ' мс'),
-          'roomTemperature': ('Температура спальни', ' °C'),
-          'roomHumidity': ('Влажность спальни', '%'),
+          'roomTemperature': ('Температура датчика', ' °C'),
+          'roomHumidity': ('Влажность датчика', '%'),
         };
         for (final metric in metricLabels.entries) {
           if (!metrics.containsKey(metric.key)) continue;
