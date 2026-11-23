@@ -9,6 +9,8 @@ import '../../theme/app_theme.dart';
 import '../../widgets/screen_header.dart';
 import '../../widgets/section_card.dart';
 import 'sleep_dynamics_analysis.dart';
+import 'sleep_change_insights.dart';
+import 'sleep_change_insights_card.dart';
 import 'sleep_score.dart';
 
 class SleepDynamicsScreen extends StatefulWidget {
@@ -415,6 +417,15 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
               number: _number,
               signed: _signed,
             ),
+            if (_rollingDays == 30) ...[
+              const SizedBox(height: 10),
+              SleepChangeInsightsCard(
+                insights: SleepChangeInsights.calculate(
+                  current: rollingCurrent,
+                  previous: rollingPrevious,
+                ),
+              ),
+            ],
             const SizedBox(height: 18),
             const Text('Показатели аналитики', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
