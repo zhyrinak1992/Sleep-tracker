@@ -100,10 +100,10 @@ class PdfReportService {
               ? monthNames[(month['month'] as int) - 1] : '—',
           month['nights']?.toString() ?? '0',
           duration(month['averageSleepMinutes']),
-          average(month['averageEfficiency'], suffix: '%'),
-          average(month['averageAwakenings']),
-          average(month['averageQuality'], suffix: '/5'),
-          average(month['averageWellbeing'], suffix: '/5'),
+          average(month['averageEfficiency'], suffix: '%') + ' (' + (month['efficiencySamples'] ?? 0).toString() + ')',
+          average(month['averageAwakenings']) + ' (' + (month['awakeningSamples'] ?? 0).toString() + ')',
+          average(month['averageQuality'], suffix: '/5') + ' (' + (month['qualitySamples'] ?? 0).toString() + ')',
+          average(month['averageWellbeing'], suffix: '/5') + ' (' + (month['wellbeingSamples'] ?? 0).toString() + ')',
         ]).toList(),
       ));
       content.add(pw.Text('Лучший и наиболее сложный месяцы ранжируются по средней продолжительности сна при наличии не менее 3 завершённых ночей в месяце. Это описательный критерий, не медицинская оценка.'));
