@@ -6,6 +6,7 @@ import '../../data/notification_service.dart';
 import '../../data/audio_observation_service.dart';
 import '../../data/sleep_database.dart';
 import '../../models/sleep_session.dart';
+import '../diary/sleep_session_detail_screen.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/storage_warning_banner.dart';
@@ -82,7 +83,7 @@ class _NightSessionScreenState extends State<NightSessionScreen> {
       await widget.database.finishSession(widget.session.id);
       await NotificationService.instance.reportReady();
       await NotificationService.instance.scheduleNightReminders();
-      if (mounted) Navigator.pop(context);
+      if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
         setState(() => _finishing = false);
@@ -194,7 +195,7 @@ class _NightSessionScreenState extends State<NightSessionScreen> {
             SizedBox(width: double.infinity, child: FilledButton.icon(
               onPressed: _finishing ? null : _finish,
               icon: const Icon(Icons.wb_sunny_outlined),
-              label: Text(_finishing ? 'Сохраняем ночь…' : 'Завершить ночь'),
+              label: Text(_finishing ? 'Сохраняем ночь…' : 'Я проснулась'),
               style: FilledButton.styleFrom(backgroundColor: const Color(0xFF59D8C5), foregroundColor: const Color(0xFF082033),
                 padding: const EdgeInsets.symmetric(vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
             )),
@@ -324,19 +325,25 @@ class _HomeScreenState extends State<HomeScreen> {
         }
         await _refresh();
         if (!mounted) return;
-        await Navigator.of(context).push(MaterialPageRoute(
+        final completed = await Navigator.of(context).push<bool>(MaterialPageRoute(
           builder: (_) => NightSessionScreen(database: widget.database, session: session),
           fullscreenDialog: true,
         ));
         await _refresh();
+        if (completed == true) {
+          await _offerMorningReport(session.id);
+        }
         return;
       } else {
+        final completedSessionId = _open!.id;
         await AudioObservationService.instance.stopObservation();
-        await widget.database.finishSession(_open!.id);
+        await widget.database.finishSession(completedSessionId);
         await NotificationService.instance.reportReady();
         await NotificationService.instance.scheduleNightReminders();
+        await _refresh();
+        await _offerMorningReport(completedSessionId);
+        return;
       }
-      await _refresh();
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -361,6 +368,45 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+
+  Future<void> _offerMorningReport(String sessionId) async {
+    if (!mounted) return;
+    final existing = await widget.database.getMorningReport(sessionId);
+    if (existing != null || !mounted) return;
+
+    final choice = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Ночь завершена'),
+        content: const Text(
+          'Ночная запись сохранена. Можно сразу открыть подробный отчёт по этой ночи и заполнить утреннюю оценку самочувствия.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Позже'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            icon: const Icon(Icons.summarize_outlined),
+            label: const Text('Сформировать утренний отчёт'),
+          ),
+        ],
+      ),
+    );
+
+    if (choice != true || !mounted) return;
+    final session = await widget.database.getSessionById(sessionId);
+    if (session == null || !mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => SleepSessionDetailScreen(
+        database: widget.database,
+        session: session,
+      ),
+    ));
+    await _refresh();
+  }
 
   Future<void> _createMorningReport() async {
     final session = _latest;
