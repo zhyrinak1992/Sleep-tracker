@@ -300,9 +300,38 @@ class SleepDatabase {
         if (exists.isEmpty) await txn.insert('sleep_notes', row);
       }
       for (final row in rowsByTable['app_metadata']!) {
-        final exists = await txn.query('app_metadata', columns: ['key'],
-            where: 'key = ?', whereArgs: [row['key']], limit: 1);
-        if (exists.isEmpty) await txn.insert('app_metadata', row);
+        final key = row['key'] as String;
+        final exists = await txn.query('app_metadata', columns: ['value'],
+            where: 'key = ?', whereArgs: [key], limit: 1);
+        if (key == 'sleep_change_history_v1') {
+          final localRaw = exists.isEmpty ? null : exists.first['value'] as String?;
+          final importedRaw = row['value'] as String? ?? '[]';
+          final localHistory = <Map<String, Object?>>[];
+          if (localRaw != null && localRaw.isNotEmpty) {
+            final decoded = jsonDecode(localRaw);
+            if (decoded is! List) throw const FormatException('Локальная история изменений повреждена; объединение отменено.');
+            for (final item in decoded) {
+              if (item is! Map) throw const FormatException('Локальная история изменений содержит некорректную запись; объединение отменено.');
+              localHistory.add(Map<String, Object?>.from(item));
+            }
+          }
+          final importedHistory = jsonDecode(importedRaw);
+          if (importedHistory is! List) throw const FormatException('История изменений в резервной копии повреждена; объединение отменено.');
+          var mergedHistory = localHistory;
+          for (final item in importedHistory) {
+            if (item is! Map) throw const FormatException('Резервная копия содержит некорректную запись истории; объединение отменено.');
+            final result = SleepChangeHistoryRecords.append(
+              mergedHistory, Map<String, Object?>.from(item),
+            );
+            mergedHistory = result.records.toList();
+          }
+          await txn.insert('app_metadata', {
+            'key': key,
+            'value': jsonEncode(mergedHistory),
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        } else if (exists.isEmpty) {
+          await txn.insert('app_metadata', row);
+        }
       }
       for (final table in ['sleep_stages', 'sleep_metrics', 'audio_events', 'climate_samples']) {
         for (final row in rowsByTable[table]!) {
