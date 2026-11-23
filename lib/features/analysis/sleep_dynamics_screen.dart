@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../data/sleep_database.dart';
+import '../../data/pdf_report_service.dart';
 import '../../models/sleep_session.dart';
 import '../diary/sleep_session_metrics.dart';
 import '../../theme/app_theme.dart';
@@ -106,6 +107,132 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
   String _dateRange(DateTime start, DateTime endExclusive) =>
     DateFormat('d MMM', 'ru').format(start) + ' — ' +
     DateFormat('d MMM yyyy', 'ru').format(endExclusive.subtract(const Duration(days: 1)));
+
+  Future<void> _exportDynamics(
+    _DynamicsData data,
+    SleepDynamicsSummary current,
+    SleepDynamicsSummary previous,
+    DateTime start,
+    DateTime end,
+  ) async {
+    final metrics = <Map<String, Object?>>[];
+    void addMetric(String label, double? value, int samples, double? previousValue, int previousSamples, String suffix, {int decimals = 1, bool asDuration = false}) {
+      String shown(double? number) {
+        if (number == null) return 'Нет данных';
+        if (asDuration) return _duration(number);
+        return number.toStringAsFixed(decimals) + suffix;
+      }
+      metrics.add({
+        'label': label,
+        'current': shown(value),
+        'currentSamples': samples,
+        'previous': shown(previousValue),
+        'previousSamples': previousSamples,
+      });
+    }
+
+    if (_showGroup('sleep')) {
+      addMetric('Продолжительность сна', current.averageSleepMinutes, current.durationSamples, previous.averageSleepMinutes, previous.durationSamples, '', asDuration: true);
+      addMetric('Оценка качества сна', current.averageSleepScore, current.scoreSamples, previous.averageSleepScore, previous.scoreSamples, ' / 100', decimals: 0);
+      addMetric('Эффективность сна', current.averageEfficiency, current.efficiencySamples, previous.averageEfficiency, previous.efficiencySamples, '%');
+      addMetric('Пробуждения', current.averageAwakenings, current.awakeningSamples, previous.averageAwakenings, previous.awakeningSamples, '');
+    }
+    if (_showGroup('wellbeing')) {
+      addMetric('Субъективное качество', current.averageQuality, current.qualitySamples, previous.averageQuality, previous.qualitySamples, ' / 5');
+      addMetric('Утреннее самочувствие', current.averageWellbeing, current.wellbeingSamples, previous.averageWellbeing, previous.wellbeingSamples, ' / 5');
+    }
+    if (_showGroup('routine')) {
+      metrics.addAll([
+        {'label':'Типичное время засыпания','current':_clock(current.typicalBedtimeMinute),'currentSamples':current.regularitySamples,'previous':_clock(previous.typicalBedtimeMinute),'previousSamples':previous.regularitySamples},
+        {'label':'Типичное время пробуждения','current':_clock(current.typicalWakeMinute),'currentSamples':current.regularitySamples,'previous':_clock(previous.typicalWakeMinute),'previousSamples':previous.regularitySamples},
+      ]);
+      addMetric('Разброс времени засыпания', current.bedtimeDeviationMinutes, current.regularitySamples, previous.bedtimeDeviationMinutes, previous.regularitySamples, ' мин', decimals: 0);
+      addMetric('Разброс времени пробуждения', current.wakeTimeDeviationMinutes, current.regularitySamples, previous.wakeTimeDeviationMinutes, previous.regularitySamples, ' мин', decimals: 0);
+    }
+
+    final trend = <Map<String, Object?>>[];
+    void addTrend(String title, List<double?> values, String suffix, {bool asDuration = false, int decimals = 1}) {
+      for (var i = 0; i < values.length; i++) {
+        final range = SleepDynamicsAnalysis.bucketRange(start, _period, i);
+        final label = _period == SleepDynamicsPeriod.week
+          ? DateFormat('EEE d MMM', 'ru').format(range.start)
+          : _period == SleepDynamicsPeriod.month
+            ? 'Неделя ${i + 1}'
+            : DateFormat('LLLL', 'ru').format(range.start);
+        final value = values[i];
+        trend.add({
+          'metric': title,
+          'interval': label,
+          'value': value == null ? 'Нет данных' : asDuration ? _duration(value) : value.toStringAsFixed(decimals) + suffix,
+          'rawValue': value,
+        });
+      }
+    }
+    if (_showGroup('sleep')) {
+      addTrend('Длительность сна', current.chartValues, '', asDuration: true);
+      addTrend('Оценка сна', current.chartScoreValues, ' / 100', decimals: 0);
+      addTrend('Эффективность', current.chartEfficiencyValues, '%');
+      addTrend('Пробуждения', current.chartAwakeningValues, '');
+    }
+    if (_showGroup('wellbeing')) {
+      addTrend('Субъективное качество', current.chartQualityValues, ' / 5');
+      addTrend('Самочувствие', current.chartWellbeingValues, ' / 5');
+    }
+
+    final nights = <Map<String, Object?>>[];
+    final selected = data.sessions.where((session) =>
+      !session.startedAt.isBefore(start) && session.startedAt.isBefore(end) &&
+      session.endedAt != null && session.duration != null && session.duration!.inMinutes > 0).toList()
+      ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
+    for (final session in selected) {
+      final stages = data.stages[session.id] ?? const <Map<String, Object?>>[];
+      final calculated = SleepSessionMetrics.calculate(session: session, stages: stages);
+      final report = data.morning[session.id];
+      final score = data.scoreCache.putIfAbsent(session.id, () =>
+        SleepScoreCalculator.calculateForSession(
+          session: session,
+          historySessions: data.sessions,
+          morningReports: data.morning,
+          stagesBySession: data.stages,
+        )).score;
+      final duration = calculated.sleepDurationMinutes ?? session.duration!.inMinutes.toDouble();
+      final date = DateFormat('dd.MM.yyyy', 'ru').format(session.startedAt);
+      final bedtime = DateFormat('HH:mm').format(session.startedAt);
+      final wake = session.endedAt == null ? '—' : DateFormat('HH:mm').format(session.endedAt!);
+      final rawQuality = report?['sleep_quality'];
+      final rawWellbeing = report?['wellbeing'];
+      nights.add({
+        'date': date,
+        'bedtime': bedtime,
+        'wake': wake,
+        'duration': _duration(duration.toDouble()),
+        'score': score == null ? '—' : score.toStringAsFixed(0),
+        'efficiency': calculated.sleepEfficiencyPercent == null ? '—' : calculated.sleepEfficiencyPercent!.toStringAsFixed(1) + '%',
+        'awakenings': stages.isEmpty || calculated.stageCoveragePercent == null ? '—' : calculated.awakeningCount.toString(),
+        'quality': rawQuality is num ? rawQuality.toString() : '—',
+        'wellbeing': rawWellbeing is num ? rawWellbeing.toString() : '—',
+      });
+    }
+
+    final groupLabel = switch (_metricGroup) {
+      'sleep' => 'Сон',
+      'routine' => 'Режим',
+      'wellbeing' => 'Самочувствие',
+      _ => 'Все показатели',
+    };
+    await PdfReportService.exportSleepDynamics(
+      title: 'Аналитика сна',
+      category: groupLabel,
+      dateRange: _dateRange(start, end),
+      previousRange: _dateRange(previous.start, previous.endExclusive),
+      sessionsCount: current.sessionsCount,
+      completedCount: current.completedCount,
+      previousCompletedCount: previous.completedCount,
+      metrics: metrics,
+      trend: trend,
+      nights: nights,
+    );
+  }
 
   Future<void> _showBucketDetails(
     _DynamicsData data,
@@ -254,6 +381,12 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
               title: 'Моя динамика сна',
               subtitle: 'Долгосрочные изменения по сохранённым ночам',
               icon: Icons.show_chart_rounded,
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => _exportDynamics(data, current, previous, start, end),
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              label: const Text('Экспортировать аналитику в PDF'),
             ),
             const SizedBox(height: 10),
             const Text('Сравнение равных скользящих периодов', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
