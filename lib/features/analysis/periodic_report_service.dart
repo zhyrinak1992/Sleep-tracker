@@ -109,6 +109,7 @@ class PeriodicReportService {
               kind: kind, start: cursor, end: end, sessions: selected,
               previousSessions: previous, stages: stages, morning: morning,
               audio: audio, notes: notes, allSessions: completed,
+              allSleepMetrics: allSleepMetrics, allClimateSamples: allClimateSamples,
               scoreCache: scoreCache, tagsBySession: tagsBySession, tagLabels: tagLabels,
             );
             await database.setAppMetadata(metadataPrefix + id, jsonEncode(snapshot));
@@ -177,6 +178,8 @@ class PeriodicReportService {
     required Map<String, Map<String, Object?>> morning,
     required List<Map<String, Object?>> audio, required List<SleepNote> notes,
     required List<SleepSession> allSessions,
+    required List<Map<String, Object?>> allSleepMetrics,
+    required List<Map<String, Object?>> allClimateSamples,
     required Map<String, SleepScoreResult> scoreCache,
     required Map<String, Set<String>> tagsBySession,
     required Map<String, String> tagLabels,
