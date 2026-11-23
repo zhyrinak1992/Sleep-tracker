@@ -5,6 +5,12 @@ import 'dart:async';
 import '../../data/notification_service.dart';
 import '../../data/audio_observation_service.dart';
 import '../../data/sleep_database.dart';
+import '../../data/comparison_suggestion_store.dart';
+import '../../models/sleep_tag.dart';
+import '../analysis/tag_sleep_comparison.dart';
+import '../diary/sleep_session_metrics.dart';
+import 'comparison_suggestion_analyzer.dart';
+import 'comparison_suggestion_card.dart';
 import '../../models/sleep_session.dart';
 import '../diary/sleep_session_detail_screen.dart';
 import '../../theme/app_theme.dart';
@@ -229,14 +235,20 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   SleepSession? _open;
   SleepSession? _latest;
   bool _loading = true;
+  bool _refreshing = false;
+  bool _refreshRequested = false;
+  ComparisonSuggestionRecord? _comparisonSuggestion;
+  Map<String, String> _suggestionTagLabels = const {};
+  Timer? _suggestionExpiryTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     NotificationService.instance.sleepStartRequested.addListener(_onSleepStartRequested);
     _refresh();
     if (NotificationService.instance.sleepStartRequested.value) {
@@ -289,14 +301,111 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _refresh() async {
+    if (_refreshing) {
+      _refreshRequested = true;
+      return;
+    }
+    _refreshing = true;
+    try {
+      do {
+        _refreshRequested = false;
+        await _refreshInternal();
+      } while (_refreshRequested && mounted);
+    } finally {
+      _refreshing = false;
+    }
+  }
+
+  Future<void> _refreshInternal() async {
     final open = await widget.database.getOpenSession();
-    final sessions = await widget.database.getSessions(limit: 1);
+    final sessions = await widget.database.getSessions(limit: 10000);
+    ComparisonSuggestionRecord? suggestion;
+    Map<String, String> labels = const {};
+    try {
+      final now = DateTime.now();
+      final dayStart = DateTime(now.year, now.month, now.day);
+      final start = DateTime(now.year, now.month, now.day - 89);
+      final end = dayStart.add(const Duration(days: 1));
+      final relevant = sessions.where((session) =>
+        !session.startedAt.isBefore(start) && session.startedAt.isBefore(end) &&
+        session.endedAt != null && session.endedAt!.isAfter(session.startedAt)).toList();
+      final ids = relevant.map((session) => session.id).toList();
+      final tags = await widget.database.getTagsForSessions(ids);
+      final stages = await widget.database.getStagesForSessions(ids);
+      final awakenings = <String, int>{};
+      for (final session in relevant) {
+        final rows = stages[session.id] ?? const <Map<String, Object?>>[];
+        final hasAwakeSamples = rows.any((row) {
+          final stage = (row['stage'] as String? ?? '').toLowerCase();
+          return stage.contains('бодрств') || stage == 'awake' || stage.contains('awake');
+        });
+        if (hasAwakeSamples) {
+          awakenings[session.id] = SleepSessionMetrics.calculate(
+            session: session,
+            stages: rows,
+          ).awakeningCount;
+        }
+      }
+      final customTags = await CustomSleepTagStore(
+        widget.database.getAppMetadata,
+        widget.database.setAppMetadata,
+      ).load();
+      labels = {
+        for (final tag in [...SleepTag.catalog, ...customTags]) tag.key: tag.label,
+      };
+      final templates = await TagComparisonTemplateStore(
+        widget.database.getAppMetadata,
+        widget.database.setAppMetadata,
+      ).load();
+      final candidates = ComparisonSuggestionAnalyzer.analyze(
+        sessions: relevant,
+        tagsBySession: tags,
+        awakeningCountsBySession: awakenings,
+        now: now,
+        existingCombinations: templates.map((item) => item.tagKeys),
+      );
+      suggestion = await ComparisonSuggestionStore(
+        widget.database.getAppMetadata,
+        widget.database.setAppMetadata,
+      ).currentOrCreate(candidates: candidates, now: now);
+    } catch (_) {
+      // Suggestion generation is optional; failures never block the sleep tracker home.
+      suggestion = null;
+    }
     if (!mounted) return;
     setState(() {
       _open = open;
       _latest = sessions.isEmpty ? null : sessions.first;
+      _comparisonSuggestion = suggestion;
+      _suggestionTagLabels = labels;
       _loading = false;
     });
+    _scheduleSuggestionExpiryRefresh();
+  }
+
+  void _scheduleSuggestionExpiryRefresh() {
+    _suggestionExpiryTimer?.cancel();
+    final now = DateTime.now();
+    DateTime due;
+    if (_comparisonSuggestion != null) {
+      due = _comparisonSuggestion!.expiresAt;
+    } else {
+      due = DateTime(now.year, now.month, now.day, 8);
+      if (!due.isAfter(now)) due = due.add(const Duration(days: 1));
+    }
+    final delay = due.difference(now);
+    _suggestionExpiryTimer = Timer(
+      delay.isNegative ? Duration.zero : delay,
+      () async {
+        if (!mounted) return;
+        await _refresh();
+      },
+    );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refresh();
   }
 
   Future<void> _toggleSession() async {
@@ -477,6 +586,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _suggestionExpiryTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     NotificationService.instance.sleepStartRequested.removeListener(_onSleepStartRequested);
     super.dispose();
   }
@@ -521,6 +632,18 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const StorageWarningBanner(),
+          if (_comparisonSuggestion != null) ...[
+            const SizedBox(height: 12),
+            ComparisonSuggestionCard(
+              database: widget.database,
+              record: _comparisonSuggestion!,
+              tagLabels: _suggestionTagLabels,
+              onProcessed: () {
+                if (mounted) setState(() => _comparisonSuggestion = null);
+                _refresh();
+              },
+            ),
+          ],
           Container(
             height: 390,
             decoration: BoxDecoration(

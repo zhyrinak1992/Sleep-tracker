@@ -26,6 +26,7 @@ import 'periodic_report_service.dart';
 import 'periodic_reports_screen.dart';
 import 'sleep_dynamics_screen.dart';
 import 'sleep_forecast_screen.dart';
+import '../home/comparison_suggestion_history_screen.dart';
 import '../diary/sleep_session_detail_screen.dart';
 
 class AnalysisScreen extends StatefulWidget {
@@ -218,6 +219,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             )),
             icon: const Icon(Icons.schedule_rounded),
             label: const Text('Персональный прогноз сна'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => ComparisonSuggestionHistoryScreen(database: widget.database),
+            )),
+            icon: const Icon(Icons.history_rounded),
+            label: const Text('История предложений сравнений'),
           ),
           OutlinedButton.icon(
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(

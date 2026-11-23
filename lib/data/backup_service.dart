@@ -91,6 +91,7 @@ class BackupService {
     SleepDatabase.instance.validateSnapshot(data);
     _validateAudioArchive(data, decoded['formatVersion'] as int);
     _validateSleepChangeHistory(data);
+    _validateComparisonSuggestionHistory(data);
     return BackupImportDraft._(
       document: Map<String, dynamic>.from(decoded),
       data: data,
@@ -141,6 +142,30 @@ class BackupService {
         if (item is! Map || item['periodKey'] is! String ||
             item['fingerprint'] is! String || item['version'] is! int) {
           throw const FormatException('В резервной копии обнаружена некорректная запись истории главных изменений.');
+        }
+      }
+    }
+  }
+
+  void _validateComparisonSuggestionHistory(Map<String, dynamic> data) {
+    final metadata = data['app_metadata'];
+    if (metadata is! List) return;
+    for (final raw in metadata) {
+      if (raw is! Map || raw['key'] != 'comparison_suggestion_history_v1') continue;
+      final value = raw['value'];
+      if (value is! String) {
+        throw const FormatException('История предложений сравнений в резервной копии повреждена.');
+      }
+      final decoded = jsonDecode(value);
+      if (decoded is! List) {
+        throw const FormatException('История предложений сравнений имеет неверный формат.');
+      }
+      for (final item in decoded) {
+        if (item is! Map || item['id'] is! String ||
+            item['candidate'] is! Map || item['status'] is! String ||
+            item['createdAt'] is! String || item['expiresAt'] is! String ||
+            item['statusEvents'] is! List) {
+          throw const FormatException('В резервной копии обнаружена некорректная запись предложения сравнения.');
         }
       }
     }
@@ -221,25 +246,32 @@ class BackupImportPreview {
     required this.formatVersion, required this.createdAt, required this.sessions,
     required this.reports, required this.notes, required this.audioEvents,
     required this.audioFiles, required this.climateSamples, required this.stages,
-    required this.metrics, required this.tags, required this.changeHistorySnapshots,
+    required this.metrics, required this.tags, required this.changeHistorySnapshots, required this.suggestionHistoryEntries,
   });
   final int formatVersion;
   final DateTime? createdAt;
-  final int sessions, reports, notes, audioEvents, audioFiles, climateSamples, stages, metrics, tags, changeHistorySnapshots;
+  final int sessions, reports, notes, audioEvents, audioFiles, climateSamples, stages, metrics, tags, changeHistorySnapshots, suggestionHistoryEntries;
 
   static int _count(Map<String, dynamic> data, String key) => data[key] is List ? (data[key] as List).length : 0;
   factory BackupImportPreview.fromDocument(Map<String, dynamic> document, Map<String, dynamic> data) {
     final audio = (data['audio_events'] as List?) ?? const [];
     final files = audio.where((row) => row is Map && row['audioDataB64'] is String && (row['audioDataB64'] as String).isNotEmpty).length;
     var changeHistorySnapshots = 0;
+    var suggestionHistoryEntries = 0;
     final metadata = (data['app_metadata'] as List?) ?? const [];
     for (final row in metadata) {
-      if (row is! Map || row['key'] != 'sleep_change_history_v1' || row['value'] is! String) continue;
-      try {
-        final decoded = jsonDecode(row['value'] as String);
-        if (decoded is List) changeHistorySnapshots = decoded.length;
-      } catch (_) {
-        // Structural validation reports malformed history before the preview is shown.
+      if (row is! Map || row['value'] is! String) continue;
+      if (row['key'] == 'sleep_change_history_v1' ||
+          row['key'] == 'comparison_suggestion_history_v1') {
+        try {
+          final decoded = jsonDecode(row['value'] as String);
+          if (decoded is List) {
+            if (row['key'] == 'sleep_change_history_v1') changeHistorySnapshots = decoded.length;
+            if (row['key'] == 'comparison_suggestion_history_v1') suggestionHistoryEntries = decoded.length;
+          }
+        } catch (_) {
+          // Structural validation reports malformed history before the preview is shown.
+        }
       }
     }
     return BackupImportPreview(
@@ -250,6 +282,7 @@ class BackupImportPreview {
       climateSamples: _count(data, 'climate_samples'), stages: _count(data, 'sleep_stages'),
       metrics: _count(data, 'sleep_metrics'), tags: _count(data, 'sleep_session_tags'),
       changeHistorySnapshots: changeHistorySnapshots,
+      suggestionHistoryEntries: suggestionHistoryEntries,
     );
   }
 }

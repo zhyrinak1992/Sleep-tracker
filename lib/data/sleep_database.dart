@@ -8,6 +8,7 @@ import '../models/sleep_session.dart';
 import '../models/sleep_tag.dart';
 import '../models/sleep_note.dart';
 import 'sleep_change_history.dart';
+import 'comparison_suggestion_history_merge.dart';
 
 class SleepDatabase {
   SleepDatabase._();
@@ -325,6 +326,25 @@ class SleepDatabase {
             );
             mergedHistory = result.records.toList();
           }
+          await txn.insert('app_metadata', {
+            'key': key,
+            'value': jsonEncode(mergedHistory),
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        } else if (key == 'comparison_suggestion_history_v1') {
+          final localRaw = exists.isEmpty ? null : exists.first['value'] as String?;
+          final importedRaw = row['value'] as String? ?? '[]';
+          List<Map<String, Object?>> decodeHistory(String? raw, String source) {
+            if (raw == null || raw.isEmpty) return [];
+            final decoded = jsonDecode(raw);
+            if (decoded is! List || decoded.any((item) => item is! Map)) {
+              throw FormatException('$source: история предложений сравнений повреждена; объединение отменено.');
+            }
+            return decoded.map((item) => Map<String, Object?>.from(item as Map)).toList();
+          }
+          final mergedHistory = ComparisonSuggestionHistoryMerge.merge(
+            local: decodeHistory(localRaw, 'Локальная'),
+            imported: decodeHistory(importedRaw, 'Резервная копия'),
+          );
           await txn.insert('app_metadata', {
             'key': key,
             'value': jsonEncode(mergedHistory),
