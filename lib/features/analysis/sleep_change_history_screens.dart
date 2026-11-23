@@ -285,7 +285,7 @@ class _SleepChangeHistoryChartScreenState extends State<SleepChangeHistoryChartS
         if (state.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
         if (state.hasError) return Center(child: Text('Не удалось загрузить историю: ${state.error}'));
         final all = state.data ?? const <Map<String, Object?>>[];
-        final snapshots = _latestMonthlySnapshots(all);
+        final snapshots = SleepChangeHistoryRecords.latestPerMonth(all);
         if (snapshots.isEmpty) {
           return const Center(child: Padding(
             padding: EdgeInsets.all(24),
@@ -371,7 +371,7 @@ class _SleepChangeHistoryChartScreenState extends State<SleepChangeHistoryChartS
                         for (var i = 0; i < snapshots.length; i++)
                           if (values[i] != null)
                             ActionChip(
-                              label: Text('${snapshots[i]['periodKey']}: ${_formatHistoryDelta(Map<String, Object?>{'delta': values[i], 'unit': unit})}',
+                              label: Text('${snapshots[i]['periodKey']}: ${_formatHistoryDelta(<String, Object?>{'delta': values[i], 'unit': unit})}',
                                 style: const TextStyle(fontSize: 10)),
                               onPressed: () => _openSnapshot(all, snapshots[i]),
                             ),
@@ -450,6 +450,11 @@ class _ChangeSeriesPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _ChangeSeriesPainter oldDelegate) =>
-      !listEquals(oldDelegate.values, values);
+  bool shouldRepaint(covariant _ChangeSeriesPainter oldDelegate) {
+    if (oldDelegate.values.length != values.length) return true;
+    for (var i = 0; i < values.length; i++) {
+      if (oldDelegate.values[i] != values[i]) return true;
+    }
+    return false;
+  }
 }
