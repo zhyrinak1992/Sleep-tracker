@@ -154,7 +154,8 @@ class SleepDatabase {
 
   /// Полное восстановление с проверкой структуры и атомарной заменой данных.
   /// При любой ошибке SQLite откатывает транзакцию и оставляет исходную базу.
-  Future<void> restoreSnapshot(Map<String, dynamic> snapshot, {bool merge = false}) async {
+  /// Проверяет структуру архива без записи в SQLite. Используется перед показом предпросмотра.
+  Map<String, List<Map<String, Object?>>> validateSnapshot(Map<String, dynamic> snapshot) {
     if (snapshot['schemaVersion'] != 3 && snapshot['schemaVersion'] != 4 && snapshot['schemaVersion'] != 5 && snapshot['schemaVersion'] != 6 && snapshot['schemaVersion'] != 7 && snapshot['schemaVersion'] != 8) {
       throw const FormatException('Версия структуры резервной копии не поддерживается.');
     }
@@ -247,7 +248,14 @@ class SleepDatabase {
         throw const FormatException('В резервной копии обнаружено несколько утренних отчётов для одной ночи.');
       }
     }
+    return rowsByTable;
+  }
 
+  /// Полное восстановление с проверкой структуры и атомарной заменой данных.
+  /// При любой ошибке SQLite откатывает транзакцию и оставляет исходную базу.
+  Future<void> restoreSnapshot(Map<String, dynamic> snapshot, {bool merge = false}) async {
+    final rowsByTable = validateSnapshot(snapshot);
+    const tables = ['sleep_sessions', 'sleep_session_tags', 'sleep_notes', 'app_metadata', 'sleep_stages', 'sleep_metrics', 'audio_events', 'morning_reports', 'climate_samples'];
     final db = await database;
     await db.transaction((txn) async {
       if (!merge) {

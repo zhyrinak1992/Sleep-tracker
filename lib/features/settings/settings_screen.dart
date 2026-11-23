@@ -391,49 +391,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _restoreBackup() async {
     if (_busy) return;
-    final merge = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Способ восстановления'),
-        content: const Text(
-          'Выберите, как обработать данные из резервной копии. При объединении '
-          'существующие записи на этом iPhone сохраняются, а недостающие добавляются. '
-          'При полной замене текущая база будет заменена содержимым файла.',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
-          OutlinedButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Полная замена'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Объединить'),
-          ),
-        ],
-      ),
-    );
-    if (merge == null || !mounted) return;
     setState(() => _busy = true);
     try {
-      final result = await BackupService.instance.importFromFiles(merge: merge, requestPassword: () => _requestBackupPassword(confirm: false));
+      final draft = await BackupService.instance.prepareImportFromFiles(
+        requestPassword: () => _requestBackupPassword(confirm: false),
+      );
+      if (draft == null || !mounted) return;
+      final preview = draft.preview;
+      final date = preview.createdAt == null
+          ? 'не указана'
+          : MaterialLocalizations.of(context).formatMediumDate(preview.createdAt!.toLocal());
+      final merge = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Содержимое резервной копии'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Дата создания: $date'),
+                Text('Версия архива: ${preview.formatVersion}'),
+                const SizedBox(height: 12),
+                _backupPreviewRow('Ночи сна', preview.sessions),
+                _backupPreviewRow('Утренние отчёты', preview.reports),
+                _backupPreviewRow('Заметки', preview.notes),
+                _backupPreviewRow('Аудиособытия', preview.audioEvents),
+                _backupPreviewRow('Аудиофайлы в архиве', preview.audioFiles),
+                _backupPreviewRow('Этапы сна', preview.stages),
+                _backupPreviewRow('Физиологические показатели', preview.metrics),
+                _backupPreviewRow('Измерения микроклимата', preview.climateSamples),
+                _backupPreviewRow('Теги', preview.tags),
+                const SizedBox(height: 12),
+                const Text('Архив проверен. До выбора действия текущие данные не изменялись.'),
+                const SizedBox(height: 8),
+                const Text('Полная замена удалит текущие данные приложения и заменит их содержимым архива. Объединение сохранит существующие записи и добавит отсутствующие.'),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Отмена')),
+            OutlinedButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Полная замена')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Объединить')),
+          ],
+        ),
+      );
+      if (merge == null || !mounted) return;
+      final result = await BackupService.instance.restorePreparedBackup(draft: draft, merge: merge);
       if (!mounted) return;
       if (result == BackupImportResult.imported) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(merge
-              ? 'Данные объединены. Существующие записи сохранены.'
-              : 'Данные успешно восстановлены.'),
+          content: Text(merge ? 'Данные объединены. Существующие записи сохранены.' : 'Данные успешно восстановлены.'),
         ));
       }
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось восстановить данные: $error')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Не удалось восстановить данные: $error')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  Widget _backupPreviewRow(String label, int count) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Row(children: [Expanded(child: Text(label)), Text('$count', style: const TextStyle(fontWeight: FontWeight.w600))]),
+  );
 
   Future<void> _exportCustomReport() async {
     final today = DateUtils.dateOnly(DateTime.now());
