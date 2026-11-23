@@ -134,10 +134,13 @@ class SleepRecordService {
       }
     }
 
-    final newRecords = <SleepRecordEvent>[];
-    final knownEvents = history
-        .map((item) => '${item.type}|${item.sessionId}|${item.value}')
-        .toSet();
+    // Recover pending celebrations from persisted history. A process may be
+    // closed after saving a record but before its dialog is displayed.
+    final newRecords = <SleepRecordEvent>[
+      if (!isFirstInitialization)
+        ...history.where((event) => !celebratedKeys.contains(_eventKey(event))),
+    ];
+    final knownEvents = history.map(_eventKey).toSet();
     num? bestScore = history
         .where((item) => item.type == 'sleep_score')
         .fold<num?>(null, (best, item) =>
@@ -212,6 +215,16 @@ class SleepRecordService {
       await database.setAppMetadata(
         _historyKey,
         jsonEncode(history.map((item) => item.toMap()).toList()),
+      );
+    }
+
+    // On the first run, existing sleep history is a baseline, not a stream
+    // of new achievements. Mark that baseline as already celebrated.
+    if (isFirstInitialization && history.isNotEmpty) {
+      celebratedKeys.addAll(history.map(_eventKey));
+      await database.setAppMetadata(
+        _celebratedKey,
+        jsonEncode(celebratedKeys.toList()),
       );
     }
 
