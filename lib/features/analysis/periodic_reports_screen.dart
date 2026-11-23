@@ -119,10 +119,10 @@ class _ReportCard extends StatelessWidget {
             _ReportLine(label: 'Ночей', value: report.nights.toString() + ' · ранее ' + (previous['nights'] ?? 0).toString()),
             _ReportLine(label: 'Средняя продолжительность сна', value: duration + ' · ранее ' + _formatDuration(previous['averageSleepMinutes']) + ' (' + (previous['sleepDurationSamples'] ?? 0).toString() + ' изм.)'),
             _ReportLine(label: 'Время в постели', value: _formatDuration(report.averageTimeInBedMinutes) + ' · ранее ' + _formatDuration(previous['averageTimeInBedMinutes']) + ' (' + (previous['timeInBedSamples'] ?? 0).toString() + ' ночей)'),
-            _ReportLine(label: 'Эффективность', value: _formatPercent(report.averageEfficiency) + ' · ранее ' + _formatPercent(previous['averageEfficiency']) + ' (' + (previous['efficiencySamples'] ?? 0).toString() + ' ночей)'),
-            _ReportLine(label: 'Пробуждения', value: _formatNumber(report.averageAwakenings) + ' · ранее ' + _formatNumber(previous['averageAwakenings']) + ' (' + (previous['awakeningSamples'] ?? 0).toString() + ' ночей)'),
-            _ReportLine(label: 'Качество сна', value: _formatScale(report.averageQuality) + ' · ранее ' + _formatScale(previous['averageQuality']) + ' (' + (previous['qualitySamples'] ?? 0).toString() + ' оценок)'),
-            _ReportLine(label: 'Самочувствие', value: _formatScale(report.averageWellbeing) + ' · ранее ' + _formatScale(previous['averageWellbeing']) + ' (' + (previous['wellbeingSamples'] ?? 0).toString() + ' оценок)'),
+            _ReportLine(label: 'Эффективность', value: _formatPercent(report.averageEfficiency) + ' · ранее ' + _formatPercent(_number(previous['averageEfficiency'])) + ' (' + (previous['efficiencySamples'] ?? 0).toString() + ' ночей)'),
+            _ReportLine(label: 'Пробуждения', value: _formatNumber(report.averageAwakenings) + ' · ранее ' + _formatNumber(_number(previous['averageAwakenings'])) + ' (' + (previous['awakeningSamples'] ?? 0).toString() + ' ночей)'),
+            _ReportLine(label: 'Качество сна', value: _formatScale(report.averageQuality) + ' · ранее ' + _formatScale(_number(previous['averageQuality'])) + ' (' + (previous['qualitySamples'] ?? 0).toString() + ' оценок)'),
+            _ReportLine(label: 'Самочувствие', value: _formatScale(report.averageWellbeing) + ' · ранее ' + _formatScale(_number(previous['averageWellbeing'])) + ' (' + (previous['wellbeingSamples'] ?? 0).toString() + ' оценок)'),
           ],
           if (notes.isNotEmpty) ...[
             const Divider(height: 22),
@@ -165,6 +165,8 @@ class _ReportCard extends StatelessWidget {
 
   static String _formatNoteDate(DateTime date) =>
       date.day.toString() + ' ' + PeriodicReportSnapshot.monthName(date.month) + ' ' + date.year.toString();
+
+  static double? _number(Object? value) => value is num ? value.toDouble() : null;
 
   static String _formatPercent(double? value) => value == null ? 'Нет данных' : value.toStringAsFixed(1) + '%';
   static String _formatNumber(double? value) => value == null ? 'Нет данных' : value.toStringAsFixed(1);
