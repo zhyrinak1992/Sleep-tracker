@@ -94,6 +94,10 @@ class _ReportCard extends StatelessWidget {
       ? (report.data['months'] as List).whereType<Map>().toList() : const <Map>[];
     final weeklyTrend = report.data['weeklyTrend'] is List
       ? (report.data['weeklyTrend'] as List).whereType<Map>().toList() : const <Map>[];
+    final trendPoints = report.data['trendPoints'] is List
+      ? (report.data['trendPoints'] as List).whereType<Map>().toList() : const <Map>[];
+    final weekdayTrend = report.data['weekdayTrend'] is List
+      ? (report.data['weekdayTrend'] as List).whereType<Map>().toList() : const <Map>[];
     final weekdayPatterns = report.data['weekdayPatterns'] is List
       ? (report.data['weekdayPatterns'] as List).whereType<Map>().toList() : const <Map>[];
     final score = report.data['score'] is Map ? Map<String, Object?>.from(report.data['score'] as Map) : <String, Object?>{};
@@ -346,6 +350,22 @@ class _ReportCard extends StatelessWidget {
             const Text('Категории звуковых событий', style: TextStyle(fontWeight: FontWeight.w600)),
             ...categories.entries.map((entry) => _ReportLine(label: entry.key, value: entry.value.toString())),
           ],
+          if (trendPoints.isNotEmpty) ...[
+            const Divider(height: 22),
+            _InteractiveSleepTrendChart(
+              title: report.kind == 'year' ? 'Динамика сна по месяцам'
+                : report.kind == 'month' ? 'Динамика сна по неделям'
+                : 'Динамика сна по дням',
+              points: trendPoints,
+            ),
+          ],
+          if (weekdayTrend.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _InteractiveSleepTrendChart(
+              title: 'Длительность сна по дням недели',
+              points: weekdayTrend,
+            ),
+          ],
           if (months.isNotEmpty) ...[
             const Divider(height: 22),
             const Text('Динамика по месяцам', style: TextStyle(fontWeight: FontWeight.w600)),
@@ -419,6 +439,99 @@ class _ReportCard extends StatelessWidget {
     if (value is! num) return 'Нет данных';
     final minutes = value.round();
     return minutes.toString() + ' мин (' + (minutes ~/ 60).toString() + ' ч ' + (minutes % 60).toString() + ' мин)';
+  }
+}
+
+class _InteractiveSleepTrendChart extends StatefulWidget {
+  const _InteractiveSleepTrendChart({required this.title, required this.points});
+  final String title;
+  final List<Map> points;
+  @override
+  State<_InteractiveSleepTrendChart> createState() => _InteractiveSleepTrendChartState();
+}
+
+class _InteractiveSleepTrendChartState extends State<_InteractiveSleepTrendChart> {
+  int? _selectedIndex;
+  String _duration(Object? raw) {
+    if (raw is! num) return 'Нет данных';
+    final minutes = raw.round();
+    return '${minutes ~/ 60} ч ${minutes % 60} мин';
+  }
+  @override
+  Widget build(BuildContext context) {
+    final valid = widget.points.where((point) => point['sleepMinutes'] is num).toList();
+    if (valid.isEmpty) return const SizedBox.shrink();
+    final maximum = valid.map((point) => (point['sleepMinutes'] as num).toDouble())
+      .fold<double>(0, (a, b) => a > b ? a : b);
+    final selected = _selectedIndex != null && _selectedIndex! < valid.length
+      ? valid[_selectedIndex!] : null;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(widget.title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+      const SizedBox(height: 6),
+      const Text('Нажми на столбец, чтобы открыть значения ночей в выбранном периоде.',
+        style: TextStyle(color: AppTheme.muted, fontSize: 11)),
+      const SizedBox(height: 12),
+      SizedBox(height: 142, child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          for (var index = 0; index < valid.length; index++)
+            Expanded(child: InkWell(
+              onTap: () => setState(() => _selectedIndex = index),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
+                  Text(_duration(valid[index]['sleepMinutes']),
+                    style: const TextStyle(fontSize: 8, color: AppTheme.muted),
+                    maxLines: 1, overflow: TextOverflow.clip),
+                  const SizedBox(height: 4),
+                  Expanded(child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      width: double.infinity,
+                      height: maximum <= 0 ? 2 :
+                        78 * (valid[index]['sleepMinutes'] as num).toDouble() / maximum,
+                      decoration: BoxDecoration(
+                        color: _selectedIndex == index
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).colorScheme.primary.withOpacity(0.38),
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(5)),
+                      ),
+                    ),
+                  )),
+                  const SizedBox(height: 5),
+                  Text((valid[index]['label'] ?? '—').toString(),
+                    style: TextStyle(fontSize: 9,
+                      fontWeight: _selectedIndex == index ? FontWeight.w700 : FontWeight.normal,
+                      color: _selectedIndex == index ? Theme.of(context).colorScheme.primary : AppTheme.muted),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                ]),
+              ),
+            )),
+        ],
+      )),
+      if (selected != null) ...[
+        const Divider(height: 18),
+        Text('${selected['label'] ?? 'Выбранный период'} · ${_duration(selected['sleepMinutes'])}',
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+        Text('Измерений: ${selected['samples'] ?? 0}',
+          style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+        if (selected['nights'] is List)
+          ...(selected['nights'] as List).whereType<Map>().map((night) {
+            final date = DateTime.tryParse(night['startedAt'] as String? ?? '');
+            final dateLabel = date == null ? 'Дата неизвестна'
+              : '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
+            final values = <String>[];
+            if (night['score'] is num) values.add('оценка ${(night['score'] as num).toStringAsFixed(0)}');
+            if (night['efficiency'] is num) values.add('эффективность ${(night['efficiency'] as num).toStringAsFixed(0)}%');
+            if (night['quality'] is num) values.add('качество ${(night['quality'] as num).toStringAsFixed(1)}/5');
+            if (night['wellbeing'] is num) values.add('самочувствие ${(night['wellbeing'] as num).toStringAsFixed(1)}/5');
+            return _ReportLine(label: dateLabel,
+              value: _duration(night['sleepMinutes']) + (values.isEmpty ? '' : ' · ' + values.join(' · ')));
+          }),
+      ],
+    ]);
   }
 }
 
