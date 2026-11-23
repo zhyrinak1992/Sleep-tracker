@@ -31,15 +31,21 @@ class SleepRecordEvent {
     final recordValue = value['value'];
     final date = value['achievedAt'];
     if ((type != 'sleep_score' && type != 'awakening_count') ||
-        sessionId is! String || sessionId.isEmpty ||
+        sessionId is! String || sessionId.trim().isEmpty ||
         recordValue is! num || !recordValue.isFinite ||
-        date is! String) return null;
+        recordValue < 0 || recordValue % 1 != 0 ||
+        (type == 'sleep_score' && recordValue > 100) ||
+        date is! String) {
+      return null;
+    }
     final parsedDate = DateTime.tryParse(date);
     if (parsedDate == null) return null;
     return SleepRecordEvent(
       type: type,
       sessionId: sessionId,
-      value: recordValue,
+      // Both supported record types are integer metrics. Normalizing here
+      // keeps event keys stable across JSON encoders (95 and 95.0).
+      value: recordValue.toInt(),
       achievedAt: parsedDate.toLocal(),
     );
   }
