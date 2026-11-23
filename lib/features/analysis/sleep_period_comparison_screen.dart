@@ -243,8 +243,7 @@ class _SleepPeriodComparisonScreenState extends State<SleepPeriodComparisonScree
             'quality': shown(report?['sleep_quality'], suffix: ' / 5'),
             'wellbeing': shown(report?['wellbeing'], suffix: ' / 5'),
           };
-        }).toList()
-        ..sort((a, b) => (a['date'] as String).compareTo(b['date'] as String));
+        }).toList();
 
     await PdfReportService.exportPeriodComparison(
       title: 'Сравнение произвольных периодов',
