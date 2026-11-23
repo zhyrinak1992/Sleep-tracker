@@ -241,6 +241,7 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
       List<double> previousValues, {
       bool isDuration = false,
       String unit = '',
+      String deltaUnit = '',
     }) {
       if (current == null) return label + ': сегодня нет данных.';
       if (previousValues.length < 3) {
@@ -253,11 +254,14 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
       String format(double value) => isDuration
           ? formatDuration(value)
           : value.toStringAsFixed(1) + unit;
+      final deltaValue = isDuration
+          ? format(difference.abs())
+          : difference.abs().toStringAsFixed(1) + deltaUnit;
       final delta = difference > 0
-          ? '+' + format(difference)
+          ? '+' + deltaValue
           : difference < 0
-              ? '−' + format(-difference)
-              : format(0);
+              ? '−' + deltaValue
+              : (isDuration ? format(0) : '0.0' + deltaUnit);
       return label + ': сегодня ' + format(current) +
           ', среднее ' + format(average) + ', разница ' + delta +
           ' (n=' + previousValues.length.toString() + ').';
@@ -342,6 +346,7 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                 metrics.sleepEfficiencyPercent,
                 previousEfficiencies,
                 unit: '%',
+                deltaUnit: ' п.п.',
               ), style: const TextStyle(fontSize: 12, height: 1.4)),
               const SizedBox(height: 5),
               Text(comparisonText(
@@ -355,6 +360,7 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                 currentQuality,
                 previousQuality,
                 unit: ' из 5',
+                deltaUnit: ' балла',
               ), style: const TextStyle(fontSize: 12, height: 1.4)),
               const SizedBox(height: 5),
               Text(comparisonText(
