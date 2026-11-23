@@ -18,7 +18,7 @@ void main() {
         'sleep_stages': [<String, Object?>{}, <String, Object?>{}],
         'sleep_metrics': [<String, Object?>{}],
         'sleep_session_tags': [<String, Object?>{}],
-        'app_metadata': [],
+        'app_metadata': [<String, Object?>{'key': 'sleep_change_history_v1', 'value': '[{"periodKey":"2026-10","fingerprint":"f","version":1}]'}],
       };
       final preview = BackupImportPreview.fromDocument({
         'formatVersion': 4,
@@ -35,6 +35,7 @@ void main() {
       expect(preview.stages, 2);
       expect(preview.metrics, 1);
       expect(preview.tags, 1);
+      expect(preview.changeHistorySnapshots, 1);
       expect(preview.formatVersion, 4);
       expect(preview.createdAt, DateTime.parse('2026-11-23T10:00:00Z'));
     });
