@@ -65,7 +65,7 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
             )),
             const SizedBox(height: 10),
             const Text(
-              'Отчёты создаются при открытии этого раздела. Если приложение было закрыто в день окончания периода, пропущенные отчёты будут сформированы при следующем открытии. iOS не гарантирует запуск приложения в фоне по расписанию. Отчёты используют только сохранённые данные; показатель 0–100 появится после отдельного согласования формулы.',
+              'Отчёты создаются при открытии этого раздела. Если приложение было закрыто в день окончания периода, пропущенные отчёты будут сформированы при следующем открытии. iOS не гарантирует запуск приложения в фоне по расписанию. Оценка 0–100 рассчитывается по личному диапазону сна за предыдущие 90 дней и доступным измерениям. Недостающие веса перераспределяются; при менее чем двух компонентах или доступном исходном весе ниже 50% оценка скрывается. Это не медицинский показатель.',
               style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.45),
             ),
           ],
@@ -96,6 +96,9 @@ class _ReportCard extends StatelessWidget {
       ? (report.data['weeklyTrend'] as List).whereType<Map>().toList() : const <Map>[];
     final weekdayPatterns = report.data['weekdayPatterns'] is List
       ? (report.data['weekdayPatterns'] as List).whereType<Map>().toList() : const <Map>[];
+    final score = report.data['score'] is Map ? Map<String, Object?>.from(report.data['score'] as Map) : <String, Object?>{};
+    final scoreComponents = score['components'] is Map ? Map<String, Object?>.from(score['components'] as Map) : <String, Object?>{};
+    final previousScore = previous['score'] is Map ? Map<String, Object?>.from(previous['score'] as Map) : <String, Object?>{};
     final shortest = report.data['shortestAverageMonth'];
     final longest = report.data['longestAverageMonth'];
     return Padding(
@@ -109,6 +112,22 @@ class _ReportCard extends StatelessWidget {
           ]),
           const SizedBox(height: 10),
           _ReportLine(label: 'Завершённых ночей', value: report.nights.toString()),
+          _ReportLine(
+            label: 'Средняя оценка сна · ' + (score['samples'] ?? 0).toString() + ' ночей',
+            value: score['average'] is num ? (score['average'] as num).toStringAsFixed(0) + ' / 100' : 'Недостаточно данных',
+          ),
+          if (scoreComponents.isNotEmpty) ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('Состав оценки сна', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            children: scoreComponents.entries.map((entry) {
+              final component = entry.value is Map ? Map<String, Object?>.from(entry.value as Map) : <String, Object?>{};
+              final value = component['average'];
+              return _ReportLine(
+                label: (component['label'] ?? entry.key).toString() + ' · ' + (component['samples'] ?? 0).toString() + ' ночей',
+                value: value is num ? value.toStringAsFixed(0) + ' / 100' : 'Нет данных',
+              );
+            }).toList(),
+          ),
           if (report.kind == 'year' && report.totalSleepMinutes != null)
             _ReportLine(label: 'Суммарная продолжительность сна', value: _formatDuration(report.totalSleepMinutes)),
           _ReportLine(label: 'Средняя продолжительность сна · ' + (report.data['sleepDurationSamples'] ?? 0).toString() + ' измерений', value: duration),
@@ -123,6 +142,7 @@ class _ReportCard extends StatelessWidget {
             const Divider(height: 22),
             const Text('Сравнение с предыдущим периодом', style: TextStyle(fontWeight: FontWeight.w600)),
             _ReportLine(label: 'Ночей', value: report.nights.toString() + ' · ранее ' + (previous['nights'] ?? 0).toString()),
+            _ReportLine(label: 'Средняя оценка сна', value: (score['average'] is num ? (score['average'] as num).toStringAsFixed(0) + ' / 100' : 'Нет данных') + ' · ранее ' + (previousScore['average'] is num ? (previousScore['average'] as num).toStringAsFixed(0) + ' / 100' : 'Нет данных')),
             _ReportLine(label: 'Средняя продолжительность сна', value: duration + ' · ранее ' + _formatDuration(previous['averageSleepMinutes']) + ' (' + (previous['sleepDurationSamples'] ?? 0).toString() + ' изм.)'),
             _ReportLine(label: 'Время в постели', value: _formatDuration(report.averageTimeInBedMinutes) + ' · ранее ' + _formatDuration(previous['averageTimeInBedMinutes']) + ' (' + (previous['timeInBedSamples'] ?? 0).toString() + ' ночей)'),
             _ReportLine(label: 'Эффективность', value: _formatPercent(report.averageEfficiency) + ' · ранее ' + _formatPercent(_number(previous['averageEfficiency'])) + ' (' + (previous['efficiencySamples'] ?? 0).toString() + ' ночей)'),
@@ -149,10 +169,15 @@ class _ReportCard extends StatelessWidget {
             const Text('Динамика по месяцам', style: TextStyle(fontWeight: FontWeight.w600)),
             ...months.map((month) {
               final index = month['month'] as int;
+              final monthScore = month['score'] is Map ? Map<String, Object?>.from(month['score'] as Map) : <String, Object?>{};
               return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 _ReportLine(
                   label: PeriodicReportSnapshot.monthName(index) + ' · ' + (month['nights'] ?? 0).toString() + ' ночей',
                   value: _formatDuration(month['averageSleepMinutes']),
+                ),
+                _ReportLine(
+                  label: '  Оценка сна · ' + (monthScore['samples'] ?? 0).toString() + ' ночей',
+                  value: monthScore['average'] is num ? (monthScore['average'] as num).toStringAsFixed(0) + ' / 100' : 'Нет данных',
                 ),
                 if (month['averageEfficiency'] is num)
                   _ReportLine(label: '  Эффективность · ' + (month['efficiencySamples'] ?? 0).toString() + ' измерений', value: _formatPercent(_number(month['averageEfficiency']))),

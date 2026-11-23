@@ -3,6 +3,7 @@ import '../../data/sleep_database.dart';
 import '../../models/sleep_session.dart';
 import '../../models/sleep_note.dart';
 import '../diary/sleep_session_metrics.dart';
+import 'sleep_score.dart';
 
 enum PeriodicReportKind { week, month, year }
 
@@ -52,7 +53,8 @@ class PeriodicReportSnapshot {
 class PeriodicReportService {
   PeriodicReportService(this.database);
   final SleepDatabase database;
-  static const metadataPrefix = 'periodic_report_v2_';
+  static const metadataPrefix = 'periodic_report_v3_';
+  static const previousMetadataPrefix = 'periodic_report_v2_';
   static const legacyMetadataPrefix = 'periodic_report_v1_';
 
   Future<List<PeriodicReportSnapshot>> generateClosedReports({DateTime? now}) async {
@@ -66,6 +68,7 @@ class PeriodicReportService {
     final morning = await database.getMorningReportsForSessions(completed.map((s) => s.id).toList());
     final audio = await database.getAudioEvents();
     final notes = await database.getNotes();
+    final scoreCache = <String, SleepScoreResult>{};
 
     for (final kind in PeriodicReportKind.values) {
       final first = _periodStart(completed.first.startedAt, kind);
@@ -84,6 +87,7 @@ class PeriodicReportService {
               kind: kind, start: cursor, end: end, sessions: selected,
               previousSessions: previous, stages: stages, morning: morning,
               audio: audio, notes: notes, allSessions: completed,
+              scoreCache: scoreCache,
             );
             await database.setAppMetadata(metadataPrefix + id, jsonEncode(snapshot));
           }
@@ -96,6 +100,7 @@ class PeriodicReportService {
 
   Future<List<PeriodicReportSnapshot>> loadArchive() async {
     final legacy = await database.getAppMetadataByPrefix(legacyMetadataPrefix);
+    final previous = await database.getAppMetadataByPrefix(previousMetadataPrefix);
     final current = await database.getAppMetadataByPrefix(metadataPrefix);
     final byId = <String, PeriodicReportSnapshot>{};
     for (final value in legacy.values) {
@@ -104,8 +109,13 @@ class PeriodicReportService {
         byId[report.id] = report;
       } catch (_) {}
     }
-    // The corrected v2 snapshot wins while the v1 entry remains in app_metadata
-    // for backup compatibility and rollback safety.
+    // New v3 snapshots win; older v1/v2 snapshots remain readable and intact.
+    for (final value in previous.values) {
+      try {
+        final report = PeriodicReportSnapshot.decode(value);
+        byId[report.id] = report;
+      } catch (_) {}
+    }
     for (final value in current.values) {
       try {
         final report = PeriodicReportSnapshot.decode(value);
@@ -124,6 +134,7 @@ class PeriodicReportService {
     required Map<String, Map<String, Object?>> morning,
     required List<Map<String, Object?>> audio, required List<SleepNote> notes,
     required List<SleepSession> allSessions,
+    required Map<String, SleepScoreResult> scoreCache,
   }) {
     Map<String, Object?> summarize(List<SleepSession> selected) {
       final metrics = selected.map((s) => SleepSessionMetrics.calculate(session: s, stages: stages[s.id] ?? const [])).toList();
@@ -138,6 +149,36 @@ class PeriodicReportService {
         if (measuredSleep != null && measuredSleep > 0) durations.add(measuredSleep);
         final measuredTimeInBed = metric.timeInBedMinutes;
         if (measuredTimeInBed != null && measuredTimeInBed > 0) timeInBed.add(measuredTimeInBed);
+      }
+      final nightlyScores = selected.map((session) =>
+        scoreCache.putIfAbsent(session.id, () =>
+          SleepScoreCalculator.calculateForSession(
+            session: session,
+            historySessions: allSessions,
+            morningReports: morning,
+            stagesBySession: stages,
+          ),
+        ),
+      ).toList();
+      final scoreValues = nightlyScores.map((item) => item.score).whereType<double>().toList();
+      final scoreComponents = <String, Map<String, Object?>>{};
+      for (final key in ['duration', 'efficiency', 'awakenings', 'subjectiveQuality']) {
+        final componentValues = <double>[];
+        String? label;
+        double? weight;
+        for (final score in nightlyScores) {
+          for (final component in score.components.where((item) => item.key == key)) {
+            label = component.label;
+            weight = component.weight;
+            if (component.score != null) componentValues.add(component.score!);
+          }
+        }
+        scoreComponents[key] = {
+          'label': label,
+          'weight': weight,
+          'average': avg(componentValues),
+          'samples': componentValues.length,
+        };
       }
       final efficiencies = metrics.map((m) => m.sleepEfficiencyPercent).whereType<double>().toList();
       final awakenings = <int>[];
@@ -161,6 +202,12 @@ class PeriodicReportService {
         'averageAwakenings': avg(awakenings), 'awakeningSamples': awakenings.length,
         'averageQuality': avg(qualities), 'qualitySamples': qualities.length,
         'averageWellbeing': avg(wellbeing), 'wellbeingSamples': wellbeing.length,
+        'score': {
+          'average': avg(scoreValues),
+          'samples': scoreValues.length,
+          'components': scoreComponents,
+          'availableWeightAverage': avg(nightlyScores.map((item) => item.availableWeight)),
+        },
       };
     }
 
@@ -185,12 +232,12 @@ class PeriodicReportService {
     }).toList();
 
     final data = <String, Object?>{
-      'schemaVersion': 2, 'id': _id(kind, start), 'kind': kind.name,
+      'schemaVersion': 3, 'id': _id(kind, start), 'kind': kind.name,
       'start': start.toIso8601String(), 'endExclusive': end.toIso8601String(),
       'generatedAt': DateTime.now().toIso8601String(),
       ...current, 'audioEventCount': events.length, 'audioCategories': categories,
       'notes': periodNotes, 'noteCount': periodNotes.length,
-      'previous': previous, 'score': null,
+      'previous': previous, 'score': current['score'],
     };
 
     List<Map<String, Object?>> weekdayPatterns(List<SleepSession> selected) {
