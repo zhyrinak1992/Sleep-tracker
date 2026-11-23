@@ -97,6 +97,13 @@ class _ReportCard extends StatelessWidget {
     final weekdayPatterns = report.data['weekdayPatterns'] is List
       ? (report.data['weekdayPatterns'] as List).whereType<Map>().toList() : const <Map>[];
     final score = report.data['score'] is Map ? Map<String, Object?>.from(report.data['score'] as Map) : <String, Object?>{};
+    final tagPatterns = report.data['tagPatterns'] is Map
+      ? Map<String, Object?>.from(report.data['tagPatterns'] as Map)
+      : <String, Object?>{};
+    final currentTagPatterns = tagPatterns['current'] is List
+      ? (tagPatterns['current'] as List).whereType<Map>().toList() : const <Map>[];
+    final previousTagPatterns = tagPatterns['previous'] is List
+      ? (tagPatterns['previous'] as List).whereType<Map>().toList() : const <Map>[];
     final scoreComponents = score['components'] is Map ? Map<String, Object?>.from(score['components'] as Map) : <String, Object?>{};
     final previousScore = previous['score'] is Map ? Map<String, Object?>.from(previous['score'] as Map) : <String, Object?>{};
     final shortest = report.data['shortestAverageMonth'];
@@ -128,6 +135,56 @@ class _ReportCard extends StatelessWidget {
               );
             }).toList(),
           ),
+          if (currentTagPatterns.isNotEmpty) ...[
+            const Divider(height: 22),
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: const Text('Персональные закономерности по отметкам', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              subtitle: const Text('Наблюдаемое сравнение ночей с отметкой и без неё', style: TextStyle(fontSize: 11)),
+              children: currentTagPatterns.map((rawPattern) {
+                final pattern = Map<String, Object?>.from(rawPattern);
+                final key = pattern['tagKey'];
+                final previousPattern = previousTagPatterns.where((item) => item['tagKey'] == key).toList();
+                final previousMetrics = previousPattern.isEmpty || previousPattern.first['metrics'] is! Map
+                  ? <String, Object?>{}
+                  : Map<String, Object?>.from(previousPattern.first['metrics'] as Map);
+                final metrics = pattern['metrics'] is Map
+                  ? Map<String, Object?>.from(pattern['metrics'] as Map) : <String, Object?>{};
+                String formatMetric(String metricKey, String suffix) {
+                  final current = metrics[metricKey] is Map
+                    ? Map<String, Object?>.from(metrics[metricKey] as Map) : <String, Object?>{};
+                  final previous = previousMetrics[metricKey] is Map
+                    ? Map<String, Object?>.from(previousMetrics[metricKey] as Map) : <String, Object?>{};
+                  String value(Object? raw) => raw is num ? raw.toStringAsFixed(metricKey == 'duration' ? 0 : 1) + suffix : 'нет данных';
+                  final difference = current['difference'];
+                  final delta = difference is num
+                    ? ' · разница ' + (difference > 0 ? '+' : '') + difference.toStringAsFixed(1) + suffix
+                    : ' · недостаточно данных для сравнения';
+                  return 'С отметкой: ' + value(current['withTagAverage']) +
+                    ' (n=' + (current['withTagSamples'] ?? 0).toString() + '); без отметки: ' +
+                    value(current['withoutTagAverage']) + ' (n=' +
+                    (current['withoutTagSamples'] ?? 0).toString() + ')' + delta +
+                    '. Ранее: ' + value(previous['withTagAverage']) + ' / ' +
+                    value(previous['withoutTagAverage']) + '.';
+                }
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text((pattern['label'] ?? key ?? 'Отметка').toString() +
+                      ' · ' + (pattern['withTagNights'] ?? 0).toString() + ' ночей с отметкой',
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                    const SizedBox(height: 4),
+                    Text('Продолжительность: ' + formatMetric('duration', ' мин'),
+                      style: const TextStyle(fontSize: 11, height: 1.4)),
+                    Text('Оценка сна: ' + formatMetric('score', ' балла'),
+                      style: const TextStyle(fontSize: 11, height: 1.4)),
+                    Text('Пробуждения: ' + formatMetric('awakenings', ' эпиз.'),
+                      style: const TextStyle(fontSize: 11, height: 1.4)),
+                  ]),
+                );
+              }).toList(),
+            ),
+          ],
           if (report.kind == 'year' && report.totalSleepMinutes != null)
             _ReportLine(label: 'Суммарная продолжительность сна', value: _formatDuration(report.totalSleepMinutes)),
           _ReportLine(label: 'Средняя продолжительность сна · ' + (report.data['sleepDurationSamples'] ?? 0).toString() + ' измерений', value: duration),
