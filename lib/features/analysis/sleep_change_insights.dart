@@ -93,6 +93,11 @@ class SleepChangeInsights {
       ));
     }
 
+    String signed(double value, String suffix, {int decimals = 0}) {
+      final sign = value > 0 ? '+' : '';
+      return '$sign${value.toStringAsFixed(decimals)}$suffix';
+    }
+
     String duration(double value) {
       final minutes = value.round();
       return minutes ~/ 60 == 0
