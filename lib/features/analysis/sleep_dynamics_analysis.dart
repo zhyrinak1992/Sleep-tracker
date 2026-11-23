@@ -23,7 +23,13 @@ class SleepDynamicsSummary {
     required this.bedtimeDeviationMinutes,
     required this.wakeTimeDeviationMinutes,
     required this.regularitySamples,
+    required this.typicalBedtimeMinute,
+    required this.typicalWakeMinute,
     required this.chartValues,
+    required this.chartEfficiencyValues,
+    required this.chartAwakeningValues,
+    required this.chartQualityValues,
+    required this.chartWellbeingValues,
   });
 
   final DateTime start;
@@ -43,7 +49,13 @@ class SleepDynamicsSummary {
   final double? bedtimeDeviationMinutes;
   final double? wakeTimeDeviationMinutes;
   final int regularitySamples;
+  final int? typicalBedtimeMinute;
+  final int? typicalWakeMinute;
   final List<double?> chartValues;
+  final List<double?> chartEfficiencyValues;
+  final List<double?> chartAwakeningValues;
+  final List<double?> chartQualityValues;
+  final List<double?> chartWellbeingValues;
 }
 
 class SleepDynamicsAnalysis {
@@ -98,33 +110,56 @@ class SleepDynamicsAnalysis {
     };
     final bucketTotals = List<double>.filled(bucketCount, 0);
     final bucketSamples = List<int>.filled(bucketCount, 0);
+    final bucketEfficiencyTotals = List<double>.filled(bucketCount, 0);
+    final bucketEfficiencySamples = List<int>.filled(bucketCount, 0);
+    final bucketAwakeningTotals = List<double>.filled(bucketCount, 0);
+    final bucketAwakeningSamples = List<int>.filled(bucketCount, 0);
+    final bucketQualityTotals = List<double>.filled(bucketCount, 0);
+    final bucketQualitySamples = List<int>.filled(bucketCount, 0);
+    final bucketWellbeingTotals = List<double>.filled(bucketCount, 0);
+    final bucketWellbeingSamples = List<int>.filled(bucketCount, 0);
 
     for (final session in completed) {
       final stages = stagesBySession[session.id] ?? const <Map<String, Object?>>[];
       final metrics = SleepSessionMetrics.calculate(session: session, stages: stages);
+      final bucket = switch (period) {
+        SleepDynamicsPeriod.week => session.startedAt.weekday - 1,
+        SleepDynamicsPeriod.month => ((session.startedAt.day - 1) ~/ 7).clamp(0, 4),
+        SleepDynamicsPeriod.year => session.startedAt.month - 1,
+      };
       // Use stage-derived/actual boundaries where available; otherwise retain
       // the saved session interval, clearly counted as an available duration sample.
       final duration = metrics.sleepDurationMinutes ?? session.duration!.inMinutes;
       if (duration > 0) {
         durations.add(duration.toDouble());
-        final bucket = switch (period) {
-          SleepDynamicsPeriod.week => session.startedAt.weekday - 1,
-          SleepDynamicsPeriod.month => ((session.startedAt.day - 1) ~/ 7).clamp(0, 4),
-          SleepDynamicsPeriod.year => session.startedAt.month - 1,
-        };
         bucketTotals[bucket] += duration;
         bucketSamples[bucket]++;
       }
       final efficiency = metrics.sleepEfficiencyPercent;
-      if (efficiency != null && efficiency.isFinite) efficiencies.add(efficiency);
+      if (efficiency != null && efficiency.isFinite) {
+        efficiencies.add(efficiency);
+        bucketEfficiencyTotals[bucket] += efficiency;
+        bucketEfficiencySamples[bucket]++;
+      }
       if (stages.isNotEmpty && metrics.stageCoveragePercent != null) {
-        awakenings.add(metrics.awakeningCount.toDouble());
+        final count = metrics.awakeningCount.toDouble();
+        awakenings.add(count);
+        bucketAwakeningTotals[bucket] += count;
+        bucketAwakeningSamples[bucket]++;
       }
       final report = morningReports[session.id];
       final quality = report?['sleep_quality'];
       final feel = report?['wellbeing'];
-      if (quality is num && quality.toDouble().isFinite) qualities.add(quality.toDouble());
-      if (feel is num && feel.toDouble().isFinite) wellbeing.add(feel.toDouble());
+      if (quality is num && quality.toDouble().isFinite) {
+        qualities.add(quality.toDouble());
+        bucketQualityTotals[bucket] += quality.toDouble();
+        bucketQualitySamples[bucket]++;
+      }
+      if (feel is num && feel.toDouble().isFinite) {
+        wellbeing.add(feel.toDouble());
+        bucketWellbeingTotals[bucket] += feel.toDouble();
+        bucketWellbeingSamples[bucket]++;
+      }
     }
 
     double? average(List<double> values) => values.isEmpty
@@ -132,8 +167,14 @@ class SleepDynamicsAnalysis {
       : values.reduce((a, b) => a + b) / values.length;
 
     final regularity = SleepRegularityAnalysis.calculate(completed);
-    final chart = List<double?>.generate(bucketCount, (index) =>
-      bucketSamples[index] == 0 ? null : bucketTotals[index] / bucketSamples[index]);
+    List<double?> chart(List<double> totals, List<int> samples) =>
+      List<double?>.generate(bucketCount, (index) =>
+        samples[index] == 0 ? null : totals[index] / samples[index]);
+    final chartDurations = chart(bucketTotals, bucketSamples);
+    final chartEfficiency = chart(bucketEfficiencyTotals, bucketEfficiencySamples);
+    final chartAwakenings = chart(bucketAwakeningTotals, bucketAwakeningSamples);
+    final chartQuality = chart(bucketQualityTotals, bucketQualitySamples);
+    final chartWellbeing = chart(bucketWellbeingTotals, bucketWellbeingSamples);
 
     return SleepDynamicsSummary(
       start: from,
@@ -153,7 +194,13 @@ class SleepDynamicsAnalysis {
       bedtimeDeviationMinutes: regularity.bedtimeMad,
       wakeTimeDeviationMinutes: regularity.wakeMad,
       regularitySamples: regularity.nights.length,
-      chartValues: chart,
+      typicalBedtimeMinute: regularity.typicalBedtimeMinute,
+      typicalWakeMinute: regularity.typicalWakeMinute,
+      chartValues: chartDurations,
+      chartEfficiencyValues: chartEfficiency,
+      chartAwakeningValues: chartAwakenings,
+      chartQualityValues: chartQuality,
+      chartWellbeingValues: chartWellbeing,
     );
   }
 }
