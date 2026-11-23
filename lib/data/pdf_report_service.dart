@@ -12,6 +12,75 @@ import 'sleep_database.dart';
 
 class PdfReportService {
 
+  /// Exports a user-selected comparison of two date ranges with aggregate
+  /// metrics and the actual completed nightly observations behind them.
+  static Future<void> exportPeriodComparison({
+    required String title,
+    required String periodALabel,
+    required String periodBLabel,
+    required List<Map<String, Object?>> metrics,
+    required List<Map<String, Object?>> nightsA,
+    required List<Map<String, Object?>> nightsB,
+  }) async {
+    final regular = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Regular.ttf'));
+    final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));
+    final doc = pw.Document();
+    pw.Widget nightTable(List<Map<String, Object?>> nights) {
+      if (nights.isEmpty) return pw.Text('Нет завершённых ночных записей.');
+      return pw.TableHelper.fromTextArray(
+        headers: ['Дата', 'Начало', 'Конец', 'Сон', 'Эффективность', 'Пробуждения', 'Качество', 'Самочувствие'],
+        cellStyle: const pw.TextStyle(fontSize: 7),
+        headerStyle: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold),
+        data: nights.map((night) => [
+          night['date'] ?? '—',
+          night['start'] ?? '—',
+          night['end'] ?? '—',
+          night['duration'] ?? '—',
+          night['efficiency'] ?? '—',
+          night['awakenings'] ?? '—',
+          night['quality'] ?? '—',
+          night['wellbeing'] ?? '—',
+        ]).toList(),
+      );
+    }
+
+    doc.addPage(pw.MultiPage(
+      theme: pw.ThemeData.withFont(base: regular, bold: bold),
+      build: (_) => [
+        pw.Header(level: 0, child: pw.Text('Sleep Tracker — $title')),
+        pw.Text('Сформирован: ${DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now())}'),
+        pw.SizedBox(height: 12),
+        pw.Header(level: 1, child: pw.Text('Сводное сравнение')),
+        pw.TableHelper.fromTextArray(
+          headers: ['Показатель', 'Период A', 'Период B', 'Изменение'],
+          cellStyle: const pw.TextStyle(fontSize: 8),
+          headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+          data: metrics.map((metric) => [
+            metric['label'] ?? '—',
+            metric['a'] ?? 'Нет данных',
+            metric['b'] ?? 'Нет данных',
+            metric['change'] ?? 'Недостаточно данных',
+          ]).toList(),
+        ),
+        pw.SizedBox(height: 14),
+        pw.Header(level: 1, child: pw.Text('Период A — $periodALabel')),
+        pw.Text('Завершённых ночей: ${nightsA.length}'),
+        nightTable(nightsA),
+        pw.SizedBox(height: 14),
+        pw.Header(level: 1, child: pw.Text('Период B — $periodBLabel')),
+        pw.Text('Завершённых ночей: ${nightsB.length}'),
+        nightTable(nightsB),
+        pw.SizedBox(height: 12),
+        pw.Text('Отчёт содержит сохранённые измерения. Размер выборки зависит от доступности конкретного показателя; отсутствие данных не считается нулём. Сравнение описывает различия между периодами и не устанавливает причины изменений.',
+          style: const pw.TextStyle(fontSize: 8)),
+      ],
+    ));
+    final dir = await getTemporaryDirectory();
+    final file = File(p.join(dir.path, 'SleepTracker-comparison-${DateTime.now().millisecondsSinceEpoch}.pdf'));
+    await file.writeAsBytes(await doc.save(), flush: true);
+    await Share.shareXFiles([XFile(file.path, mimeType: 'application/pdf')], subject: 'Сравнение периодов Sleep Tracker');
+  }
+
   /// Exports the immutable archived snapshot rather than recalculating a past
   /// period from records that may have been edited since the report was saved.
   static Future<void> exportPeriodicSnapshot(
