@@ -136,7 +136,7 @@ class ComparisonSuggestionStore {
   Future<void> _saveHistory(List<ComparisonSuggestionRecord> history) =>
       _write(historyKey, jsonEncode(history.map((item) => item.toMap()).toList()));
 
-  DateTime _nextMidnight(DateTime now) => DateTime(now.year, now.month, now.day + 1);
+  DateTime _nextMorning(DateTime now) => DateTime(now.year, now.month, now.day + 1, 8);
 
   Future<List<ComparisonSuggestionRecord>> _expireUnviewed(
     List<ComparisonSuggestionRecord> history,
@@ -206,7 +206,7 @@ class ComparisonSuggestionStore {
         id: _uuid.v4(),
         candidate: candidate,
         createdAt: now,
-        expiresAt: _nextMidnight(now),
+        expiresAt: _nextMorning(now),
         status: ComparisonSuggestionStatus.pending,
         statusEvents: [
           {'status': ComparisonSuggestionStatus.pending.name, 'at': now.toIso8601String()},
