@@ -237,7 +237,7 @@ class PeriodicReportService {
       'generatedAt': DateTime.now().toIso8601String(),
       ...current, 'audioEventCount': events.length, 'audioCategories': categories,
       'notes': periodNotes, 'noteCount': periodNotes.length,
-      'previous': previous, 'score': null,
+      'previous': previous, 'score': current['score'],
     };
 
     List<Map<String, Object?>> weekdayPatterns(List<SleepSession> selected) {
