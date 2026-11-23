@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:cryptography/cryptography.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -16,9 +17,9 @@ class BackupService {
   static final BackupService instance = BackupService._();
 
   static const format = 'sleep_tracker_backup';
-  static const formatVersion = 4;
+  static const formatVersion = 5;
 
-  Future<void> exportToFiles({required String password}) async {
+  Future<void> exportToFiles({String? password}) async {
     final snapshot = await SleepDatabase.instance.exportSnapshot();
     final audioRows = (snapshot['audio_events'] as List).cast<Map<String, Object?>>();
     var audioBytesTotal = 0;
@@ -34,24 +35,32 @@ class BackupService {
       audioBytesTotal += bytes.length;
       row['audioDataB64'] = base64Encode(bytes);
     }
+    final manifest = await _buildManifest(snapshot);
     final document = <String, Object?>{
       'format': format,
       'formatVersion': formatVersion,
       'app': 'Sleep Tracker',
       'createdAt': DateTime.now().toUtc().toIso8601String(),
       'summary': <String, Object?>{'sleepSessions': (snapshot['sleep_sessions'] as List).length, 'notes': (snapshot['sleep_notes'] as List).length, 'audioEvents': audioRows.length, 'audioBytes': audioBytesTotal, 'climateSamples': (snapshot['climate_samples'] as List).length},
+      'manifest': manifest,
       'data': snapshot,
     };
     final plaintext = const JsonEncoder.withIndent('  ').convert(document);
-    final encryptedBytes = await BackupCrypto.encryptDocument(plaintext: plaintext, password: password);
+    final encrypted = password != null && password.isNotEmpty;
+    final outputBytes = encrypted
+        ? await BackupCrypto.encryptDocument(plaintext: plaintext, password: password)
+        : utf8.encode(plaintext);
     final temp = await getTemporaryDirectory();
     final stamp = DateTime.now().toIso8601String().replaceAll(':', '-').split('.').first;
-    final file = File(p.join(temp.path, 'SleepTracker-backup-$stamp.stbackup'));
-    await file.writeAsBytes(encryptedBytes, flush: true);
+    final extension = encrypted ? 'stbackup' : 'sleepbackup';
+    final file = File(p.join(temp.path, 'SleepTracker-backup-$stamp.$extension'));
+    await file.writeAsBytes(outputBytes, flush: true);
     await Share.shareXFiles(
       [XFile(file.path, mimeType: 'application/octet-stream', name: p.basename(file.path))],
-      subject: 'Зашифрованная резервная копия Sleep Tracker',
-      text: 'Зашифрованная резервная копия. Для восстановления потребуется пароль.',
+      subject: 'Резервная копия Sleep Tracker',
+      text: encrypted
+          ? 'Зашифрованная резервная копия. Для восстановления потребуется заданный пароль.'
+          : 'Резервная копия Sleep Tracker. Дополнительный пароль не требуется.',
     );
   }
 
@@ -59,7 +68,7 @@ class BackupService {
   Future<BackupImportDraft?> prepareImportFromFiles({required Future<String?> Function() requestPassword}) async {
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['json', 'stbackup'],
+      allowedExtensions: ['json', 'stbackup', 'sleepbackup'],
       withData: true,
       allowMultiple: false,
     );
@@ -82,13 +91,14 @@ class BackupService {
     final decoded = jsonDecode(jsonText);
     if (decoded is! Map<String, dynamic> ||
         decoded['format'] != format ||
-        ![1, 2, 3, formatVersion].contains(decoded['formatVersion']) ||
+        ![1, 2, 3, 4, formatVersion].contains(decoded['formatVersion']) ||
         decoded['data'] is! Map<String, dynamic>) {
       throw const FormatException('Файл не является поддерживаемой резервной копией Sleep Tracker.');
     }
     final data = Map<String, dynamic>.from(decoded['data'] as Map<String, dynamic>);
     // This validation is deliberately read-only and runs before the user sees restore choices.
     SleepDatabase.instance.validateSnapshot(data);
+    await _validateManifest(decoded, data, decoded['formatVersion'] as int);
     _validateAudioArchive(data, decoded['formatVersion'] as int);
     _validateSleepChangeHistory(data);
     _validateComparisonSuggestionHistory(data);
@@ -97,6 +107,95 @@ class BackupService {
       data: data,
       preview: BackupImportPreview.fromDocument(decoded, data),
     );
+  }
+
+  Future<String> _sha256Hex(List<int> bytes) async {
+    final digest = await Sha256().hash(bytes);
+    return digest.bytes.map((value) => value.toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  Future<Map<String, Object?>> _buildManifest(Map<String, dynamic> data) async {
+    final tableCounts = <String, int>{};
+    for (final entry in data.entries) {
+      if (entry.value is List) tableCounts[entry.key] = (entry.value as List).length;
+    }
+    final audioFiles = <Map<String, Object?>>[];
+    for (final raw in (data['audio_events'] as List?) ?? const []) {
+      if (raw is! Map) continue;
+      final encoded = raw['audioDataB64'];
+      if (encoded is! String || encoded.isEmpty) continue;
+      final bytes = base64Decode(encoded);
+      audioFiles.add({
+        'eventId': raw['id'],
+        'sizeBytes': bytes.length,
+        'sha256': await _sha256Hex(bytes),
+      });
+    }
+    return {
+      'manifestVersion': 1,
+      'payloadSha256': await _sha256Hex(utf8.encode(jsonEncode(data))),
+      'tableCounts': tableCounts,
+      'audioFiles': audioFiles,
+    };
+  }
+
+  Future<void> _validateManifest(
+    Map<String, dynamic> document,
+    Map<String, dynamic> data,
+    int version,
+  ) async {
+    if (version < 5) return;
+    final manifest = document['manifest'];
+    if (manifest is! Map<String, dynamic> ||
+        manifest['manifestVersion'] != 1 ||
+        manifest['payloadSha256'] is! String ||
+        manifest['tableCounts'] is! Map ||
+        manifest['audioFiles'] is! List) {
+      throw const FormatException('В резервной копии отсутствует корректный манифест целостности.');
+    }
+    final expectedPayloadHash = await _sha256Hex(utf8.encode(jsonEncode(data)));
+    if (manifest['payloadSha256'] != expectedPayloadHash) {
+      throw const FormatException('Контрольная сумма данных не совпадает. Архив повреждён или изменён; восстановление отменено.');
+    }
+    final tableCounts = Map<String, dynamic>.from(manifest['tableCounts'] as Map);
+    for (final entry in data.entries) {
+      if (entry.value is! List) continue;
+      if (tableCounts[entry.key] != (entry.value as List).length) {
+        throw FormatException('Количество записей в разделе «${entry.key}» не совпадает с манифестом.');
+      }
+    }
+    final audioManifest = <String, Map<String, dynamic>>{};
+    for (final raw in manifest['audioFiles'] as List) {
+      if (raw is! Map || raw['eventId'] is! String ||
+          raw['sizeBytes'] is! int || raw['sha256'] is! String) {
+        throw const FormatException('Список контрольных сумм аудиофайлов повреждён.');
+      }
+      final id = raw['eventId'] as String;
+      if (audioManifest.containsKey(id)) {
+        throw const FormatException('В манифесте повторяется ID аудиофайла.');
+      }
+      audioManifest[id] = Map<String, dynamic>.from(raw);
+    }
+    var embeddedAudioCount = 0;
+    for (final raw in (data['audio_events'] as List?) ?? const []) {
+      if (raw is! Map) continue;
+      final encoded = raw['audioDataB64'];
+      if (encoded == null) continue;
+      if (encoded is! String || raw['id'] is! String) {
+        throw const FormatException('Вложение аудиособытия имеет неверный формат.');
+      }
+      final bytes = base64Decode(encoded);
+      final entry = audioManifest[raw['id'] as String];
+      if (entry == null ||
+          entry['sizeBytes'] != bytes.length ||
+          entry['sha256'] != await _sha256Hex(bytes)) {
+        throw const FormatException('Контрольная сумма аудиофайла не совпадает. Восстановление отменено.');
+      }
+      embeddedAudioCount++;
+    }
+    if (audioManifest.length != embeddedAudioCount) {
+      throw const FormatException('Количество вложенных аудиофайлов не совпадает с манифестом.');
+    }
   }
 
   void _validateAudioArchive(Map<String, dynamic> data, int version) {
@@ -109,7 +208,7 @@ class BackupService {
       final row = Map<String, dynamic>.from(raw);
       final encoded = row['audioDataB64'];
       if (encoded == null) {
-        if ((version == 3 || version == 4) && row['file_path'] != null) {
+        if (version >= 3 && row['file_path'] != null) {
           throw const FormatException('В резервной копии отсутствует аудиофайл, который должен быть в архиве. Импорт отменён без изменения текущих данных.');
         }
         continue;
@@ -246,11 +345,12 @@ class BackupImportPreview {
     required this.formatVersion, required this.createdAt, required this.sessions,
     required this.reports, required this.notes, required this.audioEvents,
     required this.audioFiles, required this.climateSamples, required this.stages,
-    required this.metrics, required this.tags, required this.changeHistorySnapshots, required this.suggestionHistoryEntries,
+    required this.metrics, required this.tags, required this.changeHistorySnapshots, required this.suggestionHistoryEntries, required this.integrityVerified,
   });
   final int formatVersion;
   final DateTime? createdAt;
   final int sessions, reports, notes, audioEvents, audioFiles, climateSamples, stages, metrics, tags, changeHistorySnapshots, suggestionHistoryEntries;
+  final bool integrityVerified;
 
   static int _count(Map<String, dynamic> data, String key) => data[key] is List ? (data[key] as List).length : 0;
   factory BackupImportPreview.fromDocument(Map<String, dynamic> document, Map<String, dynamic> data) {
@@ -283,6 +383,7 @@ class BackupImportPreview {
       metrics: _count(data, 'sleep_metrics'), tags: _count(data, 'sleep_session_tags'),
       changeHistorySnapshots: changeHistorySnapshots,
       suggestionHistoryEntries: suggestionHistoryEntries,
+      integrityVerified: document['formatVersion'] == 5 && document['manifest'] is Map,
     );
   }
 }
