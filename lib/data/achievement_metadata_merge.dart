@@ -120,16 +120,9 @@ List<Map<String, Object?>> _mergeRecordEvents(Object? local, Object? imported) {
           metricValue is! num || !metricValue.isFinite ||
           date is! String || DateTime.tryParse(date) == null) continue;
       final key = '$type|$sessionId';
-      final previous = bySessionMetric[key];
-      if (previous == null) {
-        bySessionMetric[key] = event;
-      } else {
-        final oldDate = DateTime.tryParse(previous['achievedAt'] as String);
-        final newDate = DateTime.parse(date);
-        if (oldDate == null || newDate.isBefore(oldDate)) {
-          bySessionMetric[key] = event;
-        }
-      }
+      // If the same source night/metric exists locally, local wins. This
+      // avoids importing a stale value after the night was edited locally.
+      bySessionMetric.putIfAbsent(key, () => event);
     }
   }
   add(local);

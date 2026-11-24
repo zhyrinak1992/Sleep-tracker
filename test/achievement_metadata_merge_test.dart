@@ -79,6 +79,17 @@ void main() {
 
       expect(history, hasLength(2));
       expect(celebrated.toSet(), {'a', 'b'});
+
+      final localWins = jsonDecode(mergeAchievementMetadata(
+        key: 'sleep_records_history_v1',
+        localRaw: jsonEncode([local]),
+        importedRaw: jsonEncode([{
+          ...local,
+          'value': 88,
+          'achievedAt': '2026-11-19T07:00:00Z',
+        }]),
+      )) as List;
+      expect(localWins.single['value'], 90);
     });
 
     test('repairs a missing local metadata entry from the archive', () {
