@@ -18,14 +18,38 @@ const _tables = [
   'climate_samples',
 ];
 
-Map<String, dynamic> _snapshot(List<Map<String, Object?>> metadata) => {
+Map<String, dynamic> _snapshot(
+  List<Map<String, Object?>> metadata, {
+  List<Map<String, Object?>> sessions = const [],
+}) => {
   'schemaVersion': 8,
   for (final table in _tables)
-    table: table == 'app_metadata' ? metadata : <Map<String, Object?>>[],
+    table: switch (table) {
+      'app_metadata' => metadata,
+      'sleep_sessions' => sessions,
+      _ => <Map<String, Object?>>[],
+    },
 };
 
 Future<void> _createMinimalRestoreSchema(Database db) async {
-  await db.execute('CREATE TABLE sleep_sessions (id TEXT PRIMARY KEY)');
+  await db.execute('''
+    CREATE TABLE sleep_sessions (
+      id TEXT PRIMARY KEY,
+      started_at TEXT NOT NULL,
+      ended_at TEXT,
+      source TEXT NOT NULL,
+      note TEXT,
+      morning_rating INTEGER,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT,
+      button_started_at TEXT,
+      button_ended_at TEXT,
+      actual_sleep_started_at TEXT,
+      actual_sleep_ended_at TEXT,
+      user_edited INTEGER NOT NULL DEFAULT 0
+    )
+  ''');
   await db.execute('CREATE TABLE sleep_session_tags (session_id TEXT, tag_key TEXT)');
   await db.execute('CREATE TABLE sleep_notes (id TEXT PRIMARY KEY)');
   await db.execute('CREATE TABLE app_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
@@ -50,6 +74,105 @@ void main() {
   tearDown(() async {
     SleepDatabase.instance.setDatabaseForTesting(null);
     await database.close();
+  });
+
+  test('trash, restore from trash, merge backup and full backup restore preserve record history', () async {
+    const sessionId = 'night-cycle';
+    final start = DateTime.utc(2026, 11, 20, 22);
+    final end = DateTime.utc(2026, 11, 21, 7);
+    final archiveSession = <String, Object?>{
+      'id': sessionId,
+      'started_at': start.toIso8601String(),
+      'ended_at': end.toIso8601String(),
+      'source': 'manual',
+      'note': null,
+      'morning_rating': 4,
+      'created_at': start.toIso8601String(),
+      'updated_at': end.toIso8601String(),
+      'deleted_at': null,
+      'button_started_at': null,
+      'button_ended_at': null,
+      'actual_sleep_started_at': null,
+      'actual_sleep_ended_at': null,
+      'user_edited': 0,
+    };
+    final recordEvent = {
+      'type': 'sleep_score',
+      'sessionId': sessionId,
+      'value': 94,
+      'achievedAt': end.toIso8601String(),
+    };
+    final archiveMetadata = <Map<String, Object?>>[
+      {
+        'key': 'sleep_records_history_v1',
+        'value': jsonEncode([recordEvent]),
+      },
+      {
+        'key': 'sleep_records_celebrated_v1',
+        'value': jsonEncode(['sleep_score|$sessionId|94']),
+      },
+      {
+        'key': 'sleep_personal_records_v1',
+        'value': jsonEncode({
+          'bestSleepScore': 94,
+          'bestSleepScoreSessionId': sessionId,
+        }),
+      },
+    ];
+
+    await database.insert('sleep_sessions', archiveSession);
+    for (final row in archiveMetadata) {
+      await database.insert('app_metadata', row);
+    }
+
+    // Moving a night to trash hides it from normal history but does not erase
+    // the original session or the already-earned record metadata.
+    await SleepDatabase.instance.moveSessionToTrash(sessionId);
+    expect(await SleepDatabase.instance.getSessions(), isEmpty);
+    final trashed = await SleepDatabase.instance.getSessionById(sessionId);
+    expect(trashed, isNotNull);
+    expect(trashed!.deletedAt, isNotNull);
+    expect(
+      await SleepDatabase.instance.getAppMetadata('sleep_records_history_v1'),
+      jsonEncode([recordEvent]),
+    );
+
+    // Restoring from the trash makes the original night visible again.
+    await SleepDatabase.instance.restoreSessionFromTrash(sessionId);
+    expect(await SleepDatabase.instance.getSessions(), hasLength(1));
+    expect(
+      (await SleepDatabase.instance.getSessionById(sessionId))!.deletedAt,
+      isNull,
+    );
+
+    // A merge restore must not silently undelete a locally trashed night:
+    // existing local session rows keep priority over archive rows.
+    await SleepDatabase.instance.moveSessionToTrash(sessionId);
+    await SleepDatabase.instance.restoreSnapshot(
+      _snapshot(archiveMetadata, sessions: [archiveSession]),
+      merge: true,
+    );
+    final afterMerge = await SleepDatabase.instance.getSessionById(sessionId);
+    expect(afterMerge, isNotNull);
+    expect(afterMerge!.deletedAt, isNotNull);
+
+    // A full restore replaces local state with the archive state, including
+    // the archive's active session and the record/celebration metadata.
+    await SleepDatabase.instance.restoreSnapshot(
+      _snapshot(archiveMetadata, sessions: [archiveSession]),
+    );
+    final afterFullRestore = await SleepDatabase.instance.getSessionById(sessionId);
+    expect(afterFullRestore, isNotNull);
+    expect(afterFullRestore!.deletedAt, isNull);
+    expect(await SleepDatabase.instance.getSessions(), hasLength(1));
+    expect(
+      await SleepDatabase.instance.getAppMetadata('sleep_records_history_v1'),
+      jsonEncode([recordEvent]),
+    );
+    expect(
+      await SleepDatabase.instance.getAppMetadata('sleep_records_celebrated_v1'),
+      jsonEncode(['sleep_score|$sessionId|94']),
+    );
   });
 
   test('merge restore persists unified achievement metadata in a real SQLite transaction', () async {
