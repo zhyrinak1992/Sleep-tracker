@@ -1,11 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqflite/sqflite.dart' show Database, inMemoryDatabasePath;
+import 'package:sqflite/sqflite.dart' show Database;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart'
     show databaseFactoryFfi, sqfliteFfiInit;
 import 'package:sleep_tracker/data/sleep_database.dart';
 
-Future<Database> _openDatabase() async {
-  final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+Future<Database> _openDatabase(String path) async {
+  final db = await databaseFactoryFfi.openDatabase(path);
   await db.execute('PRAGMA foreign_keys = ON');
   await db.execute('''
     CREATE TABLE sleep_sessions (
@@ -80,18 +82,21 @@ Future<Database> _openDatabase() async {
 void main() {
   late Database source;
   late Database destination;
+  late Directory tempDirectory;
 
   setUpAll(sqfliteFfiInit);
 
   setUp(() async {
-    source = await _openDatabase();
-    destination = await _openDatabase();
+    tempDirectory = await Directory.systemTemp.createTemp('sleep_backup_round_trip_');
+    source = await _openDatabase('${tempDirectory.path}/source.db');
+    destination = await _openDatabase('${tempDirectory.path}/destination.db');
   });
 
   tearDown(() async {
     SleepDatabase.instance.setDatabaseForTesting(null);
     await source.close();
     await destination.close();
+    await tempDirectory.delete(recursive: true);
   });
 
   test('full snapshot restore preserves every exported table and field', () async {
