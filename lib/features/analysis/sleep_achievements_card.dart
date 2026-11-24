@@ -121,7 +121,7 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
         final database = SleepDatabase.instance;
         final session = await database.getSessionById(event.sessionId);
         if (!mounted) return;
-        if (session == null) {
+        if (session == null || session.deletedAt != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Запись этой ночи больше недоступна.')),
           );

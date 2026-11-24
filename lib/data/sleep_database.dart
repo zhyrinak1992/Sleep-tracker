@@ -10,6 +10,7 @@ import '../models/sleep_note.dart';
 import 'sleep_change_history.dart';
 import 'comparison_suggestion_history_merge.dart';
 import 'backup_restore_planner.dart';
+import 'achievement_metadata_merge.dart';
 
 class SleepDatabase {
   SleepDatabase._();
@@ -379,6 +380,23 @@ class SleepDatabase {
           await txn.insert('app_metadata', {
             'key': key,
             'value': jsonEncode(mergedHistory),
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        } else if (const {
+          'sleep_achievements_history_v1',
+          'sleep_personal_records_v1',
+          'sleep_records_history_v1',
+          'sleep_records_celebrated_v1',
+        }.contains(key)) {
+          final localRaw = exists.isEmpty ? null : exists.first['value'] as String?;
+          final importedRaw = row['value'] as String? ?? '';
+          final mergedRaw = mergeAchievementMetadata(
+            key: key,
+            localRaw: localRaw,
+            importedRaw: importedRaw,
+          );
+          await txn.insert('app_metadata', {
+            'key': key,
+            'value': mergedRaw,
           }, conflictAlgorithm: ConflictAlgorithm.replace);
         } else if (exists.isEmpty) {
           await txn.insert('app_metadata', row);

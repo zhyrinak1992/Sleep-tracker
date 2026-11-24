@@ -1,0 +1,148 @@
+import 'dart:convert';
+
+/// Merges only the achievement/record metadata owned by the unified
+/// achievements feature. Other app metadata keeps the existing local-wins rule.
+String mergeAchievementMetadata({
+  required String key,
+  required String? localRaw,
+  required String importedRaw,
+}) {
+  Object? decode(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return jsonDecode(raw);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  final local = decode(localRaw);
+  final imported = decode(importedRaw);
+
+  switch (key) {
+    case 'sleep_achievements_history_v1':
+      return jsonEncode(_mergeAchievementDates(local, imported));
+    case 'sleep_personal_records_v1':
+      return jsonEncode(_mergePersonalRecords(local, imported));
+    case 'sleep_records_history_v1':
+      return jsonEncode(_mergeRecordEvents(local, imported));
+    case 'sleep_records_celebrated_v1':
+      return jsonEncode(_mergeStringSet(local, imported));
+    default:
+      return importedRaw;
+  }
+}
+
+Map<String, String> _mergeAchievementDates(Object? local, Object? imported) {
+  final result = <String, String>{};
+  void add(Object? value) {
+    if (value is! Map) return;
+    for (final entry in value.entries) {
+      if (entry.key is! String || entry.value is! String) continue;
+      final date = DateTime.tryParse(entry.value as String);
+      if (date == null) continue;
+      final id = entry.key as String;
+      final previous = result[id];
+      final previousDate = previous == null ? null : DateTime.tryParse(previous);
+      if (previousDate == null || date.isBefore(previousDate)) {
+        result[id] = date.toUtc().toIso8601String();
+      }
+    }
+  }
+  add(local);
+  add(imported);
+  return result;
+}
+
+Map<String, Object?> _mergePersonalRecords(Object? local, Object? imported) {
+  final a = local is Map ? Map<String, Object?>.from(local) : <String, Object?>{};
+  final b = imported is Map ? Map<String, Object?>.from(imported) : <String, Object?>{};
+  final result = Map<String, Object?>.from(a);
+
+  void chooseMaximum(String valueKey, List<String> associatedKeys) {
+    final av = a[valueKey];
+    final bv = b[valueKey];
+    final an = av is num && av.isFinite ? av : null;
+    final bn = bv is num && bv.isFinite ? bv : null;
+    if (an == null && bn == null) return;
+    final takeImported = an == null || (bn != null && bn > an);
+    if (takeImported) {
+      result[valueKey] = bv;
+      for (final key in associatedKeys) {
+        if (b.containsKey(key)) {
+          result[key] = b[key];
+        } else {
+          result.remove(key);
+        }
+      }
+    }
+  }
+
+  void chooseMinimum(String valueKey, List<String> associatedKeys) {
+    final av = a[valueKey];
+    final bv = b[valueKey];
+    final an = av is num && av.isFinite && av >= 0 ? av : null;
+    final bn = bv is num && bv.isFinite && bv >= 0 ? bv : null;
+    if (an == null && bn == null) return;
+    final takeImported = an == null || (bn != null && bn < an);
+    if (takeImported) {
+      result[valueKey] = bv;
+      for (final key in associatedKeys) {
+        if (b.containsKey(key)) {
+          result[key] = b[key];
+        } else {
+          result.remove(key);
+        }
+      }
+    }
+  }
+
+  chooseMaximum('longestSleepMinutes', ['longestSleepSessionId', 'longestSleepAt']);
+  chooseMaximum('bestEfficiencyPercent', ['bestEfficiencySessionId', 'bestEfficiencyAt']);
+  chooseMinimum('shortestLatencyMinutes', ['shortestLatencySessionId', 'shortestLatencyAt']);
+  chooseMaximum('longestStreakDays', const []);
+  return result;
+}
+
+List<Map<String, Object?>> _mergeRecordEvents(Object? local, Object? imported) {
+  final bySessionMetric = <String, Map<String, Object?>>{};
+  void add(Object? value) {
+    if (value is! List) return;
+    for (final item in value) {
+      if (item is! Map) continue;
+      final event = Map<String, Object?>.from(item);
+      final type = event['type'];
+      final sessionId = event['sessionId'];
+      final metricValue = event['value'];
+      final date = event['achievedAt'];
+      if ((type != 'sleep_score' && type != 'awakening_count') ||
+          sessionId is! String || sessionId.isEmpty ||
+          metricValue is! num || !metricValue.isFinite ||
+          date is! String || DateTime.tryParse(date) == null) continue;
+      final key = '$type|$sessionId';
+      final previous = bySessionMetric[key];
+      if (previous == null) {
+        bySessionMetric[key] = event;
+      } else {
+        final oldDate = DateTime.tryParse(previous['achievedAt'] as String);
+        final newDate = DateTime.parse(date);
+        if (oldDate == null || newDate.isBefore(oldDate)) {
+          bySessionMetric[key] = event;
+        }
+      }
+    }
+  }
+  add(local);
+  add(imported);
+  final result = bySessionMetric.values.toList()
+    ..sort((a, b) => DateTime.parse(a['achievedAt'] as String)
+        .compareTo(DateTime.parse(b['achievedAt'] as String)));
+  return result;
+}
+
+List<String> _mergeStringSet(Object? local, Object? imported) {
+  final result = <String>{};
+  if (local is List) result.addAll(local.whereType<String>());
+  if (imported is List) result.addAll(imported.whereType<String>());
+  return result.toList();
+}

@@ -150,8 +150,7 @@ class BackupRestorePlanner {
           final key = row['key'];
           return {
             'key': key,
-            if (key == 'sleep_change_history_v1' || key == 'comparison_suggestion_history_v1')
-              'value': row['value'],
+            'value': row['value'],
           };
         }
         final archiveState = archive.map(metadataFingerprint).toList()
@@ -200,7 +199,18 @@ class BackupRestorePlanner {
             continue;
           }
           if (metadataKey is String && currentByKey.containsKey(metadataKey)) {
-            duplicatesToSkip++;
+            const mergeableAchievementKeys = {
+              'sleep_achievements_history_v1',
+              'sleep_personal_records_v1',
+              'sleep_records_history_v1',
+              'sleep_records_celebrated_v1',
+            };
+            if (mergeableAchievementKeys.contains(metadataKey) &&
+                currentByKey[metadataKey]!['value'] != row['value']) {
+              historyEntriesToMerge++;
+            } else {
+              duplicatesToSkip++;
+            }
           } else {
             recordsToAdd++;
             mergeDatabaseBytes += _rowBytes(row);

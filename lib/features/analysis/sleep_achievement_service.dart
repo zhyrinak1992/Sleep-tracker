@@ -97,7 +97,6 @@ class SleepAchievementService {
       try {
         final decoded = jsonDecode(raw);
         if (decoded is Map<String, dynamic>) {
-          hasValidHistory = true;
           for (final entry in decoded.entries) {
             if (entry.value is String &&
                 DateTime.tryParse(entry.value as String) != null) {
@@ -109,6 +108,10 @@ class SleepAchievementService {
         // Damaged metadata must not affect sleep records or app startup.
       }
     }
+    // A structurally valid but empty/fully-invalid map is not evidence that
+    // achievements were previously initialized. Treat it as a baseline so
+    // restoring or repairing partial metadata cannot replay old celebrations.
+    hasValidHistory = history.isNotEmpty;
 
     final newlyEarned = <String>{};
     var changed = false;
