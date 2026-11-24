@@ -149,6 +149,16 @@ List<SleepRecordEvent> buildSleepRecordHistory(
   return List.unmodifiable(history);
 }
 
+bool shouldBaselineSleepRecordHistory({
+  required bool historyMissing,
+  required bool historyNeedsRewrite,
+  required bool historyEmpty,
+  required bool celebratedMarkerMissing,
+}) =>
+    historyMissing ||
+    (historyNeedsRewrite && historyEmpty) ||
+    (historyEmpty && celebratedMarkerMissing);
+
 List<SleepRecordEvent> retainDeletedNightRecordEvents({
   required Iterable<SleepRecordEvent> previousHistory,
   required Set<String> nonDeletedSessionIds,
@@ -325,8 +335,12 @@ class SleepRecordService {
     // If metadata is unreadable and yielded no usable events, treat the
     // reconstructed timeline as a baseline rather than replaying years of
     // historical congratulations after repairing the metadata.
-    final isBaselineInitialization = isFirstInitialization ||
-        (decodedHistory.needsRewrite && previousHistory.isEmpty);
+    final isBaselineInitialization = shouldBaselineSleepRecordHistory(
+      historyMissing: isFirstInitialization,
+      historyNeedsRewrite: decodedHistory.needsRewrite,
+      historyEmpty: previousHistory.isEmpty,
+      celebratedMarkerMissing: celebratedRaw == null || celebratedRaw.isEmpty,
+    );
     final candidates = <SleepRecordEvent>[];
     for (final session in sessions) {
       final stages = stagesBySession[session.id] ?? const <Map<String, Object?>>[];

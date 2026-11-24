@@ -4,6 +4,45 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sleep_tracker/features/analysis/sleep_record_service.dart';
 
 void main() {
+  group('Record history baseline detection', () {
+    test('treats empty restored history without a celebration marker as baseline', () {
+      expect(
+        shouldBaselineSleepRecordHistory(
+          historyMissing: false,
+          historyNeedsRewrite: false,
+          historyEmpty: true,
+          celebratedMarkerMissing: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('does not suppress pending celebrations when persisted events exist', () {
+      expect(
+        shouldBaselineSleepRecordHistory(
+          historyMissing: false,
+          historyNeedsRewrite: false,
+          historyEmpty: false,
+          celebratedMarkerMissing: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('does not reset an initialized empty history with its marker', () {
+      expect(
+        shouldBaselineSleepRecordHistory(
+          historyMissing: false,
+          historyNeedsRewrite: false,
+          historyEmpty: true,
+          celebratedMarkerMissing: false,
+        ),
+        isFalse,
+      );
+    });
+  });
+
+
   group('SleepRecordEvent', () {
     test('round-trips a valid persisted event', () {
       final event = SleepRecordEvent(
