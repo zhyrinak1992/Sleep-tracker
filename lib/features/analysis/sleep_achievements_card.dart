@@ -268,6 +268,7 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
         value: records.longestStreakDays == 0
             ? 'Пока нет завершённых ночей'
             : records.longestStreakDays.toString() + ' ' + _dayWord(records.longestStreakDays) + ' подряд',
+        sourceLabel: '',
         isNew: newKeys.contains('longestStreak'),
       ),
     ]);
