@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
@@ -17,6 +18,12 @@ class SleepDatabase {
   static final SleepDatabase instance = SleepDatabase._();
   static const _uuid = Uuid();
   Database? _db;
+
+  /// Supplies an in-memory database to exercise real restore transactions in tests.
+  @visibleForTesting
+  void setDatabaseForTesting(Database? database) {
+    _db = database;
+  }
 
   Future<Database> get database async {
     if (_db != null) return _db!;
