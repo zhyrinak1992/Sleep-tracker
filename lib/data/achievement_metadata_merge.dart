@@ -2,6 +2,14 @@ import 'dart:convert';
 
 /// Merges only the achievement/record metadata owned by the unified
 /// achievements feature. Other app metadata keeps the existing local-wins rule.
+Map<String, Object?> _stringKeyedMap(Object? value) {
+  if (value is! Map) return <String, Object?>{};
+  return {
+    for (final entry in value.entries)
+      if (entry.key is String) entry.key as String: entry.value,
+  };
+}
+
 String mergeAchievementMetadata({
   required String key,
   required String? localRaw,
@@ -55,8 +63,8 @@ Map<String, String> _mergeAchievementDates(Object? local, Object? imported) {
 }
 
 Map<String, Object?> _mergePersonalRecords(Object? local, Object? imported) {
-  final a = local is Map ? Map<String, Object?>.from(local) : <String, Object?>{};
-  final b = imported is Map ? Map<String, Object?>.from(imported) : <String, Object?>{};
+  final a = _stringKeyedMap(local);
+  final b = _stringKeyedMap(imported);
   final result = Map<String, Object?>.from(a);
 
   num? validRecordValue(String key, Object? value) {
@@ -113,7 +121,7 @@ List<Map<String, Object?>> _mergeRecordEvents(Object? local, Object? imported) {
     if (value is! List) return;
     for (final item in value) {
       if (item is! Map) continue;
-      final event = Map<String, Object?>.from(item);
+      final event = _stringKeyedMap(item);
       final type = event['type'];
       final sessionId = event['sessionId'];
       final metricValue = event['value'];
