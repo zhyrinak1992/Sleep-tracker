@@ -5,6 +5,61 @@ import 'package:sleep_tracker/data/backup_restore_planner.dart';
 
 void main() {
   group('BackupRestorePlanner', () {
+    test('counts individual achievement metadata entries that will actually be merged', () {
+      final archive = {
+        for (final table in BackupRestorePlanner.tableKeys.keys)
+          table: <Map<String, Object?>>[],
+      };
+      final current = {
+        for (final table in BackupRestorePlanner.tableKeys.keys)
+          table: <Map<String, Object?>>[],
+      };
+      current['app_metadata'] = [
+        {'key': 'sleep_achievements_history_v1', 'value': jsonEncode({
+          'first_night': '2026-11-20T00:00:00Z',
+        })},
+        {'key': 'sleep_personal_records_v1', 'value': jsonEncode({
+          'longestSleepMinutes': 500,
+          'bestEfficiencyPercent': 90,
+          'shortestLatencyMinutes': 10,
+          'longestStreakDays': 3,
+        })},
+        {'key': 'sleep_records_history_v1', 'value': jsonEncode([
+          {'type': 'sleep_score', 'sessionId': 'night-1', 'value': 90,
+           'achievedAt': '2026-11-20T07:00:00Z'},
+        ])},
+        {'key': 'sleep_records_celebrated_v1', 'value': jsonEncode(['x'])},
+      ];
+      archive['app_metadata'] = [
+        {'key': 'sleep_achievements_history_v1', 'value': jsonEncode({
+          'first_night': '2026-11-22T00:00:00Z',
+          'seven_nights': '2026-11-21T00:00:00Z',
+        })},
+        {'key': 'sleep_personal_records_v1', 'value': jsonEncode({
+          'longestSleepMinutes': 550,
+          'bestEfficiencyPercent': 88,
+          'shortestLatencyMinutes': 5,
+          'longestStreakDays': 7,
+        })},
+        {'key': 'sleep_records_history_v1', 'value': jsonEncode([
+          {'type': 'sleep_score', 'sessionId': 'night-1', 'value': 88,
+           'achievedAt': '2026-11-19T07:00:00Z'},
+          {'type': 'sleep_score', 'sessionId': 'night-2', 'value': 96,
+           'achievedAt': '2026-11-21T07:00:00Z'},
+        ])},
+        {'key': 'sleep_records_celebrated_v1', 'value': jsonEncode(['x', 'y', 'z'])},
+      ];
+
+      final impact = BackupRestorePlanner.calculate(
+        archiveRows: archive,
+        currentRows: current,
+        availableBytes: 100 * 1024 * 1024,
+      );
+
+      expect(impact.merge.historyEntriesToMerge, 7);
+    });
+
+
     test('counts new rows, duplicate rows, merged history and only new audio files', () {
       final archive = <String, List<Map<String, Object?>>>{
         'sleep_sessions': [

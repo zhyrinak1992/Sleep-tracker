@@ -97,6 +97,87 @@ class BackupRestorePlanner {
     return utf8.encode(jsonEncode(copy)).length;
   }
 
+  static int _achievementMetadataMergeCount(
+    String key,
+    Object? localRaw,
+    Object? importedRaw,
+  ) {
+    Object? decode(Object? raw) {
+      if (raw is! String || raw.isEmpty) return null;
+      try {
+        return jsonDecode(raw);
+      } on FormatException {
+        return null;
+      }
+    }
+
+    final local = decode(localRaw);
+    final imported = decode(importedRaw);
+    switch (key) {
+      case 'sleep_achievements_history_v1':
+        if (imported is! Map) return 0;
+        final localMap = local is Map ? local : const <Object?, Object?>{};
+        return imported.entries.where((entry) {
+          final previous = localMap[entry.key];
+          final incomingDate = entry.value is String
+              ? DateTime.tryParse(entry.value as String)
+              : null;
+          final previousDate = previous is String
+              ? DateTime.tryParse(previous)
+              : null;
+          return incomingDate != null &&
+              (previousDate == null || incomingDate.isBefore(previousDate));
+        }).length;
+      case 'sleep_personal_records_v1':
+        if (imported is! Map) return 0;
+        final localMap = local is Map ? local : const <Object?, Object?>{};
+        bool valid(Object? value, {bool percent = false}) =>
+            value is num && value.isFinite && value >= 0 &&
+            (!percent || value <= 100) && (percent || value % 1 == 0);
+        var count = 0;
+        for (final field in [
+          'longestSleepMinutes',
+          'bestEfficiencyPercent',
+          'shortestLatencyMinutes',
+          'longestStreakDays',
+        ]) {
+          final incoming = imported[field];
+          final previous = localMap[field];
+          if (!valid(incoming, percent: field == 'bestEfficiencyPercent')) continue;
+          if (!valid(previous, percent: field == 'bestEfficiencyPercent')) {
+            count++;
+          } else if (field == 'shortestLatencyMinutes'
+              ? incoming < previous
+              : incoming > previous) {
+            count++;
+          }
+        }
+        return count;
+      case 'sleep_records_history_v1':
+        if (imported is! List) return 0;
+        final identities = <String>{};
+        if (local is List) {
+          for (final item in local) {
+            if (item is Map && item['type'] is String && item['sessionId'] is String) {
+              identities.add('${item['type']}|${item['sessionId']}');
+            }
+          }
+        }
+        var count = 0;
+        for (final item in imported) {
+          if (item is! Map || item['type'] is! String || item['sessionId'] is! String) continue;
+          if (identities.add('${item['type']}|${item['sessionId']}')) count++;
+        }
+        return count;
+      case 'sleep_records_celebrated_v1':
+        final localSet = local is List ? local.whereType<String>().toSet() : <String>{};
+        final importedSet = imported is List ? imported.whereType<String>().toSet() : <String>{};
+        return importedSet.difference(localSet).length;
+      default:
+        return 0;
+    }
+  }
+
   static int _audioBytes(Map<String, Object?> row) {
     final encoded = row['audioDataB64'];
     if (encoded is! String || encoded.isEmpty) return 0;
@@ -207,7 +288,11 @@ class BackupRestorePlanner {
             };
             if (mergeableAchievementKeys.contains(metadataKey) &&
                 currentByKey[metadataKey]!['value'] != row['value']) {
-              historyEntriesToMerge++;
+              historyEntriesToMerge += _achievementMetadataMergeCount(
+                metadataKey,
+                currentByKey[metadataKey]!['value'],
+                row['value'],
+              );
               mergeDatabaseBytes += _rowBytes(row);
             } else {
               duplicatesToSkip++;
