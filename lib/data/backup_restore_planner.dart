@@ -133,7 +133,8 @@ class BackupRestorePlanner {
         final localMap = local is Map ? local : const <Object?, Object?>{};
         bool valid(Object? value, {bool percent = false}) =>
             value is num && value.isFinite && value >= 0 &&
-            (!percent || value <= 100) && (percent || value % 1 == 0);
+            (!percent || value <= 100) &&
+            (percent || value % 1 == 0);
         var count = 0;
         for (final field in [
           'longestSleepMinutes',
@@ -143,8 +144,10 @@ class BackupRestorePlanner {
         ]) {
           final incoming = imported[field];
           final previous = localMap[field];
-          if (!valid(incoming, percent: field == 'bestEfficiencyPercent')) continue;
-          if (!valid(previous, percent: field == 'bestEfficiencyPercent')) {
+          if (!valid(incoming, percent: field == 'bestEfficiencyPercent') ||
+              (field == 'shortestLatencyMinutes' && incoming > 1440)) continue;
+          if (!valid(previous, percent: field == 'bestEfficiencyPercent') ||
+              (field == 'shortestLatencyMinutes' && previous > 1440)) {
             count++;
           } else if (field == 'shortestLatencyMinutes'
               ? incoming < previous

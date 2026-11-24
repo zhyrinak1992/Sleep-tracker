@@ -70,6 +70,7 @@ Map<String, Object?> _mergePersonalRecords(Object? local, Object? imported) {
   num? validRecordValue(String key, Object? value) {
     if (value is! num || !value.isFinite || value < 0) return null;
     if (key == 'bestEfficiencyPercent') return value <= 100 ? value : null;
+    if (key == 'shortestLatencyMinutes' && value > 1440) return null;
     if (value % 1 != 0) return null;
     return value;
   }
