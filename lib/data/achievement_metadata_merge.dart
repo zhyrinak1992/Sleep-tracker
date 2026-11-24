@@ -72,7 +72,7 @@ Map<String, Object?> _mergePersonalRecords(Object? local, Object? imported) {
     if (an == null && bn == null) return;
     final takeImported = an == null || (bn != null && bn > an);
     if (takeImported) {
-      result[valueKey] = bv;
+      result[valueKey] = b[valueKey];
       for (final key in associatedKeys) {
         if (b.containsKey(key)) {
           result[key] = b[key];

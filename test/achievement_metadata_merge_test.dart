@@ -51,6 +51,7 @@ void main() {
       expect(merged['shortestLatencyMinutes'], 2);
       expect(merged['shortestLatencySessionId'], 'archive-latency');
       expect(merged['longestStreakDays'], 14);
+      expect(merged['bestEfficiencyAt'], '2026-11-21T00:00:00Z');
     });
 
     test('ignores invalid imported best values rather than erasing valid local values', () {
