@@ -175,5 +175,19 @@ void main() {
       metadata['sleep_records_celebrated_v1']!,
     ) as List<dynamic>).toSet();
     expect(celebrated, {'already-celebrated', 'new-celebration'});
+
+    // Restoring the same archive again must be idempotent: no duplicate
+    // record events, achievement dates, or celebration acknowledgements.
+    final metadataAfterFirstRestore = Map<String, String>.from(metadata);
+    await SleepDatabase.instance.restoreSnapshot(
+      _snapshot(archiveMetadata),
+      merge: true,
+    );
+    final rowsAfterSecondRestore = await database.query('app_metadata');
+    final metadataAfterSecondRestore = {
+      for (final row in rowsAfterSecondRestore)
+        row['key'] as String: row['value'] as String,
+    };
+    expect(metadataAfterSecondRestore, metadataAfterFirstRestore);
   });
 }
