@@ -319,7 +319,7 @@ void main() {
 
       final retained = retainDeletedNightRecordEvents(
         previousHistory: [deleted, stillPresent],
-        existingSessionIds: {'existing-night'},
+        activeSessionIds: {'existing-night'},
       );
 
       expect(retained, [deleted]);
@@ -338,7 +338,7 @@ void main() {
       expect(
         retainDeletedNightRecordEvents(
           previousHistory: [event],
-          existingSessionIds: {'corrected-night'},
+          activeSessionIds: {'corrected-night'},
         ),
         isEmpty,
       );
