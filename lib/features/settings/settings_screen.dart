@@ -781,7 +781,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('Отчёты и очистка аудио', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
         const SizedBox(height: 8),
-        const Text('Аудиофайлы хранятся не более 7 дней. При запуске приложения просроченные файлы и их записи удаляются; история сна и отчёты остаются.', style: TextStyle(color: AppTheme.muted, height: 1.45)),
+        const Text('Аудиофайлы хранятся не более 7 дней. После этого удаляются только сами файлы, а карточки аудиособытий остаются в истории.', style: TextStyle(color: AppTheme.muted, height: 1.45)),
         const SizedBox(height: 12),
         Wrap(spacing: 8, runSpacing: 8, children: [
           OutlinedButton.icon(onPressed: _busy ? null : () => _run(() => PdfReportService.exportHistory(days: 7), 'Недельный PDF-отчёт подготовлен.'), icon: const Icon(Icons.picture_as_pdf_outlined), label: const Text('Неделя')),
@@ -830,17 +830,29 @@ class _AudioEventsPanelState extends State<AudioEventsPanel> {
         if (events.isEmpty) return const Text('Пока нет сохранённых аудиособытий.', style: TextStyle(color: AppTheme.muted));
         return Column(children: events.map((event) {
           final id = event['id']! as String;
-          final path = event['file_path']! as String;
+          final path = event['file_path'] as String?;
           final category = event['category'] as String? ?? 'unknown';
           final captured = DateTime.tryParse(event['captured_at'] as String? ?? '')?.toLocal();
+          final captureLabel = captured == null
+              ? 'Дата неизвестна'
+              : '${captured.day.toString().padLeft(2,'0')}.${captured.month.toString().padLeft(2,'0')}.${captured.year} ${captured.hour.toString().padLeft(2,'0')}:${captured.minute.toString().padLeft(2,'0')}';
+          final retentionLabel = path == null || path.isEmpty
+              ? 'аудиофайл удалён по сроку хранения'
+              : 'хранение 7 дней';
           return ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: IconButton(icon: const Icon(Icons.play_circle_outline), onPressed: () async {
-              if (await File(path).exists()) await _player.play(DeviceFileSource(path));
-              else if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Аудиофайл не найден.')));
-            }),
+            leading: IconButton(
+              icon: const Icon(Icons.play_circle_outline),
+              onPressed: path == null || path.isEmpty ? null : () async {
+                if (await File(path).exists()) {
+                  await _player.play(DeviceFileSource(path));
+                } else if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Аудиофайл не найден.')));
+                }
+              },
+            ),
             title: Text(categories[category] ?? categories['unknown']!),
-            subtitle: Text('${captured == null ? 'Дата неизвестна' : '${captured.day.toString().padLeft(2,'0')}.${captured.month.toString().padLeft(2,'0')}.${captured.year} ${captured.hour.toString().padLeft(2,'0')}:${captured.minute.toString().padLeft(2,'0')}'} · хранение 7 дней${event['user_corrected'] == 1 ? ' · исправлено вручную' : event['confidence'] == null ? '' : ' · уверенность ${((event['confidence'] as num).toDouble() * 100).round()}%'}'),
+            subtitle: Text('$captureLabel · $retentionLabel${event['user_corrected'] == 1 ? ' · исправлено вручную' : event['confidence'] == null ? '' : ' · уверенность ${((event['confidence'] as num).toDouble() * 100).round()}%'}'),
             trailing: PopupMenuButton<String>(onSelected: (value) async {
               if (value == 'delete') { await SleepDatabase.instance.deleteAudioEvent(id); final remaining = await SleepDatabase.instance.getAudioEvents(); await NotificationService.instance.scheduleAudioExpiry(remaining.map((row) => DateTime.parse(row['expires_at']! as String))); }
               else { await SleepDatabase.instance.updateAudioCategory(id, value); }
