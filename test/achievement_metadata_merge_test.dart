@@ -53,6 +53,23 @@ void main() {
       expect(merged['longestStreakDays'], 14);
     });
 
+    test('ignores invalid imported best values rather than erasing valid local values', () {
+      final merged = jsonDecode(mergeAchievementMetadata(
+        key: 'sleep_personal_records_v1',
+        localRaw: jsonEncode({
+          'bestEfficiencyPercent': 94,
+          'bestEfficiencySessionId': 'valid-local',
+        }),
+        importedRaw: jsonEncode({
+          'bestEfficiencyPercent': 150,
+          'bestEfficiencySessionId': 'invalid-archive',
+        }),
+      )) as Map<String, dynamic>;
+
+      expect(merged['bestEfficiencyPercent'], 94);
+      expect(merged['bestEfficiencySessionId'], 'valid-local');
+    });
+
     test('unions record events by metric and session and unions celebrations', () {
       final local = {
         'type': 'sleep_score',

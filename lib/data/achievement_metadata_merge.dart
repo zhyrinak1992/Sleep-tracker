@@ -59,11 +59,16 @@ Map<String, Object?> _mergePersonalRecords(Object? local, Object? imported) {
   final b = imported is Map ? Map<String, Object?>.from(imported) : <String, Object?>{};
   final result = Map<String, Object?>.from(a);
 
+  num? validRecordValue(String key, Object? value) {
+    if (value is! num || !value.isFinite || value < 0) return null;
+    if (key == 'bestEfficiencyPercent') return value <= 100 ? value : null;
+    if (value % 1 != 0) return null;
+    return value;
+  }
+
   void chooseMaximum(String valueKey, List<String> associatedKeys) {
-    final av = a[valueKey];
-    final bv = b[valueKey];
-    final an = av is num && av.isFinite ? av : null;
-    final bn = bv is num && bv.isFinite ? bv : null;
+    final an = validRecordValue(valueKey, a[valueKey]);
+    final bn = validRecordValue(valueKey, b[valueKey]);
     if (an == null && bn == null) return;
     final takeImported = an == null || (bn != null && bn > an);
     if (takeImported) {
@@ -79,10 +84,8 @@ Map<String, Object?> _mergePersonalRecords(Object? local, Object? imported) {
   }
 
   void chooseMinimum(String valueKey, List<String> associatedKeys) {
-    final av = a[valueKey];
-    final bv = b[valueKey];
-    final an = av is num && av.isFinite && av >= 0 ? av : null;
-    final bn = bv is num && bv.isFinite && bv >= 0 ? bv : null;
+    final an = validRecordValue(valueKey, a[valueKey]);
+    final bn = validRecordValue(valueKey, b[valueKey]);
     if (an == null && bn == null) return;
     final takeImported = an == null || (bn != null && bn < an);
     if (takeImported) {
@@ -118,6 +121,8 @@ List<Map<String, Object?>> _mergeRecordEvents(Object? local, Object? imported) {
       if ((type != 'sleep_score' && type != 'awakening_count') ||
           sessionId is! String || sessionId.isEmpty ||
           metricValue is! num || !metricValue.isFinite ||
+          metricValue < 0 || metricValue % 1 != 0 ||
+          (type == 'sleep_score' && metricValue > 100) ||
           date is! String || DateTime.tryParse(date) == null) continue;
       final key = '$type|$sessionId';
       // If the same source night/metric exists locally, local wins. This
