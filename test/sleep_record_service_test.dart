@@ -319,7 +319,7 @@ void main() {
 
       final retained = retainDeletedNightRecordEvents(
         previousHistory: [deleted, stillPresent],
-        activeSessionIds: {'existing-night'},
+        nonDeletedSessionIds: {'existing-night'},
       );
 
       expect(retained, [deleted]);
@@ -327,7 +327,7 @@ void main() {
       expect(retained.single.achievedAt, deleted.achievedAt);
     });
 
-    test('does not preserve old events for sessions that still exist', () {
+    test('does not preserve old events for sessions that still exist and are not deleted', () {
       final event = SleepRecordEvent(
         type: 'sleep_score',
         sessionId: 'corrected-night',
@@ -338,7 +338,7 @@ void main() {
       expect(
         retainDeletedNightRecordEvents(
           previousHistory: [event],
-          activeSessionIds: {'corrected-night'},
+          nonDeletedSessionIds: {'corrected-night'},
         ),
         isEmpty,
       );

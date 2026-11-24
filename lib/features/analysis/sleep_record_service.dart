@@ -151,9 +151,9 @@ List<SleepRecordEvent> buildSleepRecordHistory(
 
 List<SleepRecordEvent> retainDeletedNightRecordEvents({
   required Iterable<SleepRecordEvent> previousHistory,
-  required Set<String> activeSessionIds,
+  required Set<String> nonDeletedSessionIds,
 }) => List.unmodifiable(
-  previousHistory.where((event) => !activeSessionIds.contains(event.sessionId)),
+  previousHistory.where((event) => !nonDeletedSessionIds.contains(event.sessionId)),
 );
 
 class SleepRecordState {
@@ -297,9 +297,12 @@ class SleepRecordService {
             session.duration!.inMinutes > 0)
         .toList()
       ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
-    // A soft-deleted session is absent from the active source set even though
-    // its SQLite row remains in the recycle bin. Keep its earned record event.
-    final activeSessionIds = sessions.map((session) => session.id).toSet();
+    // Distinguish a deleted source night from an edited/incomplete one.
+    // Soft-deleted rows remain in SQLite, but are absent from this set.
+    final nonDeletedSessionIds = allSessions
+        .where((session) => session.deletedAt == null)
+        .map((session) => session.id)
+        .toSet();
 
     final ids = sessions.map((item) => item.id).toList(growable: false);
     final stagesBySession = await database.getStagesForSessions(ids);
@@ -367,7 +370,7 @@ class SleepRecordService {
     // Existing sessions are still recalculated, so correction behavior is unchanged.
     final deletedNightEvents = retainDeletedNightRecordEvents(
       previousHistory: previousHistory,
-      activeSessionIds: activeSessionIds,
+      nonDeletedSessionIds: nonDeletedSessionIds,
     );
     final history = buildSleepRecordHistory([
       ...candidates,
