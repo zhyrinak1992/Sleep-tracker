@@ -149,6 +149,13 @@ List<SleepRecordEvent> buildSleepRecordHistory(
   return List.unmodifiable(history);
 }
 
+List<SleepRecordEvent> retainDeletedNightRecordEvents({
+  required Iterable<SleepRecordEvent> previousHistory,
+  required Set<String> existingSessionIds,
+}) => List.unmodifiable(
+  previousHistory.where((event) => !existingSessionIds.contains(event.sessionId)),
+);
+
 class SleepRecordState {
   const SleepRecordState({required this.history, this.newRecords = const []});
 
@@ -356,8 +363,9 @@ class SleepRecordService {
 
     // Preserve earned events if their source night has been deleted.
     // Existing sessions are still recalculated, so correction behavior is unchanged.
-    final deletedNightEvents = previousHistory.where(
-      (event) => !existingSessionIds.contains(event.sessionId),
+    final deletedNightEvents = retainDeletedNightRecordEvents(
+      previousHistory: previousHistory,
+      existingSessionIds: existingSessionIds,
     );
     final history = buildSleepRecordHistory([
       ...candidates,
