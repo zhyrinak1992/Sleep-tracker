@@ -626,12 +626,18 @@ class SleepDatabase {
 
   Future<int> purgeExpiredTrash({DateTime? now}) async {
     final db = await database;
-    final cutoff = (now ?? DateTime.now()).toUtc().subtract(const Duration(days: 30)).toIso8601String();
+    final cutoff = (now ?? DateTime.now()).toUtc().subtract(const Duration(days: 30));
     final audioPaths = <String>[];
     var deletedCount = 0;
     await db.transaction((txn) async {
-      final expired = await txn.query('sleep_sessions', columns: ['id'], where: 'deleted_at IS NOT NULL AND deleted_at <= ?', whereArgs: [cutoff]);
-      for (final row in expired) {
+      final trashed = await txn.query(
+        'sleep_sessions',
+        columns: ['id', 'deleted_at'],
+        where: 'deleted_at IS NOT NULL',
+      );
+      for (final row in trashed) {
+        final deletedAt = DateTime.parse(row['deleted_at']! as String).toUtc();
+        if (deletedAt.isAfter(cutoff)) continue;
         final id = row['id']! as String;
         final audio = await txn.query('audio_events', columns: ['file_path'], where: 'session_id = ?', whereArgs: [id]);
         audioPaths.addAll(audio.map((item) => item['file_path']).whereType<String>());
