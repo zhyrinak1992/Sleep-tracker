@@ -161,6 +161,13 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
         return Icons.rate_review_outlined;
       case 'ten_ratings':
         return Icons.reviews_outlined;
+      case 'streak_three':
+      case 'streak_fourteen':
+        return Icons.local_fire_department_outlined;
+      case 'streak_seven':
+        return Icons.calendar_view_week;
+      case 'streak_thirty':
+        return Icons.calendar_month;
       default:
         return Icons.emoji_events_outlined;
     }
