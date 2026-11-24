@@ -208,6 +208,7 @@ class BackupRestorePlanner {
             if (mergeableAchievementKeys.contains(metadataKey) &&
                 currentByKey[metadataKey]!['value'] != row['value']) {
               historyEntriesToMerge++;
+              mergeDatabaseBytes += _rowBytes(row);
             } else {
               duplicatesToSkip++;
             }
