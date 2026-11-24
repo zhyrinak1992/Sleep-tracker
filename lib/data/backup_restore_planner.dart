@@ -147,12 +147,15 @@ class BackupRestorePlanner {
           if (!valid(incoming, percent: field == 'bestEfficiencyPercent') ||
               (field == 'shortestLatencyMinutes' && incoming > 1440)) continue;
           if (!valid(previous, percent: field == 'bestEfficiencyPercent') ||
-              (field == 'shortestLatencyMinutes' && previous > 1440)) {
+              (field == 'shortestLatencyMinutes' && (previous as num) > 1440)) {
             count++;
-          } else if (field == 'shortestLatencyMinutes'
-              ? incoming < previous
-              : incoming > previous) {
-            count++;
+          } else {
+            final incomingNumber = incoming as num;
+            final previousNumber = previous as num;
+            final improves = field == 'shortestLatencyMinutes'
+                ? incomingNumber < previousNumber
+                : incomingNumber > previousNumber;
+            if (improves) count++;
           }
         }
         return count;
