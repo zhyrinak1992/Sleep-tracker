@@ -28,7 +28,7 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
   void initState() {
     super.initState();
     _state = SleepAchievementService.instance.load(widget.sessions);
-    _records = SleepRecordService.instance.load();
+    _records = _state.then((state) => state.recordHistory);
   }
 
   @override
@@ -36,7 +36,7 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.sessions, widget.sessions)) {
       _state = SleepAchievementService.instance.load(widget.sessions);
-      _records = SleepRecordService.instance.load();
+      _records = _state.then((state) => state.recordHistory);
       _celebrationsScheduled = false;
     }
   }
@@ -141,6 +141,7 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
     if (!mounted) return;
     setState(() {
       _state = SleepAchievementService.instance.load(widget.sessions);
+      _records = _state.then((state) => state.recordHistory);
     });
   }
 

@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../../data/sleep_database.dart';
 import '../../models/sleep_session.dart';
 import 'sleep_personal_records.dart';
+import 'sleep_record_service.dart';
 
 class SleepAchievementDefinition {
   const SleepAchievementDefinition({
@@ -67,6 +68,7 @@ class SleepAchievementState {
     required this.records,
     required this.newlyEarnedAchievementIds,
     required this.newRecordKeys,
+    required this.recordHistory,
   });
 
   final Map<String, DateTime> earnedAt;
@@ -74,6 +76,7 @@ class SleepAchievementState {
   final SleepPersonalRecords records;
   final Set<String> newlyEarnedAchievementIds;
   final Set<String> newRecordKeys;
+  final SleepRecordState recordHistory;
 }
 
 class SleepAchievementService {
@@ -185,6 +188,9 @@ class SleepAchievementService {
     }
 
     final enabled = await database.getAppMetadata(_displayKey) != 'false';
+    // One screen load now coordinates achievements, four personal bests,
+    // SleepScore/awakening history, and pending record celebrations.
+    final recordHistory = await SleepRecordService.instance.load();
     return SleepAchievementState(
       earnedAt: {
         for (final entry in history.entries)
@@ -194,6 +200,7 @@ class SleepAchievementService {
       records: records,
       newlyEarnedAchievementIds: newlyEarned,
       newRecordKeys: newRecordKeys,
+      recordHistory: recordHistory,
     );
   }
 
