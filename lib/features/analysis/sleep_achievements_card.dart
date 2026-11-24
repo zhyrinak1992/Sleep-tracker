@@ -194,10 +194,19 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
     }
   }
 
+  String _recordSourceLabel(DateTime? achievedAt, String? sessionId) {
+    if (achievedAt == null) return '';
+    final date = DateFormat('d MMM yyyy', 'ru').format(achievedAt);
+    final sourceExists = sessionId != null &&
+        widget.sessions.any((session) => session.id == sessionId);
+    return sourceExists ? date : date + ' · ночь удалена, рекорд сохранён';
+  }
+
   Widget _personalRecordRow({
     required IconData icon,
     required String title,
     required String value,
+    required String sourceLabel,
     required bool isNew,
   }) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 6),
@@ -209,6 +218,8 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
         children: [
           Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
           Text(value, style: const TextStyle(color: AppTheme.muted, fontSize: 12)),
+          if (sourceLabel.isNotEmpty)
+            Text(sourceLabel, style: const TextStyle(color: AppTheme.muted, fontSize: 10)),
         ],
       )),
       if (isNew) const Text('НОВЫЙ', style: TextStyle(
@@ -230,6 +241,7 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
         icon: Icons.bedtime_outlined,
         title: 'Самая продолжительная ночь',
         value: _duration(records.longestSleepMinutes),
+        sourceLabel: _recordSourceLabel(records.longestSleepAt, records.longestSleepSessionId),
         isNew: newKeys.contains('longestSleep'),
       ),
       _personalRecordRow(
@@ -238,6 +250,7 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
         value: records.bestEfficiencyPercent == null
             ? 'Пока нет достоверных измерений'
             : records.bestEfficiencyPercent!.toStringAsFixed(1) + '%',
+        sourceLabel: _recordSourceLabel(records.bestEfficiencyAt, records.bestEfficiencySessionId),
         isNew: newKeys.contains('bestEfficiency'),
       ),
       _personalRecordRow(
@@ -246,6 +259,7 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
         value: records.shortestLatencyMinutes == null
             ? 'Пока нет подтверждённого времени засыпания'
             : _duration(records.shortestLatencyMinutes),
+        sourceLabel: _recordSourceLabel(records.shortestLatencyAt, records.shortestLatencySessionId),
         isNew: newKeys.contains('shortestLatency'),
       ),
       _personalRecordRow(
@@ -385,6 +399,9 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
                       const SizedBox(height: 4),
                       ...history.map((event) {
                         final isScore = event.type == 'sleep_score';
+                        final sourceExists = widget.sessions.any(
+                          (session) => session.id == event.sessionId,
+                        );
                         final label = isScore ? 'SleepScore' : 'Пробуждения';
                         final value = isScore
                             ? '${event.value.toInt()} из 100'
@@ -405,9 +422,16 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
                                   style: const TextStyle(fontSize: 12),
                                 ),
                               ),
-                              Text(
-                                DateFormat('d MMM yyyy', 'ru').format(event.achievedAt),
-                                style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    DateFormat('d MMM yyyy', 'ru').format(event.achievedAt),
+                                    style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+                                  ),
+                                  if (!sourceExists)
+                                    const Text('ночь удалена', style: TextStyle(color: AppTheme.muted, fontSize: 9)),
+                                ],
                               ),
                             ],
                           ),
