@@ -58,6 +58,28 @@ void main() {
       ));
     });
 
+    test('localizes sobbing category while preserving legacy localized categories', () {
+      final events = SleepEventTimeline.build(
+        stages: const [],
+        metrics: const [],
+        audioEvents: [
+          {
+            'category': 'sobbing',
+            'captured_at': '2026-11-24T23:15:00.000Z',
+          },
+          {
+            'category': 'Храп',
+            'captured_at': '2026-11-24T23:20:00.000Z',
+          },
+        ],
+      );
+
+      expect(events.map((event) => event.title).toList(), [
+        'Звуковое событие · Всхлипывания',
+        'Звуковое событие · Храп',
+      ]);
+    });
+
     test('does not invent events or flag pulse outliers with too few samples', () {
       final events = SleepEventTimeline.build(
         stages: [
