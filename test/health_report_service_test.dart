@@ -104,6 +104,22 @@ void main() {
       expect(month.every((interval) => interval.$1.hour == 0 && interval.$2.hour == 0), isTrue);
     });
 
+
+    test('derives the inclusive report end from the calendar date across DST', () {
+      final report = HealthReportSnapshot.decode('''
+        {
+          "id": "week_2026-03-23",
+          "kind": "week",
+          "start": "2026-03-23T00:00:00.000",
+          "endExclusive": "2026-03-30T00:00:00.000",
+          "nights": 1,
+          "metrics": []
+        }
+      ''');
+      expect(report.endInclusive, DateTime(2026, 3, 29));
+      expect(report.endInclusive.hour, 0);
+    });
+
     test('does not create metric summaries for absent data', () {
       expect(
         HealthReportService.summarizeMetrics(rows: [], sessionsById: sessions),
