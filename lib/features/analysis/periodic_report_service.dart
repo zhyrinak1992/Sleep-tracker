@@ -674,6 +674,7 @@ class PeriodicReportService {
             ...summary,
             'sleepMinutes': summary['averageSleepMinutes'],
             'samples': summary['sleepDurationSamples'],
+            'nightCount': summary['nights'],
             'nights': nightlyDetails(monthSessions),
           });
         }
@@ -685,7 +686,7 @@ class PeriodicReportService {
       data['weekdayTrend'] = weekdayTrend(sessions);
       const minimumMonthNightsForRanking = 3;
       final measurable = months.where((m) => m['averageSleepMinutes'] is num &&
-        (m['nights'] as int? ?? 0) >= minimumMonthNightsForRanking).toList();
+        (m['nightCount'] as int? ?? 0) >= minimumMonthNightsForRanking).toList();
       if (measurable.isNotEmpty) {
         final sorted = measurable.toList()..sort((a, b) =>
           (a['averageSleepMinutes'] as num).compareTo(b['averageSleepMinutes'] as num));
