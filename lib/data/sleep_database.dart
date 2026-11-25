@@ -18,6 +18,7 @@ class SleepDatabase {
   static final SleepDatabase instance = SleepDatabase._();
   static const _uuid = Uuid();
   Database? _db;
+  String? _databasePathForTesting;
 
   /// Supplies an in-memory database to exercise real restore transactions in tests.
   @visibleForTesting
@@ -25,10 +26,18 @@ class SleepDatabase {
     _db = database;
   }
 
+  /// Uses a temporary on-disk path while exercising the real open/upgrade callbacks.
+  @visibleForTesting
+  void setDatabasePathForTesting(String? path) {
+    _databasePathForTesting = path;
+    _db = null;
+  }
+
   Future<Database> get database async {
     if (_db != null) return _db!;
-    final directory = await getApplicationDocumentsDirectory();
-    final dbPath = p.join(directory.path, 'sleep_tracker.sqlite');
+    final testPath = _databasePathForTesting;
+    final dbPath = testPath ??
+        p.join((await getApplicationDocumentsDirectory()).path, 'sleep_tracker.sqlite');
     _db = await openDatabase(
       dbPath,
       version: 8,
