@@ -694,6 +694,7 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
       final currentMonthRecordedDays = entries.keys.where((d) => !d.isBefore(monthStart) && d.isBefore(nextMonthStart)).length;
       final previousMonthRecordedDays = entries.keys.where((d) => !d.isBefore(previousMonthStart) && d.isBefore(monthStart)).length;
       final previousMonthDays = DateTime(now.year, now.month, 0).day;
+      final canCompareMonths = currentMonthRecordedDays > 0 && previousMonthRecordedDays > 0;
       final monthlyTagStats = tags.map((tag) {
         final tagDates = usage[tag] ?? const <DateTime>[];
         final currentCount = tagDates.where((d) => !d.isBefore(monthStart) && d.isBefore(nextMonthStart)).length;
@@ -798,12 +799,15 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
                   SizedBox(width: 54, child: Text('${stat.previousCount}',
                     textAlign: TextAlign.end, style: const TextStyle(color: AppTheme.muted, fontSize: 11))),
                   SizedBox(width: 48, child: Text(
-                    '${stat.difference > 0 ? '+' : ''}${stat.difference}',
+                    canCompareMonths
+                        ? '${stat.difference > 0 ? '+' : ''}${stat.difference}'
+                        : '—',
                     textAlign: TextAlign.end,
                     style: TextStyle(
                       fontSize: 11,
-                      color: stat.difference == 0 ? AppTheme.muted :
-                          stat.difference > 0 ? AppTheme.teal : const Color(0xFFFF8FA3),
+                      color: !canCompareMonths || stat.difference == 0
+                          ? AppTheme.muted
+                          : stat.difference > 0 ? AppTheme.teal : const Color(0xFFFF8FA3),
                     ),
                   )),
                 ],
