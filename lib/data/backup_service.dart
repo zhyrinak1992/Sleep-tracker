@@ -28,6 +28,15 @@ class BackupService {
     return valid ? extension : '.audio';
   }
 
+  static Future<File> writeAudioBytesForRestore({
+    required String destinationPath,
+    required List<int> bytes,
+  }) async {
+    final file = File(destinationPath);
+    await file.writeAsBytes(bytes, flush: true);
+    return file;
+  }
+
   static const format = 'sleep_tracker_backup';
   static const formatVersion = 5;
 
@@ -252,8 +261,12 @@ class BackupService {
         final id = row['id'] as String;
         final restored = File(p.join(audioDir.path,
           'restored_${DateTime.now().microsecondsSinceEpoch}_${i}_${id.hashCode.abs()}$safeExtension'));
-        await restored.writeAsBytes(audioBytes, flush: true);
+        // Track the destination before writing so a partial write is also cleaned up.
         createdFiles.add(restored);
+        await writeAudioBytesForRestore(
+          destinationPath: restored.path,
+          bytes: audioBytes,
+        );
         row['file_path'] = restored.path;
         restoredRows.add(row);
       }
