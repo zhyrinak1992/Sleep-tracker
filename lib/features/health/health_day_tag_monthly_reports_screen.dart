@@ -149,18 +149,42 @@ class _HealthDayTagMonthlyReportsScreenState
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              LinearProgressIndicator(
-                                value: entry.share == null
-                                    ? 0
-                                    : (entry.share! / 100).clamp(0.0, 1.0),
-                                minHeight: 7,
-                                borderRadius: BorderRadius.circular(5),
-                              ),
+                              Row(children: [
+                                const SizedBox(width: 82, child: Text('Этот месяц',
+                                  style: TextStyle(color: AppTheme.muted, fontSize: 10))),
+                                Expanded(child: LinearProgressIndicator(
+                                  value: entry.share == null ? 0 : (entry.share! / 100).clamp(0.0, 1.0),
+                                  minHeight: 7,
+                                  color: AppTheme.teal,
+                                  backgroundColor: AppTheme.surfaceLight,
+                                  borderRadius: BorderRadius.circular(5),
+                                )),
+                                const SizedBox(width: 8),
+                                SizedBox(width: 52, child: Text(_share(entry.share),
+                                  textAlign: TextAlign.end,
+                                  style: const TextStyle(fontSize: 10))),
+                              ]),
+                              const SizedBox(height: 5),
+                              Row(children: [
+                                const SizedBox(width: 82, child: Text('Прошлый',
+                                  style: TextStyle(color: AppTheme.muted, fontSize: 10))),
+                                Expanded(child: LinearProgressIndicator(
+                                  value: entry.previousShare == null ? 0 : (entry.previousShare! / 100).clamp(0.0, 1.0),
+                                  minHeight: 7,
+                                  color: const Color(0xFFB9A7FF),
+                                  backgroundColor: AppTheme.surfaceLight,
+                                  borderRadius: BorderRadius.circular(5),
+                                )),
+                                const SizedBox(width: 8),
+                                SizedBox(width: 52, child: Text(_share(entry.previousShare),
+                                  textAlign: TextAlign.end,
+                                  style: const TextStyle(fontSize: 10))),
+                              ]),
                               const SizedBox(height: 4),
                               Align(
                                 alignment: Alignment.centerLeft,
                                 child: Text(
-                                  '${entry.days} дней · ${_share(entry.share)} · прошлый месяц: ${entry.previousDays} дней (${_share(entry.previousShare)}) · ${_difference(entry.differencePercentagePoints)}',
+                                  '${entry.days} дней с отметкой · прошлый месяц: ${entry.previousDays} дней · ${_difference(entry.differencePercentagePoints)}',
                                   style: const TextStyle(
                                     color: AppTheme.muted,
                                     fontSize: 10,
