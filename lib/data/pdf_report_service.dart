@@ -274,7 +274,7 @@ class PdfReportService {
           return pw.Text('${component['label'] ?? entry.key}: ${value is num ? value.toStringAsFixed(0) + ' / 100' : 'Нет данных'} · выборка ${component['samples'] ?? 0}');
         }),
       ],
-      if (snapshot['kind'] == 'year')
+      if (const {'year', 'quarter', 'halfYear'}.contains(snapshot['kind']))
         pw.Text('Суммарная продолжительность сна: ${duration(snapshot['totalSleepMinutes'])}'),
       pw.Text('Средняя продолжительность сна: ${duration(snapshot['averageSleepMinutes'])} · выборка ${snapshot['sleepDurationSamples'] ?? 0}'),
       pw.Text('Среднее время в постели: ${duration(snapshot['averageTimeInBedMinutes'])} · выборка ${snapshot['timeInBedSamples'] ?? 0}'),
