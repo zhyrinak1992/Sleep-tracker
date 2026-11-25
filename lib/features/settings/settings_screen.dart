@@ -342,7 +342,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<String?> _requestLegacyBackupPassword() async {
+  Future<String?> _requestEncryptedBackupPassword() async {
     final passwordController = TextEditingController();
     String? errorText;
     try {
@@ -355,7 +355,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Этот архив был создан в прежнем зашифрованном формате. Пароль нужен только для чтения такой старой копии; новые резервные копии Sleep Tracker создаются без отдельного пароля.'),
+                const Text('Этот архив защищён паролем. Введите пароль, заданный при создании резервной копии. Приложение не хранит пароль и не может восстановить его.'),
                 const SizedBox(height: 12),
                 TextField(
                   controller: passwordController,
