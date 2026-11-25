@@ -9,6 +9,7 @@ import 'screen_time_card.dart';
 import 'weather_night_detail_card.dart';
 import 'sleep_session_metrics_card.dart';
 import 'sleep_session_metrics.dart';
+import 'sleep_event_timeline.dart';
 import 'sleep_metric_summary.dart';
 import '../../models/sleep_session.dart';
 import '../../models/sleep_note.dart';
@@ -31,6 +32,7 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
   late Future<List<Map<String, Object?>>> _stagesFuture;
   late Future<List<Map<String, Object?>>> _metricsFuture;
   late Future<List<Map<String, Object?>>> _climateFuture;
+  late Future<List<SleepTimelineEvent>> _timelineFuture;
   late Future<Map<String, Object?>?> _reportFuture;
 
   @override
@@ -41,6 +43,7 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
     _stagesFuture = widget.database.getStages(widget.session.id);
     _metricsFuture = widget.database.getMetrics(widget.session.id);
     _climateFuture = _loadClimate(widget.session);
+    _timelineFuture = _loadTimeline();
     _reportFuture = widget.database.getMorningReport(widget.session.id);
   }
 
@@ -51,9 +54,21 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
       _stagesFuture = widget.database.getStages(widget.session.id);
       _metricsFuture = widget.database.getMetrics(widget.session.id);
       _climateFuture = _loadClimate(widget.session);
+      _timelineFuture = _loadTimeline();
       _reportFuture = widget.database.getMorningReport(widget.session.id);
     });
     await _future;
+  }
+
+  Future<List<SleepTimelineEvent>> _loadTimeline() async {
+    final stages = await _stagesFuture;
+    final metrics = await _metricsFuture;
+    final audioEvents = await widget.database.getAudioEvents(sessionId: widget.session.id);
+    return SleepEventTimeline.build(
+      stages: stages,
+      metrics: metrics,
+      audioEvents: audioEvents,
+    );
   }
 
   Future<List<Map<String, Object?>>> _loadClimate(SleepSession session) {
@@ -800,6 +815,8 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                       const SizedBox(height: 8),
                       const Text('Показываются только измерения, реально полученные из Apple Health. Их отсутствие не заменяется оценками.', style: TextStyle(color: AppTheme.teal, fontSize: 12, height: 1.4)),
                     ])),
+                    const SizedBox(height: 12),
+                    SleepEventTimelineCard(eventsFuture: _timelineFuture),
                     const SizedBox(height: 12),
                     SectionCard(child: FutureBuilder<List<Map<String, Object?>>>(
                       future: _climateFuture,
