@@ -244,6 +244,12 @@ void main() {
       'body': 'Local note', 'created_at': timestamp, 'updated_at': timestamp,
     });
     await destination.insert('app_metadata', {'key': 'theme', 'value': 'local'});
+    await destination.insert('audio_events', {
+      'id': 'same-audio', 'session_id': 'same-night',
+      'file_path': 'local-audio.m4a', 'category': 'user-category',
+      'captured_at': timestamp, 'expires_at': '2026-12-01T22:00:00.000Z',
+      'duration_ms': 3000, 'user_corrected': 1,
+    });
 
     final archive = <String, dynamic>{
       'schemaVersion': 8,
@@ -290,6 +296,12 @@ void main() {
         },
       ],
       'audio_events': [
+        {
+          'id': 'same-audio', 'session_id': 'same-night',
+          'file_path': 'archive-audio.m4a', 'category': 'archive-category',
+          'captured_at': timestamp, 'expires_at': '2026-12-01T22:00:00.000Z',
+          'duration_ms': 9999, 'user_corrected': 0,
+        },
         {
           'id': 'archive-audio', 'session_id': 'archive-only-night',
           'file_path': null, 'category': 'snoring', 'captured_at': timestamp,
@@ -353,7 +365,13 @@ void main() {
     );
     expect(await destination.query('sleep_stages'), hasLength(1));
     expect(await destination.query('sleep_metrics'), hasLength(1));
-    expect(await destination.query('audio_events'), hasLength(1));
+    final audioRows = await destination.query('audio_events', orderBy: 'id');
+    expect(audioRows, hasLength(2));
+    final preservedAudio = audioRows.singleWhere((row) => row['id'] == 'same-audio');
+    expect(preservedAudio['file_path'], 'local-audio.m4a');
+    expect(preservedAudio['category'], 'user-category');
+    expect(preservedAudio['duration_ms'], 3000);
+    expect(audioRows.any((row) => row['id'] == 'archive-audio'), isTrue);
     expect(await destination.query('morning_reports'), hasLength(1));
     expect(await destination.query('climate_samples'), hasLength(1));
   });
