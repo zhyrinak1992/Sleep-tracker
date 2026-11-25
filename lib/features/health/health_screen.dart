@@ -10,6 +10,7 @@ import '../../widgets/screen_header.dart';
 import 'health_report_service.dart';
 import 'health_report_history_card.dart';
 import 'health_day_tag_library.dart';
+import 'health_day_tag_period_comparison.dart';
 
 class HealthScreen extends StatefulWidget {
   const HealthScreen({super.key, required this.database});
@@ -473,6 +474,8 @@ class _HealthScreenState extends State<HealthScreen> {
           const SizedBox(height: 12),
           _HealthTagStatsCard(entriesFuture: _dayEntriesFuture, sessions: data?.sessions ?? const [], onSelectDay: _selectHealthDay),
           const SizedBox(height: 12),
+          _HealthTagPeriodComparisonCard(entriesFuture: _dayEntriesFuture),
+          const SizedBox(height: 12),
           HealthReportHistoryCard(
             reports: _healthReportsFuture,
             onExport: _exportHealthReport,
@@ -829,6 +832,205 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
       ));
     },
   );
+}
+
+class _HealthTagPeriodComparisonCard extends StatefulWidget {
+  const _HealthTagPeriodComparisonCard({required this.entriesFuture});
+
+  final Future<Map<DateTime, _HealthDayEntry>> entriesFuture;
+
+  @override
+  State<_HealthTagPeriodComparisonCard> createState() =>
+      _HealthTagPeriodComparisonCardState();
+}
+
+class _HealthTagPeriodComparisonCardState
+    extends State<_HealthTagPeriodComparisonCard> {
+  String? _selectedTag;
+  late DateTimeRange _firstRange;
+  late DateTimeRange _secondRange;
+
+  @override
+  void initState() {
+    super.initState();
+    final today = DateTime.now();
+    final day = DateTime(today.year, today.month, today.day);
+    _firstRange = DateTimeRange(
+      start: HealthReportService.shiftCalendarDays(day, -59),
+      end: HealthReportService.shiftCalendarDays(day, -30),
+    );
+    _secondRange = DateTimeRange(
+      start: HealthReportService.shiftCalendarDays(day, -29),
+      end: day,
+    );
+  }
+
+  Future<void> _chooseRange({required bool first}) async {
+    final today = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(today.year, today.month, today.day),
+      initialDateRange: first ? _firstRange : _secondRange,
+      helpText: first ? 'Выберите первый период' : 'Выберите второй период',
+      saveText: 'Применить',
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      if (first) {
+        _firstRange = picked;
+      } else {
+        _secondRange = picked;
+      }
+    });
+  }
+
+  String _rangeLabel(DateTimeRange range) =>
+      '${_date(range.start)} — ${_date(range.end)}';
+
+  @override
+  Widget build(BuildContext context) =>
+      FutureBuilder<Map<DateTime, _HealthDayEntry>>(
+        future: widget.entriesFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const SectionCard(child: LinearProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return SectionCard(
+              child: Text('Не удалось загрузить дневные отметки: ${snapshot.error}'),
+            );
+          }
+          final entries = snapshot.data ?? const <DateTime, _HealthDayEntry>{};
+          final tags = entries.values
+              .expand((entry) => entry.tags)
+              .toSet()
+              .toList()
+            ..sort();
+          if (tags.isEmpty) {
+            return const SectionCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Сравнение отметок между периодами',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                  SizedBox(height: 6),
+                  Text(
+                    'Добавьте отметки в календаре здоровья, чтобы сравнивать их частоту между периодами.',
+                    style: TextStyle(color: AppTheme.muted, fontSize: 12),
+                  ),
+                ],
+              ),
+            );
+          }
+          final selected = tags.contains(_selectedTag) ? _selectedTag! : tags.first;
+          final tagEntries = <DateTime, List<String>>{
+            for (final entry in entries.entries) entry.key: entry.value.tags,
+          };
+          final first = HealthDayTagPeriodComparison.calculate(
+            entries: tagEntries,
+            tag: selected,
+            start: _firstRange.start,
+            end: _firstRange.end,
+          );
+          final second = HealthDayTagPeriodComparison.calculate(
+            entries: tagEntries,
+            tag: selected,
+            start: _secondRange.start,
+            end: _secondRange.end,
+          );
+          final difference =
+              HealthDayTagPeriodComparison.differencePercentagePoints(
+            first: first,
+            second: second,
+          );
+          String percent(double? value) =>
+              value == null ? 'Недостаточно данных' : '${value.toStringAsFixed(1)}%';
+          String signedPoints(double? value) {
+            if (value == null) return 'Недостаточно данных';
+            final sign = value > 0 ? '+' : '';
+            return '$sign${value.toStringAsFixed(1)} п. п.';
+          }
+
+          return SectionCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Сравнение отметки между периодами',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: selected,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Отметка',
+                    isDense: true,
+                  ),
+                  items: [
+                    for (final tag in tags)
+                      DropdownMenuItem(value: tag, child: Text(tag)),
+                  ],
+                  onChanged: (value) => setState(() => _selectedTag = value),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _chooseRange(first: true),
+                  icon: const Icon(Icons.date_range_rounded),
+                  label: Text('Период 1: ${_rangeLabel(_firstRange)}'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _chooseRange(first: false),
+                  icon: const Icon(Icons.date_range_rounded),
+                  label: Text('Период 2: ${_rangeLabel(_secondRange)}'),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _Stat(
+                        label: 'Период 1',
+                        value: '${first.taggedDays} / ${first.recordedDays}',
+                      ),
+                    ),
+                    Expanded(
+                      child: _Stat(
+                        label: 'Доля периода 1',
+                        value: percent(first.percentage),
+                      ),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _Stat(
+                        label: 'Период 2',
+                        value: '${second.taggedDays} / ${second.recordedDays}',
+                      ),
+                    ),
+                    Expanded(
+                      child: _Stat(
+                        label: 'Доля периода 2',
+                        value: percent(second.percentage),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Изменение доли: ${signedPoints(difference)}',
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'В знаменатель входят только дни с сохранёнными дневными записями. Сравнение описывает частоту отметки и не доказывает её влияние на сон.',
+                  style: TextStyle(color: AppTheme.muted, fontSize: 10, height: 1.4),
+                ),
+              ],
+            ),
+          );
+        },
+      );
 }
 
 class _HealthTagOverviewCalendar extends StatelessWidget {
