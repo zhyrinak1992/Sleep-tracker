@@ -95,10 +95,18 @@ class SleepEventTimeline {
     for (final row in audioEvents) {
       final at = _date(row['captured_at']);
       if (at == null) continue;
-      final category = (row['category'] as String? ?? '').trim();
-      final title = category.isEmpty || category == 'unknown'
-          ? 'Неопределённый звук'
-          : category;
+      final category = (row['category'] as String? ?? '').trim().toLowerCase();
+      final title = switch (category) {
+        'snore' => 'Храп',
+        'cough' => 'Кашель',
+        'laugh' => 'Смех',
+        'speech' => 'Разговор',
+        'groan' => 'Стон',
+        'sobbing' => 'Всхлипывания',
+        'noise' => 'Посторонний шум',
+        '' || 'unknown' => 'Неопределённый звук',
+        _ => category,
+      };
       final duration = row['duration_ms'] is num
           ? (row['duration_ms'] as num).toDouble() / 1000
           : null;
