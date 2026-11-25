@@ -379,6 +379,184 @@ void main() {
   });
 
 
+  test('full replace restores audio bytes and removes previous local audio files', () async {
+    const timestamp = '2026-11-24T22:00:00.000Z';
+    final oldAudioPath = '${tempDirectory.path}/old-local.m4a';
+    final oldBytes = [7, 8, 9];
+    await File(oldAudioPath).writeAsBytes(oldBytes, flush: true);
+    await destination.insert('sleep_sessions', {
+      'id': 'local-night',
+      'started_at': timestamp,
+      'ended_at': '2026-11-25T07:00:00.000Z',
+      'source': 'manual',
+      'created_at': timestamp,
+      'updated_at': timestamp,
+      'user_edited': 1,
+    });
+    await destination.insert('audio_events', {
+      'id': 'local-audio',
+      'session_id': 'local-night',
+      'file_path': oldAudioPath,
+      'category': 'local-category',
+      'captured_at': timestamp,
+      'expires_at': '2026-12-01T22:00:00.000Z',
+      'duration_ms': 3000,
+      'user_corrected': 1,
+    });
+
+    final archiveBytes = [0, 1, 2, 127, 128, 254, 255];
+    final archive = <String, dynamic>{
+      'schemaVersion': 8,
+      'sleep_sessions': [session('replacement-night', 'archive')],
+      'sleep_session_tags': <Map<String, Object?>>[],
+      'sleep_notes': <Map<String, Object?>>[],
+      'app_metadata': <Map<String, Object?>>[],
+      'sleep_stages': <Map<String, Object?>>[],
+      'sleep_metrics': <Map<String, Object?>>[],
+      'audio_events': [
+        {
+          'id': 'replacement-audio',
+          'session_id': 'replacement-night',
+          'file_path': 'replacement.wav',
+          'category': 'snoring',
+          'captured_at': timestamp,
+          'expires_at': '2026-12-01T22:00:00.000Z',
+          'duration_ms': 1200,
+          'user_corrected': 0,
+          'audioDataB64': base64Encode(archiveBytes),
+        },
+      ],
+      'morning_reports': <Map<String, Object?>>[],
+      'climate_samples': <Map<String, Object?>>[],
+    };
+
+    SleepDatabase.instance.setDatabaseForTesting(destination);
+    final impact = await SleepDatabase.instance.previewRestoreImpact(
+      archive,
+      availableBytes: null,
+    );
+    final document = <String, dynamic>{
+      'format': BackupService.format,
+      'formatVersion': BackupService.formatVersion,
+      'createdAt': timestamp,
+      'data': archive,
+    };
+    final draft = BackupImportDraft.forTesting(
+      document: document,
+      data: archive,
+      preview: BackupImportPreview.fromDocument(document, archive),
+      impact: impact,
+    );
+
+    await BackupService.instance.restorePreparedBackup(
+      draft: draft,
+      merge: false,
+      documentsDirectoryForTesting: tempDirectory,
+    );
+
+    expect(await File(oldAudioPath).exists(), isFalse);
+    final rows = await destination.query('audio_events');
+    expect(rows, hasLength(1));
+    final restoredPath = rows.single['file_path'] as String;
+    expect(restoredPath.endsWith('.wav'), isTrue);
+    expect(await File(restoredPath).readAsBytes(), archiveBytes);
+  });
+
+  test('failed full replace removes newly written audio files and preserves local files', () async {
+    const timestamp = '2026-11-24T22:00:00.000Z';
+    final oldAudioPath = '${tempDirectory.path}/old-protected.m4a';
+    final oldBytes = [31, 32, 33];
+    await File(oldAudioPath).writeAsBytes(oldBytes, flush: true);
+    await destination.insert('sleep_sessions', {
+      'id': 'local-night',
+      'started_at': timestamp,
+      'ended_at': '2026-11-25T07:00:00.000Z',
+      'source': 'manual',
+      'created_at': timestamp,
+      'updated_at': timestamp,
+      'user_edited': 1,
+    });
+    await destination.insert('audio_events', {
+      'id': 'local-audio',
+      'session_id': 'local-night',
+      'file_path': oldAudioPath,
+      'category': 'local-category',
+      'captured_at': timestamp,
+      'expires_at': '2026-12-01T22:00:00.000Z',
+      'duration_ms': 3000,
+      'user_corrected': 1,
+    });
+    SleepDatabase.instance.setDatabaseForTesting(destination);
+    final before = await SleepDatabase.instance.exportSnapshot();
+
+    final archiveBytes = [4, 5, 6, 7];
+    final archive = <String, dynamic>{
+      'schemaVersion': 8,
+      'sleep_sessions': [
+        {
+          'id': 'invalid-night',
+          'started_at': timestamp,
+          'ended_at': '2026-11-25T07:00:00.000Z',
+          'source': 'manual',
+          'created_at': timestamp,
+          'updated_at': timestamp,
+          'user_edited': null,
+        },
+      ],
+      'sleep_session_tags': <Map<String, Object?>>[],
+      'sleep_notes': <Map<String, Object?>>[],
+      'app_metadata': <Map<String, Object?>>[],
+      'sleep_stages': <Map<String, Object?>>[],
+      'sleep_metrics': <Map<String, Object?>>[],
+      'audio_events': [
+        {
+          'id': 'new-audio',
+          'session_id': 'invalid-night',
+          'file_path': 'new.m4a',
+          'category': 'snoring',
+          'captured_at': timestamp,
+          'expires_at': '2026-12-01T22:00:00.000Z',
+          'duration_ms': 1200,
+          'user_corrected': 0,
+          'audioDataB64': base64Encode(archiveBytes),
+        },
+      ],
+      'morning_reports': <Map<String, Object?>>[],
+      'climate_samples': <Map<String, Object?>>[],
+    };
+    final impact = await SleepDatabase.instance.previewRestoreImpact(
+      archive,
+      availableBytes: null,
+    );
+    final document = <String, dynamic>{
+      'format': BackupService.format,
+      'formatVersion': BackupService.formatVersion,
+      'createdAt': timestamp,
+      'data': archive,
+    };
+    final draft = BackupImportDraft.forTesting(
+      document: document,
+      data: archive,
+      preview: BackupImportPreview.fromDocument(document, archive),
+      impact: impact,
+    );
+
+    await expectLater(
+      BackupService.instance.restorePreparedBackup(
+        draft: draft,
+        merge: false,
+        documentsDirectoryForTesting: tempDirectory,
+      ),
+      throwsA(anything),
+    );
+
+    expect(await File(oldAudioPath).readAsBytes(), oldBytes);
+    expect(await SleepDatabase.instance.exportSnapshot(), equals(before));
+    final audioDirectory = Directory('${tempDirectory.path}/audio_events');
+    final createdFiles = await audioDirectory.list().where((entry) => entry is File).toList();
+    expect(createdFiles, isEmpty);
+  });
+
   test('merge restore writes archive-only audio bytes and preserves local conflict files', () async {
     const timestamp = '2026-11-24T22:00:00.000Z';
     Map<String, Object?> session(String id) => {
