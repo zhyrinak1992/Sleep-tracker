@@ -24,7 +24,7 @@ Map<String, Object?> stage(String name, DateTime start, DateTime end) => {
 
 void main() {
   group('SleepPersonalRecords', () {
-    test('calculates duration, covered efficiency and confirmed latency', () {
+    test('calculates duration, SleepScore, covered efficiency and awakenings', () {
       final start = DateTime(2026, 11, 20, 22);
       final night = session(
         'night-1',
@@ -34,6 +34,9 @@ void main() {
       );
       final records = SleepPersonalRecords.calculate(
         sessions: [night],
+        morningReports: const {
+          'night-1': {'sleep_quality': 4},
+        },
         stagesBySession: {
           'night-1': [
             stage('Deep', start.add(const Duration(minutes: 20)),
@@ -48,7 +51,8 @@ void main() {
 
       expect(records.longestSleepMinutes, 440);
       expect(records.bestEfficiencyPercent, closeTo(440 / 480 * 100, 0.01));
-      expect(records.shortestLatencyMinutes, 20);
+      expect(records.bestSleepScore, isNotNull);
+      expect(records.fewestAwakenings, 1);
       expect(records.longestSleepSessionId, 'night-1');
     });
 
@@ -56,6 +60,7 @@ void main() {
       final start = DateTime(2026, 11, 20, 22);
       final records = SleepPersonalRecords.calculate(
         sessions: [session('night-1', start)],
+        morningReports: const {},
         stagesBySession: {
           'night-1': [
             stage('Light', start, start.add(const Duration(hours: 8))),
@@ -75,6 +80,7 @@ void main() {
           SleepSession(id: 'open', startedAt: start),
           session('invalid', start, end: start),
         ],
+        morningReports: const {},
         stagesBySession: const {},
       );
 
@@ -112,7 +118,7 @@ void main() {
       expect(merged.longestStreakDays, 12);
     });
 
-    test('keeps dated history for each of the four approved record types', () {
+    test('keeps dated history for the four approved record types', () {
       final previous = SleepPersonalRecords(
         longestSleepMinutes: 480,
         longestSleepSessionId: 'sleep-old',
@@ -120,11 +126,12 @@ void main() {
         bestEfficiencyPercent: 90,
         bestEfficiencySessionId: 'eff-old',
         bestEfficiencyAt: DateTime(2026, 11, 2),
-        shortestLatencyMinutes: 15,
-        shortestLatencySessionId: 'latency-old',
-        shortestLatencyAt: DateTime(2026, 11, 3),
-        longestStreakDays: 5,
-        longestStreakAt: DateTime(2026, 11, 5),
+        bestSleepScore: 88,
+        bestSleepScoreSessionId: 'score-old',
+        bestSleepScoreAt: DateTime(2026, 11, 3),
+        fewestAwakenings: 4,
+        fewestAwakeningsSessionId: 'awake-old',
+        fewestAwakeningsAt: DateTime(2026, 11, 4),
       );
       final current = SleepPersonalRecords(
         longestSleepMinutes: 510,
@@ -133,11 +140,12 @@ void main() {
         bestEfficiencyPercent: 94,
         bestEfficiencySessionId: 'eff-new',
         bestEfficiencyAt: DateTime(2026, 11, 21),
-        shortestLatencyMinutes: 8,
-        shortestLatencySessionId: 'latency-new',
-        shortestLatencyAt: DateTime(2026, 11, 22),
-        longestStreakDays: 8,
-        longestStreakAt: DateTime(2026, 11, 24),
+        bestSleepScore: 96,
+        bestSleepScoreSessionId: 'score-new',
+        bestSleepScoreAt: DateTime(2026, 11, 22),
+        fewestAwakenings: 1,
+        fewestAwakeningsSessionId: 'awake-new',
+        fewestAwakeningsAt: DateTime(2026, 11, 24),
       );
 
       final baseline = SleepPersonalRecordHistory.fromRecords(previous);
@@ -155,18 +163,18 @@ void main() {
       expect(improvements, hasLength(4));
       expect(restored, hasLength(8));
       expect(best.longestSleepMinutes, 510);
+      expect(best.bestSleepScore, 96);
       expect(best.bestEfficiencyPercent, 94);
-      expect(best.shortestLatencyMinutes, 8);
-      expect(best.longestStreakDays, 8);
-      expect(best.longestStreakAt, DateTime(2026, 11, 24));
+      expect(best.fewestAwakenings, 1);
+      expect(best.fewestAwakeningsAt, DateTime(2026, 11, 24));
     });
 
     test('does not invent history dates when a record has no confirmed date', () {
       const records = SleepPersonalRecords(
         longestSleepMinutes: 480,
+        bestSleepScore: 90,
         bestEfficiencyPercent: 90,
-        shortestLatencyMinutes: 8,
-        longestStreakDays: 5,
+        fewestAwakenings: 2,
       );
 
       expect(SleepPersonalRecordHistory.fromRecords(records), isEmpty);
@@ -209,9 +217,9 @@ void main() {
     test('recovers source dates when equal restored bests lack metadata', () {
       const previous = SleepPersonalRecords(
         longestSleepMinutes: 500,
+        bestSleepScore: 96,
         bestEfficiencyPercent: 96,
-        shortestLatencyMinutes: 3,
-        longestStreakDays: 12,
+        fewestAwakenings: 1,
       );
       final current = SleepPersonalRecords(
         longestSleepMinutes: 500,
@@ -220,38 +228,42 @@ void main() {
         bestEfficiencyPercent: 96,
         bestEfficiencySessionId: 'efficiency-source',
         bestEfficiencyAt: DateTime(2026, 11, 21),
-        shortestLatencyMinutes: 3,
-        shortestLatencySessionId: 'latency-source',
-        shortestLatencyAt: DateTime(2026, 11, 22),
-        longestStreakDays: 12,
-        longestStreakAt: DateTime(2026, 11, 24),
+        bestSleepScore: 96,
+        bestSleepScoreSessionId: 'score-source',
+        bestSleepScoreAt: DateTime(2026, 11, 22),
+        fewestAwakenings: 1,
+        fewestAwakeningsSessionId: 'awake-source',
+        fewestAwakeningsAt: DateTime(2026, 11, 24),
       );
 
       final merged = current.preserveBest(previous);
 
       expect(merged.longestSleepAt, DateTime(2026, 11, 20));
       expect(merged.longestSleepSessionId, 'sleep-source');
+      expect(merged.bestSleepScoreAt, DateTime(2026, 11, 22));
+      expect(merged.bestSleepScoreSessionId, 'score-source');
       expect(merged.bestEfficiencyAt, DateTime(2026, 11, 21));
       expect(merged.bestEfficiencySessionId, 'efficiency-source');
-      expect(merged.shortestLatencyAt, DateTime(2026, 11, 22));
-      expect(merged.shortestLatencySessionId, 'latency-source');
-      expect(merged.longestStreakAt, DateTime(2026, 11, 24));
+      expect(merged.fewestAwakeningsAt, DateTime(2026, 11, 24));
+      expect(merged.fewestAwakeningsSessionId, 'awake-source');
     });
 
     test('round-trips the version-independent metadata payload', () {
       final original = SleepPersonalRecords(
         longestSleepMinutes: 480,
         longestSleepAt: DateTime.utc(2026, 11, 20),
+        bestSleepScore: 91,
+        bestSleepScoreAt: DateTime.utc(2026, 11, 21),
         bestEfficiencyPercent: 92.5,
-        shortestLatencyMinutes: 7,
-        longestStreakDays: 5,
+        fewestAwakenings: 1,
+        fewestAwakeningsAt: DateTime.utc(2026, 11, 22),
       );
       final restored = SleepPersonalRecords.fromMap(original.toMap());
 
       expect(restored.longestSleepMinutes, 480);
+      expect(restored.bestSleepScore, 91);
       expect(restored.bestEfficiencyPercent, 92.5);
-      expect(restored.shortestLatencyMinutes, 7);
-      expect(restored.longestStreakDays, 5);
+      expect(restored.fewestAwakenings, 1);
     });
   });
 }
