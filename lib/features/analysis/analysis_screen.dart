@@ -24,6 +24,8 @@ import 'sleep_achievements_screen.dart';
 import 'audio_event_analysis_card.dart';
 import 'periodic_report_service.dart';
 import 'periodic_reports_screen.dart';
+import '../health/health_day_tag_monthly_report.dart';
+import '../health/health_day_tag_monthly_reports_screen.dart';
 import 'sleep_dynamics_screen.dart';
 import 'sleep_forecast_screen.dart';
 import '../home/comparison_suggestion_history_screen.dart';
@@ -57,6 +59,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   Future<void> _generateClosedReports() async {
     try {
       await PeriodicReportService(widget.database).generateClosedReports();
+      await HealthDayTagMonthlyReportService(widget.database).generateClosedReports();
     } catch (_) {
       // Report generation must not block the primary analysis screen.
     }
@@ -233,6 +236,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             )),
             icon: const Icon(Icons.description_outlined),
             label: const Text('Периодические отчёты'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => HealthDayTagMonthlyReportsScreen(database: widget.database),
+            )),
+            icon: const Icon(Icons.event_note_rounded),
+            label: const Text('Месячные отчёты по дневным отметкам'),
           ),
           const SizedBox(height: 18),
           SegmentedButton<AnalysisPeriod>(
