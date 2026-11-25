@@ -37,6 +37,11 @@ class StorageService {
   static const defaultWarningThreshold = 1024 * 1024 * 1024;
   static const thresholdMetadataKey = 'storage_warning_threshold_bytes';
 
+  static bool isBackupFile(String path) {
+    final extension = p.extension(path).toLowerCase();
+    return extension == '.stbackup' || extension == '.sleepbackup';
+  }
+
   Future<StorageSnapshot> measure() async {
     final documents = await getApplicationDocumentsDirectory();
     final support = await getApplicationSupportDirectory();
@@ -48,7 +53,7 @@ class StorageService {
     final databaseBytes = await _databaseBytes(documents);
     final audioBytes = await _directoryBytes(Directory(p.join(documents.path, 'audio_events')));
     final reportBytes = await _extensionBytes(temporary, '.pdf');
-    final backupBytes = await _extensionBytes(temporary, '.stbackup');
+    final backupBytes = await _matchingFileBytes(temporary, isBackupFile);
 
     final uniqueDirectories = <String>[];
     final candidates = [documents.path, support.path, cache.path, temporary.path]
@@ -143,6 +148,20 @@ class StorageService {
     var total = 0;
     await for (final entity in directory.list(recursive: true, followLinks: false)) {
       if (entity is File && p.extension(entity.path).toLowerCase() == extension) {
+        total += await _entityBytes(entity);
+      }
+    }
+    return total;
+  }
+
+  Future<int> _matchingFileBytes(
+    Directory directory,
+    bool Function(String path) matches,
+  ) async {
+    if (!await directory.exists()) return 0;
+    var total = 0;
+    await for (final entity in directory.list(recursive: true, followLinks: false)) {
+      if (entity is File && matches(entity.path)) {
         total += await _entityBytes(entity);
       }
     }
