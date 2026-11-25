@@ -89,6 +89,26 @@ void main() {
     expect(awakenings.single.value, isNull);
   });
 
+  test('does not turn missing awake-stage samples into zero awakenings', () {
+    final night = session('no-awake');
+    final sleepOnlyStages = [
+      stage('1', 'Основной', DateTime(2026, 11, 24, 22), DateTime(2026, 11, 25, 1)),
+      stage('2', 'REM', DateTime(2026, 11, 25, 1), DateTime(2026, 11, 25, 4)),
+      stage('3', 'Глубокий', DateTime(2026, 11, 25, 4), DateTime(2026, 11, 25, 6)),
+    ];
+    final result = HealthDayTagNightHistory.calculate(
+      sessions: [night],
+      tagsByDay: tags,
+      stagesBySession: {'no-awake': sleepOnlyStages},
+      tag: 'Кофеин',
+      start: DateTime(2026, 11, 24),
+      endExclusive: DateTime(2026, 11, 26),
+      metric: HealthDayTagNightMetric.awakenings,
+    );
+
+    expect(result.single.value, isNull);
+  });
+
   test('filters untagged, out-of-period and deleted nights and sorts chronologically', () {
     final older = session(
       'older',
