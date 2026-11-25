@@ -71,14 +71,17 @@ class _HealthDayTagMonthlyReportsScreenState
                 title: 'Отчёты по отметкам',
                 subtitle: 'Сохранённые месячные обзоры календаря здоровья',
                 icon: Icons.event_note_rounded,
-                trailing: IconButton(
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: IconButton(
                   tooltip: 'Обновить',
                   onPressed: snapshot.connectionState == ConnectionState.waiting
                       ? null : _refresh,
                   icon: const Icon(Icons.refresh_rounded),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 4),
               if (snapshot.connectionState == ConnectionState.waiting)
                 const SectionCard(
                   child: Center(child: CircularProgressIndicator()),
