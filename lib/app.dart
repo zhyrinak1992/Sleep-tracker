@@ -96,7 +96,12 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     AudioObservationService.instance.observing.addListener(_syncClimatePolling);
     AudioObservationService.instance.paused.addListener(_syncClimatePolling);
-    _cleanupTimer = Timer.periodic(const Duration(minutes: 30), (_) { _cleanupAudio(); _cleanupTrash(); });
+    _cleanupTimer = Timer.periodic(const Duration(minutes: 30), (_) {
+      _cleanupAudio();
+      _cleanupTrash();
+      _generateClosedHealthTagReports();
+      _generateClosedPeriodicReports();
+    });
     _cleanupTrash();
     _startClimatePolling();
     _ensureNightReminders();
