@@ -747,9 +747,6 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
         );
       }).toList()
         ..sort((a, b) => b.currentCount.compareTo(a.currentCount));
-      final twelveMonthStart = DateTime(now.year, now.month - 11);
-      final recentDates = allDates.where((d) => !d.isBefore(twelveMonthStart)).toList();
-      final recordedDays = entries.keys.where((d) => !d.isBefore(twelveMonthStart)).length;
       final overviewTags = _overviewTags.where(tags.contains).toSet();
       final matchedEntries = entries.entries.where((entry) =>
         HealthDayTagLibrary.matches(
@@ -1305,6 +1302,42 @@ class _HealthTagOverviewCalendar extends StatelessWidget {
       ],
     );
   }
+}
+
+class _SelectedTagHistoryPainter extends CustomPainter {
+  const _SelectedTagHistoryPainter(this.values);
+
+  final List<int> values;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.isEmpty || size.width <= 0 || size.height <= 0) return;
+    final maxValue = values.reduce((a, b) => a > b ? a : b);
+    final barWidth = size.width / (values.length * 1.7);
+    final gap = values.length <= 1
+        ? 0.0
+        : (size.width - barWidth * values.length) / (values.length - 1);
+    for (var index = 0; index < values.length; index++) {
+      final left = index * (barWidth + gap);
+      final value = values[index];
+      final height = maxValue == 0 ? 2.0 : value / maxValue * (size.height - 4);
+      final paint = Paint()
+        ..color = value == 0
+            ? AppTheme.teal.withValues(alpha: 0.22)
+            : AppTheme.teal;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(left, size.height - height, barWidth, height),
+          const Radius.circular(3),
+        ),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _SelectedTagHistoryPainter oldDelegate) =>
+      oldDelegate.values.toString() != values.toString();
 }
 
 class _MonthlyTagBarsPainter extends CustomPainter {
