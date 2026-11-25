@@ -206,6 +206,38 @@ void main() {
       expect(SleepPersonalRecordHistory.merge([first], [second]), hasLength(2));
     });
 
+    test('recovers source dates when equal restored bests lack metadata', () {
+      const previous = SleepPersonalRecords(
+        longestSleepMinutes: 500,
+        bestEfficiencyPercent: 96,
+        shortestLatencyMinutes: 3,
+        longestStreakDays: 12,
+      );
+      final current = SleepPersonalRecords(
+        longestSleepMinutes: 500,
+        longestSleepSessionId: 'sleep-source',
+        longestSleepAt: DateTime(2026, 11, 20),
+        bestEfficiencyPercent: 96,
+        bestEfficiencySessionId: 'efficiency-source',
+        bestEfficiencyAt: DateTime(2026, 11, 21),
+        shortestLatencyMinutes: 3,
+        shortestLatencySessionId: 'latency-source',
+        shortestLatencyAt: DateTime(2026, 11, 22),
+        longestStreakDays: 12,
+        longestStreakAt: DateTime(2026, 11, 24),
+      );
+
+      final merged = current.preserveBest(previous);
+
+      expect(merged.longestSleepAt, DateTime(2026, 11, 20));
+      expect(merged.longestSleepSessionId, 'sleep-source');
+      expect(merged.bestEfficiencyAt, DateTime(2026, 11, 21));
+      expect(merged.bestEfficiencySessionId, 'efficiency-source');
+      expect(merged.shortestLatencyAt, DateTime(2026, 11, 22));
+      expect(merged.shortestLatencySessionId, 'latency-source');
+      expect(merged.longestStreakAt, DateTime(2026, 11, 24));
+    });
+
     test('round-trips the version-independent metadata payload', () {
       final original = SleepPersonalRecords(
         longestSleepMinutes: 480,
