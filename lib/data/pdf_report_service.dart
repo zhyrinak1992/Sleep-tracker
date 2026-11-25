@@ -24,6 +24,21 @@ class PdfReportService {
     return DateTime(today.year, today.month, today.day - days + 1);
   }
 
+  /// Reads the monthly night count without confusing it with the detailed
+  /// night rows stored under the legacy `nights` key.
+  static int monthNightCount(Map<String, Object?> month) {
+    final explicit = month['nightCount'];
+    if (explicit is num && explicit.isFinite && explicit >= 0) {
+      return explicit.round();
+    }
+    final nights = month['nights'];
+    if (nights is List) return nights.length;
+    if (nights is num && nights.isFinite && nights >= 0) {
+      return nights.round();
+    }
+    return 0;
+  }
+
 
   /// Exports a user-selected comparison of two date ranges with aggregate
   /// metrics and the actual completed nightly observations behind them.
@@ -413,7 +428,7 @@ class PdfReportService {
         data: months.map((month) => [
           month['month'] is int && (month['month'] as int) >= 1 && (month['month'] as int) <= 12
               ? monthNames[(month['month'] as int) - 1] : '—',
-          month['nights']?.toString() ?? '0',
+          monthNightCount(Map<String, Object?>.from(month)).toString(),
           duration(month['averageSleepMinutes']),
           (month['score'] is Map && (month['score'] as Map)['average'] is num)
             ? ((month['score'] as Map)['average'] as num).toStringAsFixed(0) + ' / 100' : '—',
