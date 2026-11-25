@@ -605,15 +605,18 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
       final twelveMonthStart = DateTime(now.year, now.month - 11);
       final recentDates = dates.where((d) => !d.isBefore(twelveMonthStart)).toList();
       final recordedDays = entries.keys.where((d) => !d.isBefore(twelveMonthStart)).length;
-      final percentage = recordedDays == 0 ? 0.0 : recentDates.length / recordedDays * 100;
+      final percentage = HealthDayTagLibrary.percentageOfRecordedDays(
+        matchedDays: recentDates.length,
+        recordedDays: recordedDays,
+      );
       final overviewTags = _overviewTags.where(tags.contains).toSet();
-      final matchedEntries = entries.entries.where((entry) {
-        if (overviewTags.isEmpty) return false;
-        final dayTags = entry.value.tags.toSet();
-        return _matchAllOverviewTags
-            ? overviewTags.every(dayTags.contains)
-            : overviewTags.any(dayTags.contains);
-      }).toList()..sort((a, b) => b.key.compareTo(a.key));
+      final matchedEntries = entries.entries.where((entry) =>
+        HealthDayTagLibrary.matches(
+          dayTags: entry.value.tags,
+          selectedTags: overviewTags,
+          requireAll: _matchAllOverviewTags,
+        )
+      ).toList()..sort((a, b) => b.key.compareTo(a.key));
       final monthlyCounts = List<int>.generate(12, (index) {
         final start = DateTime(now.year, now.month - 11 + index);
         final end = DateTime(start.year, start.month + 1);
@@ -634,7 +637,12 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
           const SizedBox(height: 12),
           Text('${dates.length} дней с отметкой «$selected»', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
           const SizedBox(height: 3),
-          Text('${_number(percentage)}% дней с записями за последние 12 месяцев', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+          Text(
+            percentage == null
+                ? 'Недостаточно дневных записей для расчёта доли за 12 месяцев'
+                : '${_number(percentage)}% дней с записями за последние 12 месяцев',
+            style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+          ),
           const SizedBox(height: 10),
           Row(children: [
             Expanded(child: _Stat(label: 'Этот месяц', value: '$currentMonthCount')),
