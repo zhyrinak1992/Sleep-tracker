@@ -200,7 +200,7 @@ class _HealthScreenState extends State<HealthScreen> {
 
   Future<List<String>?> _manageCustomHealthTags(List<String> initial) async {
     var working = [...initial];
-    return showDialog<List<String>>(
+    final result = await showDialog<List<String>>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
@@ -316,6 +316,12 @@ class _HealthScreenState extends State<HealthScreen> {
         ),
       ),
     );
+    if (result == null) return null;
+    await widget.database.setAppMetadata(
+      HealthDayTagLibrary.storageKey,
+      HealthDayTagLibrary.encode(result),
+    );
+    return result;
   }
 
   Future<List<HealthReportSnapshot>> _loadHealthReports() =>
@@ -707,7 +713,9 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
               behavior: HitTestBehavior.opaque,
               onTapUp: (details) {
                 if (constraints.maxWidth <= 0) return;
-                final index = (details.localPosition.dx / constraints.maxWidth * 12)
+                final barWidth = constraints.maxWidth / (12 * 1.7);
+                final gap = (constraints.maxWidth - barWidth * 12) / 11;
+                final index = (details.localPosition.dx / (barWidth + gap))
                     .floor()
                     .clamp(0, 11)
                     .toInt();
