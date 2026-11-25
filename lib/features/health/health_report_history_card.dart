@@ -44,7 +44,7 @@ class HealthReportHistoryCard extends StatelessWidget {
               )
             else
               ...items.take(12).map((report) {
-                final end = report.endExclusive.subtract(const Duration(days: 1));
+                final end = report.endInclusive;
                 final range = '${DateFormat('dd.MM.yyyy').format(report.start)} — ${DateFormat('dd.MM.yyyy').format(end)}';
                 return ListTile(
                   contentPadding: EdgeInsets.zero,
