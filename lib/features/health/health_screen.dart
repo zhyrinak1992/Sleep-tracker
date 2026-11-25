@@ -130,7 +130,7 @@ class _HealthScreenState extends State<HealthScreen> {
   }
 
   Future<_HealthSnapshot> _load() async {
-    final sessions = await widget.database.getSessions(limit: 5000);
+    final sessions = await widget.database.getSessions(limit: null);
     final sessionsById = {for (final session in sessions) session.id: session};
     final rows = await widget.database.getAllMetrics();
     final samples = <String, List<_MetricSample>>{};
