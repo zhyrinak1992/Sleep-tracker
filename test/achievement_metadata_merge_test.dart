@@ -23,6 +23,7 @@ void main() {
       final merged = jsonDecode(mergeAchievementMetadata(
         key: 'sleep_personal_records_v1',
         localRaw: jsonEncode({
+          'recordSchemaVersion': 1,
           'longestSleepMinutes': 500,
           'longestSleepSessionId': 'local',
           'longestSleepAt': '2026-11-20T00:00:00Z',
@@ -40,6 +41,7 @@ void main() {
           'longestStreakAt': '2026-11-10T00:00:00Z',
         }),
         importedRaw: jsonEncode({
+          'recordSchemaVersion': 2,
           'longestSleepMinutes': 480,
           'longestSleepSessionId': 'archive',
           'bestSleepScore': 96,
@@ -58,6 +60,7 @@ void main() {
         }),
       )) as Map<String, dynamic>;
 
+      expect(merged['recordSchemaVersion'], 2);
       expect(merged['longestSleepMinutes'], 500);
       expect(merged['longestSleepSessionId'], 'local');
       expect(merged['bestSleepScore'], 96);
