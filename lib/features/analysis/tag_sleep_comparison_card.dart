@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../data/sleep_database.dart';
@@ -341,6 +342,16 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
           : null;
       final matchingTemplates = data.templates.where((item) => item.id == _activeTemplateId);
       final activeTemplate = matchingTemplates.isEmpty ? null : matchingTemplates.first;
+      Widget periodLine(String label, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          children: [
+            Expanded(child: Text(label, style: const TextStyle(color: AppTheme.muted, fontSize: 11))),
+            const SizedBox(width: 8),
+            Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11)),
+          ],
+        ),
+      );
 
       return SectionCard(
         child: Column(
@@ -496,15 +507,15 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
             if (result.isSufficient && previousResult.isSufficient) ...[
               _ReportLine(
                 label: 'Предыдущий период',
-                value: '${_formatDifference(previousResult.difference!, _metric)} · ${previousResult.withTag.nights}/${previousResult.withoutTag.nights} ночей',
+                '${_formatDifference(previousResult.difference!, _metric)} · ${previousResult.withTag.nights}/${previousResult.withoutTag.nights} ночей',
               ),
               _ReportLine(
                 label: 'Текущий период',
-                value: '${_formatDifference(result.difference!, _metric)} · ${result.withTag.nights}/${result.withoutTag.nights} ночей',
+                '${_formatDifference(result.difference!, _metric)} · ${result.withTag.nights}/${result.withoutTag.nights} ночей',
               ),
               _ReportLine(
                 label: 'Изменение разницы',
-                value: '${_formatDifference(periodDifferenceChange!, _metric)}',
+                '${_formatDifference(periodDifferenceChange!, _metric)}',
               ),
             ] else
               Text(
