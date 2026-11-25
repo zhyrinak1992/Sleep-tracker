@@ -26,8 +26,14 @@ void main() {
           'longestSleepMinutes': 500,
           'longestSleepSessionId': 'local',
           'longestSleepAt': '2026-11-20T00:00:00Z',
+          'bestSleepScore': 90,
+          'bestSleepScoreSessionId': 'local-score',
+          'bestSleepScoreAt': '2026-11-19T00:00:00Z',
           'bestEfficiencyPercent': 92,
           'bestEfficiencySessionId': 'local-eff',
+          'fewestAwakenings': 3,
+          'fewestAwakeningsSessionId': 'local-awake',
+          'fewestAwakeningsAt': '2026-11-18T00:00:00Z',
           'shortestLatencyMinutes': 5,
           'shortestLatencySessionId': 'local-latency',
           'longestStreakDays': 8,
@@ -36,9 +42,15 @@ void main() {
         importedRaw: jsonEncode({
           'longestSleepMinutes': 480,
           'longestSleepSessionId': 'archive',
+          'bestSleepScore': 96,
+          'bestSleepScoreSessionId': 'archive-score',
+          'bestSleepScoreAt': '2026-11-22T00:00:00Z',
           'bestEfficiencyPercent': 97,
           'bestEfficiencySessionId': 'archive-eff',
           'bestEfficiencyAt': '2026-11-21T00:00:00Z',
+          'fewestAwakenings': 1,
+          'fewestAwakeningsSessionId': 'archive-awake',
+          'fewestAwakeningsAt': '2026-11-23T00:00:00Z',
           'shortestLatencyMinutes': 2,
           'shortestLatencySessionId': 'archive-latency',
           'longestStreakDays': 14,
@@ -48,6 +60,10 @@ void main() {
 
       expect(merged['longestSleepMinutes'], 500);
       expect(merged['longestSleepSessionId'], 'local');
+      expect(merged['bestSleepScore'], 96);
+      expect(merged['bestSleepScoreSessionId'], 'archive-score');
+      expect(merged['fewestAwakenings'], 1);
+      expect(merged['fewestAwakeningsSessionId'], 'archive-awake');
       expect(merged['bestEfficiencyPercent'], 97);
       expect(merged['bestEfficiencySessionId'], 'archive-eff');
       expect(merged['shortestLatencyMinutes'], 2);
@@ -89,19 +105,33 @@ void main() {
         'achievedAt': '2026-11-22T00:00:00Z',
         'sessionId': 'night-2',
       };
+      final score = {
+        'id': 'bestSleepScore|night-3|98.0|2026-11-23T00:00:00.000Z',
+        'metric': 'bestSleepScore',
+        'value': 98,
+        'achievedAt': '2026-11-23T00:00:00Z',
+        'sessionId': 'night-3',
+      };
+      final awakenings = {
+        'id': 'fewestAwakenings|night-4|0.0|2026-11-24T00:00:00.000Z',
+        'metric': 'fewestAwakenings',
+        'value': 0,
+        'achievedAt': '2026-11-24T00:00:00Z',
+        'sessionId': 'night-4',
+      };
       final merged = jsonDecode(mergeAchievementMetadata(
         key: 'sleep_personal_records_history_v1',
         localRaw: jsonEncode([local]),
-        importedRaw: jsonEncode([local, imported, {
-          'id': 'sleep_score|night-3',
+        importedRaw: jsonEncode([local, imported, score, awakenings, {
+          'id': 'sleep_score|night-5',
           'metric': 'sleepScore',
           'value': 99,
-          'achievedAt': '2026-11-23T00:00:00Z',
-          'sessionId': 'night-3',
+          'achievedAt': '2026-11-25T00:00:00Z',
+          'sessionId': 'night-5',
         }]),
       )) as List;
 
-      expect(merged, hasLength(2));
+      expect(merged, hasLength(4));
       expect(merged.first['value'], 480);
       expect(merged.last['value'], 510);
     });
