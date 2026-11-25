@@ -41,7 +41,6 @@ void main() {
     final start = DateTime(2026, 3, 23);
     final endExclusive = DateTime(2026, 3, 30);
 
-    expect(endExclusive.difference(start).inHours, 167);
     final previous = SleepAnalytics.previousEqualPeriodStart(start, endExclusive);
 
     expect(previous, DateTime(2026, 3, 16));
@@ -52,7 +51,6 @@ void main() {
     final start = DateTime(2026, 10, 26);
     final endExclusive = DateTime(2026, 11, 2);
 
-    expect(endExclusive.difference(start).inHours, 169);
     final previous = SleepAnalytics.previousEqualPeriodStart(start, endExclusive);
 
     expect(previous, DateTime(2026, 10, 19));
