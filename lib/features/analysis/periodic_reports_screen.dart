@@ -415,7 +415,7 @@ class _ReportCard extends StatelessWidget {
               final monthScore = month['score'] is Map ? Map<String, Object?>.from(month['score'] as Map) : <String, Object?>{};
               return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 _ReportLine(
-                  label: PeriodicReportSnapshot.monthName(index) + ' · ' + (month['nights'] ?? 0).toString() + ' ночей',
+                  label: PeriodicReportSnapshot.monthName(index) + ' · ' + PdfReportService.monthNightCount(Map<String, Object?>.from(month)).toString() + ' ночей',
                   value: _formatDuration(month['averageSleepMinutes']),
                 ),
                 _ReportLine(
