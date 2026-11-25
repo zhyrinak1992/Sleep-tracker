@@ -28,6 +28,10 @@ jobs:
         env:
           TZ: Europe/Berlin
         run: flutter test test/sleep_dynamics_analysis_test.dart --reporter expanded
+      - name: Verify weekly analysis calendar boundaries across DST
+        env:
+          TZ: Europe/Berlin
+        run: flutter test test/sleep_analytics_test.dart --reporter expanded
       - name: Verify physiological report calendar boundaries across DST
         env:
           TZ: Europe/Berlin
