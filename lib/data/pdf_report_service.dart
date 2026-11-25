@@ -496,7 +496,7 @@ class PdfReportService {
     final doc = pw.Document();
     final start = DateTime.parse(snapshot['start'] as String);
     final endExclusive = DateTime.parse(snapshot['endExclusive'] as String);
-    final end = endExclusive.subtract(const Duration(days: 1));
+    final end = DateTime(endExclusive.year, endExclusive.month, endExclusive.day - 1);
     final metrics = (snapshot['metrics'] as List? ?? const [])
         .whereType<Map>()
         .map((row) => Map<String, Object?>.from(row))
