@@ -43,7 +43,7 @@ class _SleepPeriodComparisonScreenState extends State<SleepPeriodComparisonScree
   }
 
   Future<_PeriodComparisonData> _load() async {
-    final sessions = await widget.database.getSessions(limit: 10000);
+    final sessions = await widget.database.getSessions(limit: null);
     final ids = sessions.where((s) => s.endedAt != null && s.duration != null && s.duration!.inMinutes > 0)
       .map((s) => s.id).toList();
     final stages = await widget.database.getStagesForSessions(ids);
