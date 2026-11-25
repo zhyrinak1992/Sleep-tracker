@@ -7,7 +7,7 @@ import 'package:sleep_tracker/data/backup_service.dart';
 
 void main() {
   group('Portable backup export format', () {
-    test('creates an encrypted transferable archive with integrity manifest', () async {
+    test('creates a plain transferable JSON archive with integrity manifest and no password envelope', () async {
       final data = <String, dynamic>{
         'schemaVersion': 8,
         'sleep_sessions': <Map<String, Object?>>[],
@@ -30,25 +30,12 @@ void main() {
         'data': data,
       };
 
-      const password = 'sleep-tracker-archive-password';
-      final plaintext = const JsonEncoder.withIndent('  ').convert(document);
-      final encrypted = await BackupCrypto.encryptDocument(
-        plaintext: plaintext,
-        password: password,
-      );
-      final envelope = jsonDecode(utf8.decode(encrypted)) as Map<String, dynamic>;
+      final bytes = BackupService.encodeExportDocument(document);
+      final decoded = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
 
-      expect(BackupCrypto.isEncryptedEnvelope(envelope), isTrue);
-      expect(envelope['cipher'], 'AES-256-GCM');
-      expect(envelope['kdf'], 'PBKDF2-HMAC-SHA256');
-
-      final restoredText = await BackupCrypto.decryptDocument(
-        bytes: encrypted,
-        password: password,
-      );
-      final decoded = jsonDecode(restoredText) as Map<String, dynamic>;
       expect(decoded['format'], BackupService.format);
       expect(decoded['formatVersion'], BackupService.formatVersion);
+      expect(BackupCrypto.isEncryptedEnvelope(decoded), isFalse);
       await BackupManifest.validate(
         document: decoded,
         data: Map<String, dynamic>.from(decoded['data'] as Map),
