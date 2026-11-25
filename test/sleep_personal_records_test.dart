@@ -69,6 +69,8 @@ void main() {
       );
 
       expect(records.bestEfficiencyPercent, isNull);
+      expect(records.bestSleepScore, isNull);
+      expect(records.fewestAwakenings, isNull);
       expect(records.shortestLatencyMinutes, isNull);
     });
 
