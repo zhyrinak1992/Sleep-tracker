@@ -212,7 +212,12 @@ class _SleepAchievementsScreenState extends State<SleepAchievementsScreen> {
     }
 
     final previousByMetric = <String, SleepPersonalRecordEvent>{};
-    for (final event in state.recordHistory) {
+    for (final event in state.recordHistory.where((event) => const {
+      'longestSleepMinutes',
+      'bestSleepScore',
+      'bestEfficiencyPercent',
+      'fewestAwakenings',
+    }.contains(event.metric))) {
       final previous = previousByMetric[event.metric];
       timeline.add(_TimelineEntry(
         event.achievedAt,
