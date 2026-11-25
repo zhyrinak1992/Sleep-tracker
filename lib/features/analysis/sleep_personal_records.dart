@@ -108,12 +108,7 @@ class SleepPersonalRecords {
         }
       }
 
-      final hasAwakeSamples = (stagesBySession[session.id] ?? const [])
-          .any((row) {
-        final stage = (row['stage'] as String? ?? '').toLowerCase();
-        return stage.contains('бодрств') || stage.contains('awake');
-      });
-      final awakeningsAreReliable = hasAwakeSamples &&
+      final awakeningsAreReliable = metrics.hasAwakeSamples &&
           metrics.stageCoveragePercent != null &&
           metrics.stageCoveragePercent! >= 80;
       if (awakeningsAreReliable &&
