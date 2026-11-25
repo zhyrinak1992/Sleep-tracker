@@ -68,7 +68,21 @@ class PeriodicReportService {
   static const olderMetadataPrefixV6 = 'periodic_report_v2_';
   static const legacyMetadataPrefix = 'periodic_report_v1_';
 
-  Future<List<PeriodicReportSnapshot>> generateClosedReports({DateTime? now}) async {
+  static Future<List<PeriodicReportSnapshot>>? _generationInFlight;
+
+  Future<List<PeriodicReportSnapshot>> generateClosedReports({DateTime? now}) {
+    final inFlight = _generationInFlight;
+    if (inFlight != null) return inFlight;
+    final future = _generateClosedReports(now: now);
+    _generationInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_generationInFlight, future)) {
+        _generationInFlight = null;
+      }
+    });
+  }
+
+  Future<List<PeriodicReportSnapshot>> _generateClosedReports({DateTime? now}) async {
     final current = now ?? DateTime.now();
     final sessions = await database.getSessions(limit: null);
     final completed = sessions.where((s) => s.endedAt != null && s.duration != null && s.duration!.inMinutes > 0).toList()
