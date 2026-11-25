@@ -203,6 +203,7 @@ class SleepPersonalRecords {
   }
 
   Map<String, Object?> toMap() => {
+        'recordSchemaVersion': 2,
         'longestSleepMinutes': longestSleepMinutes,
         'longestSleepSessionId': longestSleepSessionId,
         'longestSleepAt': longestSleepAt?.toUtc().toIso8601String(),
