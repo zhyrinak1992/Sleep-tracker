@@ -152,20 +152,45 @@ Map<String, Object?> _mergePersonalRecords(Object? local, Object? imported) {
     return value;
   }
 
+  bool hasAssociatedValue(Map<String, Object?> source, String key) {
+    final value = source[key];
+    if (key.endsWith('At')) {
+      return value is String && DateTime.tryParse(value) != null;
+    }
+    if (key.endsWith('SessionId')) {
+      return value is String && value.isNotEmpty;
+    }
+    return value != null;
+  }
+
+  bool importedHasMissingSourceMetadata(List<String> associatedKeys) =>
+      associatedKeys.any((key) =>
+          !hasAssociatedValue(a, key) && hasAssociatedValue(b, key));
+
+  void applyImportedRecord(
+    String valueKey,
+    List<String> associatedKeys, {
+    required bool tiedValue,
+  }) {
+    result[valueKey] = b[valueKey];
+    for (final key in associatedKeys) {
+      if (hasAssociatedValue(b, key)) {
+        result[key] = b[key];
+      } else if (!tiedValue || !hasAssociatedValue(a, key)) {
+        result.remove(key);
+      }
+    }
+  }
+
   void chooseMaximum(String valueKey, List<String> associatedKeys) {
     final an = validRecordValue(valueKey, a[valueKey]);
     final bn = validRecordValue(valueKey, b[valueKey]);
     if (an == null && bn == null) return;
-    final takeImported = an == null || (bn != null && bn > an);
+    final tiedValue = an != null && bn != null && an == bn;
+    final takeImported = an == null || (bn != null && bn > an) ||
+        (tiedValue && importedHasMissingSourceMetadata(associatedKeys));
     if (takeImported) {
-      result[valueKey] = b[valueKey];
-      for (final key in associatedKeys) {
-        if (b.containsKey(key)) {
-          result[key] = b[key];
-        } else {
-          result.remove(key);
-        }
-      }
+      applyImportedRecord(valueKey, associatedKeys, tiedValue: tiedValue);
     }
   }
 
@@ -173,16 +198,11 @@ Map<String, Object?> _mergePersonalRecords(Object? local, Object? imported) {
     final an = validRecordValue(valueKey, a[valueKey]);
     final bn = validRecordValue(valueKey, b[valueKey]);
     if (an == null && bn == null) return;
-    final takeImported = an == null || (bn != null && bn < an);
+    final tiedValue = an != null && bn != null && an == bn;
+    final takeImported = an == null || (bn != null && bn < an) ||
+        (tiedValue && importedHasMissingSourceMetadata(associatedKeys));
     if (takeImported) {
-      result[valueKey] = b[valueKey];
-      for (final key in associatedKeys) {
-        if (b.containsKey(key)) {
-          result[key] = b[key];
-        } else {
-          result.remove(key);
-        }
-      }
+      applyImportedRecord(valueKey, associatedKeys, tiedValue: tiedValue);
     }
   }
 
