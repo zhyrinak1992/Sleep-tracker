@@ -181,9 +181,13 @@ class SleepAchievementService {
     final stages = await database.getStagesForSessions(
       validSessions.map((session) => session.id).toList(),
     );
+    final morningReports = await database.getMorningReportsForSessions(
+      validSessions.map((session) => session.id).toList(),
+    );
     final calculatedRecords = SleepPersonalRecords.calculate(
       sessions: validSessions,
       stagesBySession: stages,
+      morningReports: morningReports,
     );
 
     final recordsRaw = await database.getAppMetadata(_recordsKey);
@@ -211,6 +215,53 @@ class SleepAchievementService {
         // Rebuild damaged history from the persisted bests/source records.
       }
     }
+    // Migrate the earlier SleepScore/awakening record stream into the unified
+    // dated history. The legacy key remains supported by backup merging.
+    final legacyRecordHistoryRaw = await database.getAppMetadata('sleep_records_history_v1');
+    if (legacyRecordHistoryRaw != null && legacyRecordHistoryRaw.isNotEmpty) {
+      try {
+        final decodedLegacy = jsonDecode(legacyRecordHistoryRaw);
+        if (decodedLegacy is List) {
+          final migrated = <SleepPersonalRecordEvent>[];
+          for (final item in decodedLegacy) {
+            if (item is! Map) continue;
+            final type = item['type'];
+            final metric = type == 'sleep_score'
+                ? 'bestSleepScore'
+                : type == 'awakening_count'
+                    ? 'fewestAwakenings'
+                    : null;
+            final sessionId = item['sessionId'];
+            final value = item['value'];
+            final rawDate = item['achievedAt'];
+            final date = rawDate is String ? DateTime.tryParse(rawDate) : null;
+            if (metric == null || sessionId is! String || sessionId.isEmpty ||
+                value is! num || date == null) continue;
+            final normalized = value.toDouble();
+            final id = SleepPersonalRecordEvent.createId(
+              metric: metric,
+              value: normalized,
+              achievedAt: date,
+              sessionId: sessionId,
+            );
+            try {
+              migrated.add(SleepPersonalRecordEvent.fromMap({
+                'id': id,
+                'metric': metric,
+                'value': normalized,
+                'achievedAt': date.toUtc().toIso8601String(),
+                'sessionId': sessionId,
+              }));
+            } on FormatException {
+              // Ignore malformed legacy record events without losing other data.
+            }
+          }
+          recordHistory = SleepPersonalRecordHistory.merge(recordHistory, migrated);
+        }
+      } on FormatException {
+        // A damaged legacy history must not affect sleep records or startup.
+      }
+    }
     final historyBest = SleepPersonalRecordHistory.bestRecords(recordHistory);
     final recordBaseline = previousRecords == null
         ? historyBest
@@ -226,27 +277,26 @@ class SleepAchievementService {
                   recordBaseline.longestSleepMinutes!)) {
         newRecordKeys.add('longestSleep');
       }
+      if (calculatedRecords.bestSleepScore != null &&
+          (recordBaseline.bestSleepScore == null ||
+              calculatedRecords.bestSleepScore! > recordBaseline.bestSleepScore!)) {
+        newRecordKeys.add('bestSleepScore');
+      }
       if (calculatedRecords.bestEfficiencyPercent != null &&
           (recordBaseline.bestEfficiencyPercent == null ||
               calculatedRecords.bestEfficiencyPercent! >
                   recordBaseline.bestEfficiencyPercent!)) {
         newRecordKeys.add('bestEfficiency');
       }
-      if (calculatedRecords.shortestLatencyMinutes != null &&
-          (recordBaseline.shortestLatencyMinutes == null ||
-              calculatedRecords.shortestLatencyMinutes! <
-                  recordBaseline.shortestLatencyMinutes!)) {
-        newRecordKeys.add('shortestLatency');
-      }
-      if (calculatedRecords.longestStreakDays >
-          recordBaseline.longestStreakDays) {
-        newRecordKeys.add('longestStreak');
+      if (calculatedRecords.fewestAwakenings != null &&
+          (recordBaseline.fewestAwakenings == null ||
+              calculatedRecords.fewestAwakenings! < recordBaseline.fewestAwakenings!)) {
+        newRecordKeys.add('fewestAwakenings');
       }
     }
 
-    // Seed a baseline once, then append only genuine improvements. This keeps
-    // the four approved records' history without adding history for excluded
-    // SleepScore/awakening metrics.
+    // Seed a baseline once, then append only genuine improvements for the
+    // four approved records: duration, SleepScore, efficiency and awakenings.
     if (recordBaseline == null) {
       recordHistory = SleepPersonalRecordHistory.merge(
         recordHistory,
