@@ -152,13 +152,16 @@ class _HealthDayTagMonthlyReportsScreenState
                               Row(children: [
                                 const SizedBox(width: 82, child: Text('Этот месяц',
                                   style: TextStyle(color: AppTheme.muted, fontSize: 10))),
-                                Expanded(child: LinearProgressIndicator(
-                                  value: entry.share == null ? 0 : (entry.share! / 100).clamp(0.0, 1.0),
-                                  minHeight: 7,
-                                  color: AppTheme.teal,
-                                  backgroundColor: AppTheme.surfaceLight,
-                                  borderRadius: BorderRadius.circular(5),
-                                )),
+                                if (entry.share != null)
+                                  Expanded(child: LinearProgressIndicator(
+                                    value: HealthDayTagMonthlyReportEntry.progressFraction(entry.share),
+                                    minHeight: 7,
+                                    color: AppTheme.teal,
+                                    backgroundColor: AppTheme.surfaceLight,
+                                    borderRadius: BorderRadius.circular(5),
+                                  ))
+                                else
+                                  const Expanded(child: SizedBox.shrink()),
                                 const SizedBox(width: 8),
                                 SizedBox(width: 52, child: Text(_share(entry.share),
                                   textAlign: TextAlign.end,
@@ -168,13 +171,16 @@ class _HealthDayTagMonthlyReportsScreenState
                               Row(children: [
                                 const SizedBox(width: 82, child: Text('Прошлый',
                                   style: TextStyle(color: AppTheme.muted, fontSize: 10))),
-                                Expanded(child: LinearProgressIndicator(
-                                  value: entry.previousShare == null ? 0 : (entry.previousShare! / 100).clamp(0.0, 1.0),
-                                  minHeight: 7,
-                                  color: const Color(0xFFB9A7FF),
-                                  backgroundColor: AppTheme.surfaceLight,
-                                  borderRadius: BorderRadius.circular(5),
-                                )),
+                                if (entry.previousShare != null)
+                                  Expanded(child: LinearProgressIndicator(
+                                    value: HealthDayTagMonthlyReportEntry.progressFraction(entry.previousShare),
+                                    minHeight: 7,
+                                    color: const Color(0xFFB9A7FF),
+                                    backgroundColor: AppTheme.surfaceLight,
+                                    borderRadius: BorderRadius.circular(5),
+                                  ))
+                                else
+                                  const Expanded(child: SizedBox.shrink()),
                                 const SizedBox(width: 8),
                                 SizedBox(width: 52, child: Text(_share(entry.previousShare),
                                   textAlign: TextAlign.end,
