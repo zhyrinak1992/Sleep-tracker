@@ -56,14 +56,23 @@ void main() {
       expect(records.longestSleepSessionId, 'night-1');
     });
 
-    test('records 100% efficiency when asleep stages cover the full time in bed', () {
+    test('records 100% efficiency with full coverage and explicit sleep boundaries', () {
       final start = DateTime(2026, 11, 20, 22);
+      final end = start.add(const Duration(hours: 8));
       final records = SleepPersonalRecords.calculate(
-        sessions: [session('night-full-coverage', start)],
+        sessions: [
+          SleepSession(
+            id: 'night-full-coverage',
+            startedAt: start,
+            endedAt: end,
+            actualSleepStartedAt: start,
+            actualSleepEndedAt: end,
+          ),
+        ],
         morningReports: const {},
         stagesBySession: {
           'night-full-coverage': [
-            stage('Light', start, start.add(const Duration(hours: 8))),
+            stage('Light', start, end),
           ],
         },
       );
