@@ -23,6 +23,7 @@ void main() {
     expect(result.sleepDurationMinutes, 440);
     expect(result.firstAwakeningAt, DateTime(2026, 11, 22, 1));
     expect(result.awakeningCount, 1);
+    expect(result.hasAwakeSamples, isTrue);
     expect(result.awakeStageMinutes, 10);
     expect(result.stageBreakdownMinutes['Глубокий'], 120);
     expect(result.stageBreakdownMinutes['REM'], 320);
@@ -45,6 +46,7 @@ void main() {
       {'stage': 'Лёгкий сон', 'started_at': start.toUtc().toIso8601String(), 'ended_at': DateTime(2026, 11, 22, 7).toUtc().toIso8601String()},
     ]);
     expect(result.sleepEfficiencyPercent, isNull);
+    expect(result.hasAwakeSamples, isFalse);
     expect(result.stageCoveragePercent, 100);
     expect(result.sleepOnsetAt, start);
     expect(result.sleepEndAt, DateTime(2026, 11, 22, 7));
