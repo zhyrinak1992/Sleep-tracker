@@ -220,4 +220,142 @@ void main() {
     ), isTrue);
   });
 
+  test('merge restore keeps local conflicts and adds archive-only records', () async {
+    const timestamp = '2026-11-24T22:00:00.000Z';
+    Map<String, Object?> session(String id, String note) => {
+      'id': id,
+      'started_at': timestamp,
+      'ended_at': '2026-11-25T07:00:00.000Z',
+      'source': 'manual',
+      'note': note,
+      'created_at': timestamp,
+      'updated_at': timestamp,
+      'user_edited': 1,
+    };
+
+    await destination.insert('sleep_sessions', session('same-night', 'local session'));
+    await destination.insert('sleep_sessions', session('local-only-night', 'local only'));
+    await destination.insert('sleep_session_tags', {
+      'session_id': 'same-night', 'tag_key': 'stress',
+      'label': 'Local label', 'created_at': timestamp,
+    });
+    await destination.insert('sleep_notes', {
+      'id': 'same-note', 'session_id': 'same-night',
+      'body': 'Local note', 'created_at': timestamp, 'updated_at': timestamp,
+    });
+    await destination.insert('app_metadata', {'key': 'theme', 'value': 'local'});
+
+    final archive = <String, dynamic>{
+      'schemaVersion': 8,
+      'sleep_sessions': [
+        session('same-night', 'archive session'),
+        session('archive-only-night', 'archive only'),
+      ],
+      'sleep_session_tags': [
+        {
+          'session_id': 'same-night', 'tag_key': 'stress',
+          'label': 'Archive label', 'created_at': timestamp,
+        },
+        {
+          'session_id': 'archive-only-night', 'tag_key': 'caffeine',
+          'label': 'Caffeine', 'created_at': timestamp,
+        },
+      ],
+      'sleep_notes': [
+        {
+          'id': 'same-note', 'session_id': 'same-night',
+          'body': 'Archive note', 'created_at': timestamp, 'updated_at': timestamp,
+        },
+        {
+          'id': 'archive-note', 'session_id': 'archive-only-night',
+          'body': 'New archive note', 'created_at': timestamp, 'updated_at': timestamp,
+        },
+      ],
+      'app_metadata': [
+        {'key': 'theme', 'value': 'archive'},
+        {'key': 'archive-only-setting', 'value': 'imported'},
+      ],
+      'sleep_stages': [
+        {
+          'id': 'archive-stage', 'session_id': 'archive-only-night',
+          'stage': 'deep', 'started_at': timestamp,
+          'ended_at': '2026-11-24T23:00:00.000Z', 'source': 'device',
+        },
+      ],
+      'sleep_metrics': [
+        {
+          'id': 'archive-metric', 'session_id': 'archive-only-night',
+          'metric_type': 'heart_rate', 'value': 57.0, 'unit': 'bpm',
+          'measured_at': timestamp, 'source': 'device',
+        },
+      ],
+      'audio_events': [
+        {
+          'id': 'archive-audio', 'session_id': 'archive-only-night',
+          'file_path': null, 'category': 'snoring', 'captured_at': timestamp,
+          'expires_at': '2026-12-01T22:00:00.000Z',
+          'duration_ms': 1200, 'user_corrected': 0,
+        },
+      ],
+      'morning_reports': [
+        {
+          'id': 'archive-report', 'session_id': 'archive-only-night',
+          'report_date': '2026-11-25', 'created_at': timestamp,
+        },
+      ],
+      'climate_samples': [
+        {
+          'id': 'archive-climate', 'session_id': 'archive-only-night',
+          'device_id': 'sensor-1', 'metric_type': 'temperature',
+          'value': 19.0, 'unit': '°C', 'source': 'sensor',
+          'measured_at': timestamp, 'received_at': timestamp, 'quality': 'actual',
+        },
+      ],
+    };
+
+    SleepDatabase.instance.setDatabaseForTesting(destination);
+    await SleepDatabase.instance.restoreSnapshot(archive, merge: true);
+
+    final sessions = await destination.query('sleep_sessions', orderBy: 'id');
+    expect(sessions.map((row) => row['id']).toSet(), {
+      'same-night', 'local-only-night', 'archive-only-night',
+    });
+    expect(
+      (await destination.query('sleep_sessions',
+          where: 'id = ?', whereArgs: ['same-night'])).single['note'],
+      'local session',
+    );
+    expect(
+      (await destination.query('sleep_session_tags',
+          where: 'session_id = ? AND tag_key = ?',
+          whereArgs: ['same-night', 'stress'])).single['label'],
+      'Local label',
+    );
+    expect(
+      (await destination.query('sleep_notes',
+          where: 'id = ?', whereArgs: ['same-note'])).single['body'],
+      'Local note',
+    );
+    expect(
+      (await destination.query('sleep_notes',
+          where: 'id = ?', whereArgs: ['archive-note'])).single['body'],
+      'New archive note',
+    );
+    expect(
+      (await destination.query('app_metadata',
+          where: 'key = ?', whereArgs: ['theme'])).single['value'],
+      'local',
+    );
+    expect(
+      (await destination.query('app_metadata',
+          where: 'key = ?', whereArgs: ['archive-only-setting'])).single['value'],
+      'imported',
+    );
+    expect(await destination.query('sleep_stages'), hasLength(1));
+    expect(await destination.query('sleep_metrics'), hasLength(1));
+    expect(await destination.query('audio_events'), hasLength(1));
+    expect(await destination.query('morning_reports'), hasLength(1));
+    expect(await destination.query('climate_samples'), hasLength(1));
+  });
+
 }
