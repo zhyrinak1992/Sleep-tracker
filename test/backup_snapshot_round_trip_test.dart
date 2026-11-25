@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -5,6 +6,7 @@ import 'package:sqflite/sqflite.dart' show Database;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart'
     show databaseFactoryFfi, sqfliteFfiInit;
 import 'package:sleep_tracker/data/sleep_database.dart';
+import 'package:sleep_tracker/data/backup_service.dart';
 
 Future<Database> _openDatabase(String path) async {
   final db = await databaseFactoryFfi.openDatabase(path);
@@ -374,6 +376,110 @@ void main() {
     expect(audioRows.any((row) => row['id'] == 'archive-audio'), isTrue);
     expect(await destination.query('morning_reports'), hasLength(1));
     expect(await destination.query('climate_samples'), hasLength(1));
+  });
+
+
+  test('merge restore writes archive-only audio bytes and preserves local conflict files', () async {
+    const timestamp = '2026-11-24T22:00:00.000Z';
+    Map<String, Object?> session(String id) => {
+      'id': id,
+      'started_at': timestamp,
+      'ended_at': '2026-11-25T07:00:00.000Z',
+      'source': 'manual',
+      'created_at': timestamp,
+      'updated_at': timestamp,
+      'user_edited': 1,
+    };
+
+    final localAudioPath = '${tempDirectory.path}/local-conflict.m4a';
+    final localAudioBytes = [21, 22, 23, 24];
+    await File(localAudioPath).writeAsBytes(localAudioBytes, flush: true);
+    await destination.insert('sleep_sessions', session('same-night'));
+    await destination.insert('audio_events', {
+      'id': 'same-audio',
+      'session_id': 'same-night',
+      'file_path': localAudioPath,
+      'category': 'local-category',
+      'captured_at': timestamp,
+      'expires_at': '2026-12-01T22:00:00.000Z',
+      'duration_ms': 3000,
+      'user_corrected': 1,
+    });
+
+    final archiveAudioBytes = [0, 1, 2, 127, 128, 254, 255];
+    final archive = <String, dynamic>{
+      'schemaVersion': 8,
+      'sleep_sessions': [session('same-night'), session('archive-night')],
+      'sleep_session_tags': <Map<String, Object?>>[],
+      'sleep_notes': <Map<String, Object?>>[],
+      'app_metadata': <Map<String, Object?>>[],
+      'sleep_stages': <Map<String, Object?>>[],
+      'sleep_metrics': <Map<String, Object?>>[],
+      'audio_events': [
+        {
+          'id': 'same-audio',
+          'session_id': 'same-night',
+          'file_path': 'archive-conflict.m4a',
+          'category': 'archive-category',
+          'captured_at': timestamp,
+          'expires_at': '2026-12-01T22:00:00.000Z',
+          'duration_ms': 9999,
+          'user_corrected': 0,
+          'audioDataB64': base64Encode([99, 98, 97]),
+        },
+        {
+          'id': 'archive-audio',
+          'session_id': 'archive-night',
+          'file_path': 'recording.m4a',
+          'category': 'snoring',
+          'captured_at': timestamp,
+          'expires_at': '2026-12-01T22:00:00.000Z',
+          'duration_ms': 1200,
+          'user_corrected': 0,
+          'audioDataB64': base64Encode(archiveAudioBytes),
+        },
+      ],
+      'morning_reports': <Map<String, Object?>>[],
+      'climate_samples': <Map<String, Object?>>[],
+    };
+
+    SleepDatabase.instance.setDatabaseForTesting(destination);
+    final impact = await SleepDatabase.instance.previewRestoreImpact(
+      archive,
+      availableBytes: null,
+    );
+    final document = <String, dynamic>{
+      'format': BackupService.format,
+      'formatVersion': BackupService.formatVersion,
+      'createdAt': timestamp,
+      'data': archive,
+    };
+    final draft = BackupImportDraft.forTesting(
+      document: document,
+      data: archive,
+      preview: BackupImportPreview.fromDocument(document, archive),
+      impact: impact,
+    );
+
+    final result = await BackupService.instance.restorePreparedBackup(
+      draft: draft,
+      merge: true,
+      documentsDirectoryForTesting: tempDirectory,
+    );
+    expect(result.isCancelled, isFalse);
+
+    final audioRows = await destination.query('audio_events', orderBy: 'id');
+    expect(audioRows, hasLength(2));
+    final preserved = audioRows.singleWhere((row) => row['id'] == 'same-audio');
+    expect(preserved['file_path'], localAudioPath);
+    expect(preserved['category'], 'local-category');
+    expect(await File(localAudioPath).readAsBytes(), localAudioBytes);
+
+    final restored = audioRows.singleWhere((row) => row['id'] == 'archive-audio');
+    final restoredPath = restored['file_path'] as String;
+    expect(restoredPath, contains('audio_events'));
+    expect(restoredPath.endsWith('.m4a'), isTrue);
+    expect(await File(restoredPath).readAsBytes(), archiveAudioBytes);
   });
 
 }
