@@ -12,6 +12,7 @@ import 'health_report_service.dart';
 import 'health_report_history_card.dart';
 import 'health_day_tag_library.dart';
 import 'health_day_tag_period_comparison.dart';
+import 'health_day_tag_history_period.dart';
 import 'health_day_tag_monthly_report.dart';
 import 'health_day_tag_monthly_reports_screen.dart';
 
@@ -594,6 +595,7 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
   bool _matchAllOverviewTags = false;
   bool _overviewNewestFirst = true;
   DateTime _overviewMonth = DateTime.now();
+  HealthDayTagHistoryPeriod _selectedHistoryPeriod = HealthDayTagHistoryPeriod.month;
 
 
   Future<void> _showMonthDates({
@@ -674,23 +676,59 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
         ));
       }
       final selected = tags.contains(_selectedTag) ? _selectedTag! : tags.first;
-      final dates = [...usage[selected]!]..sort((a, b) => b.compareTo(a));
+      final allDates = [...usage[selected]!]..sort((a, b) => b.compareTo(a));
       DateTime dayOnly(DateTime date) => DateTime(date.year, date.month, date.day);
-      final taggedDays = dates.map(dayOnly).toSet();
-      final completedSessions = widget.sessions.where((session) => session.endedAt != null && session.duration != null && session.duration!.inMinutes > 0).toList();
-      final taggedSessions = completedSessions.where((session) => taggedDays.contains(dayOnly(session.endedAt!))).toList();
-      final otherSessions = completedSessions.where((session) => !taggedDays.contains(dayOnly(session.endedAt!))).toList();
+      final now = DateTime.now();
+      final earliestEntry = entries.keys.isEmpty
+          ? null
+          : entries.keys.reduce((a, b) => a.isBefore(b) ? a : b);
+      final historyRange = HealthDayTagHistoryPeriodCalculator.range(
+        period: _selectedHistoryPeriod,
+        now: now,
+        earliestEntry: earliestEntry,
+      );
+      final selectedPeriodDates = allDates.where((date) =>
+        !dayOnly(date).isBefore(historyRange.start) &&
+        dayOnly(date).isBefore(historyRange.endExclusive)).toList();
+      final recordedDaysInSelectedPeriod = entries.keys.where((date) {
+        final day = dayOnly(date);
+        return !day.isBefore(historyRange.start) && day.isBefore(historyRange.endExclusive);
+      }).length;
+      final percentage = HealthDayTagLibrary.percentageOfRecordedDays(
+        matchedDays: selectedPeriodDates.length,
+        recordedDays: recordedDaysInSelectedPeriod,
+      );
+      final historyBuckets = HealthDayTagHistoryPeriodCalculator.buckets(
+        period: _selectedHistoryPeriod,
+        range: historyRange,
+      );
+      final historyBucketCounts = historyBuckets.map((bucket) =>
+        selectedPeriodDates.where((date) {
+          final day = dayOnly(date);
+          return !day.isBefore(bucket.start) && day.isBefore(bucket.endExclusive);
+        }).length).toList();
+      final taggedDays = selectedPeriodDates.map(dayOnly).toSet();
+      final completedSessions = widget.sessions.where((session) =>
+        session.endedAt != null && session.duration != null &&
+        session.duration!.inMinutes > 0).toList();
+      final sessionsInPeriod = completedSessions.where((session) {
+        final day = dayOnly(session.endedAt!);
+        return !day.isBefore(historyRange.start) && day.isBefore(historyRange.endExclusive);
+      }).toList();
+      final taggedSessions = sessionsInPeriod.where((session) =>
+        taggedDays.contains(dayOnly(session.endedAt!))).toList();
+      final otherSessions = sessionsInPeriod.where((session) =>
+        !taggedDays.contains(dayOnly(session.endedAt!))).toList();
       double? averageDuration(List<SleepSession> values) => values.isEmpty ? null : values.fold<int>(0, (sum, item) => sum + item.duration!.inMinutes) / values.length / 60;
       double? averageRating(List<SleepSession> values) {
         final rated = values.where((session) => session.morningRating != null).toList();
         return rated.isEmpty ? null : rated.fold<int>(0, (sum, item) => sum + item.morningRating!) / rated.length;
       }
-      final now = DateTime.now();
       final monthStart = DateTime(now.year, now.month);
       final previousMonthStart = DateTime(now.year, now.month - 1);
       final nextMonthStart = DateTime(now.year, now.month + 1);
-      final currentMonthCount = dates.where((d) => !d.isBefore(monthStart) && d.isBefore(nextMonthStart)).length;
-      final previousMonthCount = dates.where((d) => !d.isBefore(previousMonthStart) && d.isBefore(monthStart)).length;
+      final currentMonthCount = allDates.where((d) => !d.isBefore(monthStart) && d.isBefore(nextMonthStart)).length;
+      final previousMonthCount = allDates.where((d) => !d.isBefore(previousMonthStart) && d.isBefore(monthStart)).length;
       final currentMonthRecordedDays = entries.keys.where((d) => !d.isBefore(monthStart) && d.isBefore(nextMonthStart)).length;
       final previousMonthRecordedDays = entries.keys.where((d) => !d.isBefore(previousMonthStart) && d.isBefore(monthStart)).length;
       final previousMonthDays = DateTime(now.year, now.month, 0).day;
@@ -710,12 +748,8 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
       }).toList()
         ..sort((a, b) => b.currentCount.compareTo(a.currentCount));
       final twelveMonthStart = DateTime(now.year, now.month - 11);
-      final recentDates = dates.where((d) => !d.isBefore(twelveMonthStart)).toList();
+      final recentDates = allDates.where((d) => !d.isBefore(twelveMonthStart)).toList();
       final recordedDays = entries.keys.where((d) => !d.isBefore(twelveMonthStart)).length;
-      final percentage = HealthDayTagLibrary.percentageOfRecordedDays(
-        matchedDays: recentDates.length,
-        recordedDays: recordedDays,
-      );
       final overviewTags = _overviewTags.where(tags.contains).toSet();
       final matchedEntries = entries.entries.where((entry) =>
         HealthDayTagLibrary.matches(
@@ -754,14 +788,46 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
             onChanged: (value) => setState(() => _selectedTag = value),
           ),
           const SizedBox(height: 12),
-          Text('${dates.length} дней с отметкой «$selected»', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 3),
-          Text(
-            percentage == null
-                ? 'Недостаточно дневных записей для расчёта доли за 12 месяцев'
-                : '${_number(percentage)}% дней с записями за последние 12 месяцев',
-            style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+          Text(selectedPeriodDates.length.toString() + ' дней с отметкой «' + selected + '»', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          SegmentedButton<HealthDayTagHistoryPeriod>(
+            segments: const [
+              ButtonSegment(value: HealthDayTagHistoryPeriod.week, label: Text('Неделя')),
+              ButtonSegment(value: HealthDayTagHistoryPeriod.month, label: Text('Месяц')),
+              ButtonSegment(value: HealthDayTagHistoryPeriod.halfYear, label: Text('Полгода')),
+              ButtonSegment(value: HealthDayTagHistoryPeriod.allTime, label: Text('Всё время')),
+            ],
+            selected: {_selectedHistoryPeriod},
+            onSelectionChanged: (value) => setState(() => _selectedHistoryPeriod = value.first),
           ),
+          const SizedBox(height: 5),
+          Text(
+            historyRange.description + ' · ' + selectedPeriodDates.length.toString() +
+                ' из ' + recordedDaysInSelectedPeriod.toString() + ' дней с записями' +
+                (percentage == null ? '' : ' · ' + _number(percentage) + '%'),
+            style: const TextStyle(color: AppTheme.muted, fontSize: 10),
+          ),
+          const SizedBox(height: 10),
+          const Text('Динамика выбранного периода', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 5),
+          LayoutBuilder(builder: (context, constraints) {
+            final requiredWidth = historyBucketCounts.length * 14.0;
+            final chartWidth = constraints.maxWidth > requiredWidth
+                ? constraints.maxWidth : requiredWidth;
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: chartWidth,
+                height: 66,
+                child: CustomPaint(painter: _SelectedTagHistoryPainter(historyBucketCounts)),
+              ),
+            );
+          }),
+          if (historyBuckets.isNotEmpty)
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text(historyBuckets.first.label, style: const TextStyle(color: AppTheme.muted, fontSize: 9)),
+              Text(historyBuckets.last.label, style: const TextStyle(color: AppTheme.muted, fontSize: 9)),
+            ]),
           const SizedBox(height: 10),
           Row(children: [
             Expanded(child: _Stat(label: 'Этот месяц', value: '$currentMonthCount')),
@@ -869,16 +935,16 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
             const Text('Сопоставление описательное, не доказывает влияние отметки на сон. День сопоставляется с ночью по дате её окончания.', style: TextStyle(color: AppTheme.muted, fontSize: 10, height: 1.35)),
           ],
           const Divider(height: 20),
-          Text('Даты использования · ${dates.length}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+          Text('Даты использования · ${selectedPeriodDates.length}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
           const SizedBox(height: 6),
           SizedBox(height: 130, child: ListView.builder(
-            itemCount: dates.length,
+            itemCount: selectedPeriodDates.length,
             itemBuilder: (context, index) => ListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.event_available_outlined, size: 18),
-              title: Text(_date(dates[index]), style: const TextStyle(fontSize: 12)),
-              onTap: () => widget.onSelectDay(dates[index]),
+              title: Text(_date(selectedPeriodDates[index]), style: const TextStyle(fontSize: 12)),
+              onTap: () => widget.onSelectDay(selectedPeriodDates[index]),
             ),
           )),
           const Divider(height: 22),
