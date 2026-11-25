@@ -51,6 +51,39 @@ void main() {
       expect(result.difference, 60);
     });
 
+    test('excludes soft-deleted nights from both comparison groups', () {
+      final sessions = <SleepSession>[
+        for (var i = 0; i < 4; i++)
+          _session(id: 'tag-$i', start: start.add(Duration(days: i))),
+        for (var i = 0; i < 4; i++)
+          _session(id: 'plain-$i', start: start.add(Duration(days: i + 5))),
+        SleepSession(
+          id: 'deleted-tag',
+          startedAt: start.add(const Duration(days: 12)),
+          endedAt: start.add(const Duration(days: 13)),
+          source: 'apple_health:Apple Watch',
+          deletedAt: DateTime(2026, 11, 20),
+        ),
+      ];
+      final tags = <String, Set<String>>{
+        for (var i = 0; i < 4; i++) 'tag-$i': {'caffeine'},
+        'deleted-tag': {'caffeine'},
+      };
+
+      final result = TagSleepComparison.calculate(
+        sessions: sessions,
+        tagsBySession: tags,
+        tagKeys: {'caffeine'},
+        start: start,
+        endExclusive: end,
+        metric: TagSleepMetric.sleepDuration,
+      );
+
+      expect(result.withTag.nights, 4);
+      expect(result.withoutTag.nights, 4);
+      expect(result.withTag.sessionIds, isNot(contains('deleted-tag')));
+    });
+
     test('requires every selected tag to be present for a combined comparison', () {
       final sessions = <SleepSession>[
         for (var i = 0; i < 4; i++)
