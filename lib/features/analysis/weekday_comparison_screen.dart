@@ -20,7 +20,7 @@ class _WeekdayComparisonScreenState extends State<WeekdayComparisonScreen> {
   @override
   void initState() {
     super.initState();
-    _sessions = widget.database.getSessions(limit: 10000);
+    _sessions = widget.database.getSessions(limit: null);
   }
 
   @override
