@@ -215,19 +215,31 @@ class _HealthScreenState extends State<HealthScreen> {
     builder: (context, snapshot) {
       final data = snapshot.data;
       final now = DateTime.now();
-      final selectedStart = _customRange?.start ?? DateTime(now.year, now.month, now.day).subtract(Duration(days: _days - 1));
-      final selectedEnd = _customRange == null ? now : DateTime(_customRange!.end.year, _customRange!.end.month, _customRange!.end.day, 23, 59, 59);
-      final durationDays = selectedEnd.difference(selectedStart).inDays + 1;
-      final defaultPreviousStart = selectedStart.subtract(Duration(days: durationDays));
-      final defaultPreviousEnd = selectedStart.subtract(const Duration(microseconds: 1));
+      final selectedStart = _customRange?.start ?? HealthReportService.lastDaysStart(now, _days);
+      final selectedEndLabel = _customRange?.end ?? now;
+      final selectedEndExclusive = _customRange == null
+          ? now.add(const Duration(microseconds: 1))
+          : HealthReportService.calendarDayAfter(_customRange!.end);
+      final durationDays = _customRange == null
+          ? _days
+          : HealthReportService.inclusiveCalendarDays(_customRange!.start, _customRange!.end);
+      final defaultPreviousStart = HealthReportService.shiftCalendarDays(selectedStart, -durationDays);
       final previousStart = _comparisonRange?.start ?? defaultPreviousStart;
-      final previousEnd = _comparisonRange == null ? defaultPreviousEnd : DateTime(_comparisonRange!.end.year, _comparisonRange!.end.month, _comparisonRange!.end.day, 23, 59, 59);
+      final previousEndLabel = _comparisonRange?.end ??
+          DateTime(selectedStart.year, selectedStart.month, selectedStart.day - 1);
+      final previousEndExclusive = _comparisonRange == null
+          ? selectedStart
+          : HealthReportService.calendarDayAfter(_comparisonRange!.end);
       final visible = <String, List<_MetricSample>>{};
       final previous = <String, List<_MetricSample>>{};
       if (data != null) {
         for (final entry in data.samples.entries) {
-          final currentPoints = entry.value.where((sample) => !sample.measuredAt.isBefore(selectedStart) && !sample.measuredAt.isAfter(selectedEnd)).toList();
-          final previousPoints = entry.value.where((sample) => !sample.measuredAt.isBefore(previousStart) && !sample.measuredAt.isAfter(previousEnd)).toList();
+          final currentPoints = entry.value.where((sample) =>
+            !sample.measuredAt.isBefore(selectedStart) &&
+            sample.measuredAt.isBefore(selectedEndExclusive)).toList();
+          final previousPoints = entry.value.where((sample) =>
+            !sample.measuredAt.isBefore(previousStart) &&
+            sample.measuredAt.isBefore(previousEndExclusive)).toList();
           if (currentPoints.isNotEmpty) visible[entry.key] = currentPoints;
           if (previousPoints.isNotEmpty) previous[entry.key] = previousPoints;
         }
@@ -318,7 +330,7 @@ class _HealthScreenState extends State<HealthScreen> {
             else ...[
               _CoverageCard(samples: visible),
               const SizedBox(height: 12),
-              _ComparisonCard(current: visible, previous: previous, currentStart: selectedStart, currentEnd: selectedEnd, previousStart: previousStart, previousEnd: previousEnd),
+              _ComparisonCard(current: visible, previous: previous, currentStart: selectedStart, currentEnd: selectedEndLabel, previousStart: previousStart, previousEnd: previousEndLabel),
               const SizedBox(height: 12),
               for (final entry in visible.entries)
                 Padding(
