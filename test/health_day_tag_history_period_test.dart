@@ -73,6 +73,22 @@ void main() {
       expect(buckets, hasLength(21));
     });
 
+    test('calendar buckets remain at local midnight across DST boundaries', () {
+      final range = HealthDayTagHistoryPeriodCalculator.range(
+        period: HealthDayTagHistoryPeriod.week,
+        now: DateTime(2026, 3, 30, 18, 30),
+      );
+      final buckets = HealthDayTagHistoryPeriodCalculator.buckets(
+        period: HealthDayTagHistoryPeriod.week,
+        range: range,
+      );
+
+      expect(range.start.hour, 0);
+      expect(range.endExclusive.hour, 0);
+      expect(buckets.every((bucket) => bucket.start.hour == 0), isTrue);
+      expect(buckets, hasLength(7));
+    });
+
     test('all-time without saved entries does not invent an earlier date', () {
       final range = HealthDayTagHistoryPeriodCalculator.range(
         period: HealthDayTagHistoryPeriod.allTime,
