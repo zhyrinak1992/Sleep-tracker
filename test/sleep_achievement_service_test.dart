@@ -83,6 +83,7 @@ void main() {
     expect(initial.newRecordKeys, isEmpty);
     expect(initial.earnedAt['first_night'], DateTime(2026, 11, 20));
     expect(initial.recordHistory, hasLength(1));
+    expect(initial.pendingRecordEvents, isEmpty);
     expect(
       initial.recordHistory
           .firstWhere((event) => event.metric == 'longestSleepMinutes')
@@ -97,6 +98,10 @@ void main() {
     expect(improved.newRecordKeys, contains('longestSleep'));
     expect(improved.records.longestSleepMinutes, 540);
     expect(improved.recordHistory, hasLength(2));
+    expect(improved.pendingRecordEvents, hasLength(1));
+    await SleepAchievementService.instance.markRecordCelebrated(
+      improved.pendingRecordEvents.single,
+    );
     expect(
       improved.recordHistory
           .lastWhere((event) => event.metric == 'longestSleepMinutes')
@@ -110,10 +115,12 @@ void main() {
     ]);
     expect(unchanged.newRecordKeys, isEmpty);
     expect(unchanged.recordHistory, hasLength(2));
+    expect(unchanged.pendingRecordEvents, isEmpty);
 
     final afterDeletion = await SleepAchievementService.instance.load([first]);
     expect(afterDeletion.records.longestSleepMinutes, 540);
     expect(afterDeletion.recordHistory, hasLength(2));
+    expect(afterDeletion.pendingRecordEvents, isEmpty);
     expect(
       afterDeletion.recordHistory
           .lastWhere((event) => event.metric == 'longestSleepMinutes')
@@ -150,6 +157,7 @@ void main() {
 
     expect(state.records.bestSleepScore, 96);
     expect(state.records.fewestAwakenings, 1);
+    expect(state.pendingRecordEvents, isEmpty);
     expect(state.recordHistory.any(
       (event) => event.metric == 'bestSleepScore' && event.value == 96,
     ), isTrue);
