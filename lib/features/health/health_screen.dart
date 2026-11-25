@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../data/sleep_database.dart';
@@ -11,6 +12,8 @@ import 'health_report_service.dart';
 import 'health_report_history_card.dart';
 import 'health_day_tag_library.dart';
 import 'health_day_tag_period_comparison.dart';
+import 'health_day_tag_monthly_report.dart';
+import 'health_day_tag_monthly_reports_screen.dart';
 
 class HealthScreen extends StatefulWidget {
   const HealthScreen({super.key, required this.database});
@@ -29,6 +32,7 @@ class _HealthScreenState extends State<HealthScreen> {
   DateTime _selectedDay = DateTime.now();
   late Future<_HealthDayEntry> _dayEntryFuture;
   late Future<Map<DateTime, _HealthDayEntry>> _dayEntriesFuture;
+  late Future<List<HealthDayTagMonthlyReport>> _monthlyTagReportsFuture;
 
   @override
   void initState() {
@@ -37,6 +41,7 @@ class _HealthScreenState extends State<HealthScreen> {
     _healthReportsFuture = _loadHealthReports();
     _dayEntryFuture = _loadDayEntry(_selectedDay);
     _dayEntriesFuture = _loadAllHealthDayEntries();
+    _monthlyTagReportsFuture = HealthDayTagMonthlyReportService(widget.database).generateClosedReports();
   }
 
   Future<Map<DateTime, _HealthDayEntry>> _loadAllHealthDayEntries() async {
@@ -475,6 +480,14 @@ class _HealthScreenState extends State<HealthScreen> {
           _HealthTagStatsCard(entriesFuture: _dayEntriesFuture, sessions: data?.sessions ?? const [], onSelectDay: _selectHealthDay),
           const SizedBox(height: 12),
           _HealthTagPeriodComparisonCard(entriesFuture: _dayEntriesFuture),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => HealthDayTagMonthlyReportsScreen(database: widget.database),
+            )),
+            icon: const Icon(Icons.description_outlined),
+            label: const Text('Месячные отчёты по отметкам'),
+          ),
           const SizedBox(height: 12),
           HealthReportHistoryCard(
             reports: _healthReportsFuture,
