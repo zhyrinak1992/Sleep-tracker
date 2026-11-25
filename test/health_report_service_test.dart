@@ -95,6 +95,36 @@ void main() {
     });
 
 
+    test('keeps selected health ranges on local calendar dates across DST', () {
+      final start = HealthReportService.lastDaysStart(
+        DateTime(2026, 3, 30, 12),
+        7,
+      );
+      expect(start, DateTime(2026, 3, 24));
+      expect(start.hour, 0);
+
+      final shifted = HealthReportService.shiftCalendarDays(
+        DateTime(2026, 3, 30),
+        -7,
+      );
+      expect(shifted, DateTime(2026, 3, 23));
+      expect(shifted.hour, 0);
+
+      final exclusiveEnd = HealthReportService.calendarDayAfter(
+        DateTime(2026, 3, 29),
+      );
+      expect(exclusiveEnd, DateTime(2026, 3, 30));
+      expect(exclusiveEnd.hour, 0);
+
+      expect(
+        HealthReportService.inclusiveCalendarDays(
+          DateTime(2026, 3, 28),
+          DateTime(2026, 3, 30),
+        ),
+        3,
+      );
+    });
+
     test('keeps weekly and monthly trend boundaries at local midnight across DST', () {
       final nextWeek = HealthReportService.nextPeriodStartForTesting(
         DateTime(2026, 3, 23),
