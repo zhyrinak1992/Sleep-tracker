@@ -69,7 +69,7 @@ void main() {
 
     final initial = await SleepAchievementService.instance.load([first]);
     expect(initial.newRecordKeys, isEmpty);
-    expect(initial.earnedAt['first_night'], first.startedAt);
+    expect(initial.earnedAt['first_night'], DateTime(2026, 11, 20));
     expect(initial.recordHistory, hasLength(3));
     expect(
       initial.recordHistory
