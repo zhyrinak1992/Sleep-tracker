@@ -50,7 +50,7 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
         final reports = snapshot.data ?? const <PeriodicReportSnapshot>[];
         if (reports.isEmpty) return const Center(child: Padding(
           padding: EdgeInsets.all(28),
-          child: Text('Здесь будут сохраняться недельные, месячные и годовые отчёты после завершения соответствующих периодов.'),
+          child: Text('Здесь будут сохраняться недельные, месячные, квартальные, полугодовые и годовые отчёты после завершения соответствующих периодов.'),
         ));
         return ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
