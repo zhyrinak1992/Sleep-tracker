@@ -185,11 +185,15 @@ class _HealthScreenState extends State<HealthScreen> {
 
   Future<void> _chooseRange() async {
     final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
     final picked = await showDateRangePicker(
       context: context,
       firstDate: DateTime(2000),
-      lastDate: DateTime(now.year, now.month, now.day),
-      initialDateRange: _customRange ?? DateTimeRange(start: now.subtract(const Duration(days: 29)), end: now),
+      lastDate: today,
+      initialDateRange: _customRange ?? DateTimeRange(
+        start: HealthReportService.shiftCalendarDays(today, -29),
+        end: today,
+      ),
       helpText: 'Выберите период анализа',
       saveText: 'Применить',
     );
@@ -198,11 +202,15 @@ class _HealthScreenState extends State<HealthScreen> {
 
   Future<void> _chooseComparisonRange() async {
     final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
     final picked = await showDateRangePicker(
       context: context,
       firstDate: DateTime(2000),
-      lastDate: DateTime(now.year, now.month, now.day),
-      initialDateRange: _comparisonRange ?? DateTimeRange(start: now.subtract(const Duration(days: 59)), end: now.subtract(const Duration(days: 30))),
+      lastDate: today,
+      initialDateRange: _comparisonRange ?? DateTimeRange(
+        start: HealthReportService.shiftCalendarDays(today, -59),
+        end: HealthReportService.shiftCalendarDays(today, -30),
+      ),
       helpText: 'Выберите период для сравнения',
       saveText: 'Сравнить',
     );
