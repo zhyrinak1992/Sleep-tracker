@@ -803,7 +803,7 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
                     style: TextStyle(
                       fontSize: 11,
                       color: stat.difference == 0 ? AppTheme.muted :
-                          stat.difference > 0 ? AppTheme.teal : AppTheme.warning,
+                          stat.difference > 0 ? AppTheme.teal : const Color(0xFFFF8FA3),
                     ),
                   )),
                 ],
