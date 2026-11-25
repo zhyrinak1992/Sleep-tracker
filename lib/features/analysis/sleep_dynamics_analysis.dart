@@ -79,6 +79,9 @@ class SleepDynamicsRollingRanges {
 }
 
 class SleepDynamicsAnalysis {
+  static DateTime addCalendarDays(DateTime value, int days) =>
+      DateTime(value.year, value.month, value.day + days);
+
   static SleepDynamicsRollingRanges rollingRanges(DateTime now, int days) {
     if (days <= 0) throw ArgumentError.value(days, 'days', 'Длительность должна быть положительной.');
     final today = DateTime(now.year, now.month, now.day);
