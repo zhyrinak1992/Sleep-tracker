@@ -16,7 +16,7 @@ class MoonPhaseScreen extends StatefulWidget {
 class _MoonPhaseScreenState extends State<MoonPhaseScreen> {
   late Future<List<SleepSession>> _future;
   @override
-  void initState() { super.initState(); _future=widget.database.getSessions(limit:10000); }
+  void initState() { super.initState(); _future=widget.database.getSessions(limit: null); }
 
   @override
   Widget build(BuildContext context) => Scaffold(
