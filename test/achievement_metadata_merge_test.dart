@@ -172,6 +172,15 @@ void main() {
       expect(history, hasLength(2));
       expect(celebrated.toSet(), {'a', 'b'});
 
+      final personalRecordAcknowledgements = jsonDecode(
+        mergeAchievementMetadata(
+          key: 'sleep_personal_records_celebrated_v1',
+          localRaw: jsonEncode(['event-a']),
+          importedRaw: jsonEncode(['event-a', 'event-b']),
+        ),
+      ) as List;
+      expect(personalRecordAcknowledgements.toSet(), {'event-a', 'event-b'});
+
       final localWins = jsonDecode(mergeAchievementMetadata(
         key: 'sleep_records_history_v1',
         localRaw: jsonEncode([local]),
