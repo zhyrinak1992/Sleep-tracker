@@ -78,18 +78,6 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
     return hours.toString() + ' ч ' + remainder.toString() + ' мин';
   }
 
-  String _dayWord(int value) {
-    final lastTwo = value % 100;
-    if (lastTwo >= 11 && lastTwo <= 14) return 'дней';
-    switch (value % 10) {
-      case 1: return 'день';
-      case 2:
-      case 3:
-      case 4: return 'дня';
-      default: return 'дней';
-    }
-  }
-
   String _recordSourceLabel(DateTime? achievedAt, String? sessionId) {
     if (achievedAt == null) return '';
     final date = DateFormat('d MMM yyyy', 'ru').format(achievedAt);
