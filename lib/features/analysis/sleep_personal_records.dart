@@ -57,8 +57,10 @@ class SleepPersonalRecords {
           session.endedAt != null &&
           duration != null &&
           duration.inMinutes > 0;
-    }).toList(growable: false);
+    }).toList()
+      ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
 
+    var historyStartIndex = 0;
     int? longestSleep;
     String? longestSleepId;
     DateTime? longestSleepAt;
@@ -72,7 +74,8 @@ class SleepPersonalRecords {
     String? fewestAwakeningsId;
     DateTime? fewestAwakeningsAt;
 
-    for (final session in valid) {
+    for (var index = 0; index < valid.length; index++) {
+      final session = valid[index];
       final metrics = SleepSessionMetrics.calculate(
         session: session,
         stages: stagesBySession[session.id] ?? const [],
@@ -85,9 +88,14 @@ class SleepPersonalRecords {
         longestSleepAt = session.startedAt;
       }
 
+      final historyCutoff = session.startedAt.subtract(const Duration(days: 90));
+      while (historyStartIndex < index &&
+          valid[historyStartIndex].startedAt.isBefore(historyCutoff)) {
+        historyStartIndex++;
+      }
       final score = SleepScoreCalculator.calculateForSession(
         session: session,
-        historySessions: valid,
+        historySessions: valid.sublist(historyStartIndex, index),
         morningReports: morningReports,
         stagesBySession: stagesBySession,
       ).score;
