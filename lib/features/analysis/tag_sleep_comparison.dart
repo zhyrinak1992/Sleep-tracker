@@ -57,6 +57,17 @@ class TagSleepComparison {
     return end.difference(start).inMinutes.toDouble();
   }
 
+  static bool _isValidMetricValue(TagSleepMetric metric, double value) =>
+      switch (metric) {
+        TagSleepMetric.sleepDuration => value > 0,
+        TagSleepMetric.sleepEfficiency => value >= 0 && value <= 100,
+        TagSleepMetric.sleepLatency => value >= 0 && value <= 1440,
+        TagSleepMetric.morningRating =>
+          value >= 1 && value <= 5 && value == value.roundToDouble(),
+        TagSleepMetric.awakeningCount =>
+          value >= 0 && value == value.roundToDouble(),
+      };
+
   static TagSleepComparisonResult calculate({
     required Iterable<SleepSession> sessions,
     required Map<String, Set<String>> tagsBySession,
@@ -89,7 +100,7 @@ class TagSleepComparison {
         TagSleepMetric.morningRating => session.morningRating?.toDouble(),
         TagSleepMetric.awakeningCount => awakeningCountsBySession[session.id]?.toDouble(),
       };
-      if (value == null || !value.isFinite) continue;
+      if (value == null || !value.isFinite || !_isValidMetricValue(metric, value)) continue;
 
       final sessionTags = tagsBySession[session.id] ?? const <String>{};
       final hasTag = tagKeys.every(sessionTags.contains);
