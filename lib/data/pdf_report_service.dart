@@ -547,7 +547,7 @@ class PdfReportService {
         ],
         headerStyle: pw.TextStyle(font: bold, fontSize: 7),
         cellStyle: pw.TextStyle(font: regular, fontSize: 7),
-        headerDecoration: const pw.BoxDecoration(color: PdfColor(0.90, 0.92, 0.95)),
+        headerDecoration: const pw.BoxDecoration(color: pw.PdfColor(0.90, 0.92, 0.95)),
         cellAlignment: pw.Alignment.centerLeft,
         cellPadding: const pw.EdgeInsets.all(4),
       ));
