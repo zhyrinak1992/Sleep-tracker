@@ -57,11 +57,12 @@ class SleepAchievementCatalog {
     final rated = valid
         .where((session) => session.morningRating != null)
         .toList(growable: false);
-    final days = valid.map((session) {
+    final nightDates = valid.map((session) {
       final date = session.startedAt.toLocal();
       return DateTime(date.year, date.month, date.day);
     }).toSet().toList()
       ..sort();
+    final days = nightDates;
 
     DateTime? firstStreakDate(int target) {
       if (days.length < target) return null;
@@ -87,10 +88,8 @@ class SleepAchievementCatalog {
     for (final achievement in achievements) {
       final earnedDates = <DateTime>[];
       if (achievement.completedNights > 0) {
-        if (valid.length < achievement.completedNights) continue;
-        earnedDates.add(
-          valid[achievement.completedNights - 1].startedAt.toLocal(),
-        );
+        if (nightDates.length < achievement.completedNights) continue;
+        earnedDates.add(nightDates[achievement.completedNights - 1]);
       }
       if (achievement.morningRatings > 0) {
         if (rated.length < achievement.morningRatings) continue;
