@@ -172,6 +172,40 @@ void main() {
       expect(SleepPersonalRecordHistory.fromRecords(records), isEmpty);
     });
 
+    test('uses the source session in record-history event identity', () {
+      final achievedAt = DateTime.utc(2026, 11, 20, 22);
+      final firstId = SleepPersonalRecordEvent.createId(
+        metric: 'longestSleepMinutes',
+        value: 480,
+        achievedAt: achievedAt,
+        sessionId: 'night-1',
+      );
+      final secondId = SleepPersonalRecordEvent.createId(
+        metric: 'longestSleepMinutes',
+        value: 480,
+        achievedAt: achievedAt,
+        sessionId: 'night-2',
+      );
+
+      expect(firstId, isNot(secondId));
+
+      final first = SleepPersonalRecordEvent(
+        id: firstId,
+        metric: 'longestSleepMinutes',
+        value: 480,
+        achievedAt: achievedAt,
+        sessionId: 'night-1',
+      );
+      final second = SleepPersonalRecordEvent(
+        id: secondId,
+        metric: 'longestSleepMinutes',
+        value: 480,
+        achievedAt: achievedAt,
+        sessionId: 'night-2',
+      );
+      expect(SleepPersonalRecordHistory.merge([first], [second]), hasLength(2));
+    });
+
     test('round-trips the version-independent metadata payload', () {
       final original = SleepPersonalRecords(
         longestSleepMinutes: 480,
