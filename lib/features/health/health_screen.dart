@@ -688,8 +688,26 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
       final now = DateTime.now();
       final monthStart = DateTime(now.year, now.month);
       final previousMonthStart = DateTime(now.year, now.month - 1);
-      final currentMonthCount = dates.where((d) => !d.isBefore(monthStart)).length;
+      final nextMonthStart = DateTime(now.year, now.month + 1);
+      final currentMonthCount = dates.where((d) => !d.isBefore(monthStart) && d.isBefore(nextMonthStart)).length;
       final previousMonthCount = dates.where((d) => !d.isBefore(previousMonthStart) && d.isBefore(monthStart)).length;
+      final currentMonthRecordedDays = entries.keys.where((d) => !d.isBefore(monthStart) && d.isBefore(nextMonthStart)).length;
+      final previousMonthRecordedDays = entries.keys.where((d) => !d.isBefore(previousMonthStart) && d.isBefore(monthStart)).length;
+      final previousMonthDays = DateTime(now.year, now.month, 0).day;
+      final monthlyTagStats = tags.map((tag) {
+        final tagDates = usage[tag] ?? const <DateTime>[];
+        final currentCount = tagDates.where((d) => !d.isBefore(monthStart) && d.isBefore(nextMonthStart)).length;
+        final previousCount = tagDates.where((d) => !d.isBefore(previousMonthStart) && d.isBefore(monthStart)).length;
+        return (
+          tag: tag,
+          currentCount: currentCount,
+          previousCount: previousCount,
+          currentShare: currentMonthRecordedDays == 0 ? null : currentCount / currentMonthRecordedDays * 100,
+          previousShare: previousMonthRecordedDays == 0 ? null : previousCount / previousMonthRecordedDays * 100,
+          difference: currentCount - previousCount,
+        );
+      }).toList()
+        ..sort((a, b) => b.currentCount.compareTo(a.currentCount));
       final twelveMonthStart = DateTime(now.year, now.month - 11);
       final recentDates = dates.where((d) => !d.isBefore(twelveMonthStart)).toList();
       final recordedDays = entries.keys.where((d) => !d.isBefore(twelveMonthStart)).length;
@@ -749,6 +767,48 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
             Expanded(child: _Stat(label: 'Прошлый месяц', value: '$previousMonthCount')),
             Expanded(child: _Stat(label: 'Разница', value: (currentMonthCount - previousMonthCount > 0 ? '+' : '') + '${currentMonthCount - previousMonthCount}')),
           ]),
+          const SizedBox(height: 12),
+          const Text('Рейтинг отметок: этот и прошлый месяц',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          Text(
+            'Этот месяц: $currentMonthRecordedDays из ${now.day} прошедших дней с записями · прошлый: $previousMonthRecordedDays из $previousMonthDays дней',
+            style: const TextStyle(color: AppTheme.muted, fontSize: 10),
+          ),
+          const SizedBox(height: 6),
+          for (final stat in monthlyTagStats)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(stat.tag, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                        Text(
+                          'Доля: ${stat.currentShare == null ? '—' : _number(stat.currentShare!)}% · ${stat.previousShare == null ? '—' : _number(stat.previousShare!)}%',
+                          style: const TextStyle(color: AppTheme.muted, fontSize: 9),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: 54, child: Text('${stat.currentCount}',
+                    textAlign: TextAlign.end, style: const TextStyle(fontSize: 11))),
+                  SizedBox(width: 54, child: Text('${stat.previousCount}',
+                    textAlign: TextAlign.end, style: const TextStyle(color: AppTheme.muted, fontSize: 11))),
+                  SizedBox(width: 48, child: Text(
+                    '${stat.difference > 0 ? '+' : ''}${stat.difference}',
+                    textAlign: TextAlign.end,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: stat.difference == 0 ? AppTheme.muted :
+                          stat.difference > 0 ? AppTheme.teal : AppTheme.warning,
+                    ),
+                  )),
+                ],
+              ),
+            ),
           const SizedBox(height: 14),
           const Text('Частота за 12 месяцев', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
