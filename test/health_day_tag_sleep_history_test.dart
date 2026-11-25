@@ -11,13 +11,18 @@ void main() {
     DateTime? endedAt,
     DateTime? deletedAt,
     int? rating,
-  }) => SleepSession(
-    id: id,
-    startedAt: startedAt ?? start,
-    endedAt: endedAt ?? end,
-    deletedAt: deletedAt,
-    morningRating: rating,
-  );
+  }) {
+    final actualStart = startedAt ?? start;
+    final actualEnd = endedAt ?? end;
+    return SleepSession(
+      id: id,
+      startedAt: actualStart,
+      endedAt: actualEnd,
+      duration: actualEnd.difference(actualStart),
+      deletedAt: deletedAt,
+      morningRating: rating,
+    );
+  }
 
   Map<String, Object?> stage(String id, String name, DateTime from, DateTime to) => {
     'id': id,
