@@ -159,6 +159,35 @@ class BackupRestorePlanner {
           }
         }
         return count;
+      case 'sleep_personal_records_history_v1':
+        if (imported is! List) return 0;
+        final identities = <String>{};
+        if (local is List) {
+          for (final item in local) {
+            if (item is Map && item['id'] is String) {
+              identities.add(item['id'] as String);
+            }
+          }
+        }
+        var count = 0;
+        for (final item in imported) {
+          if (item is! Map || item['id'] is! String ||
+              item['metric'] is! String ||
+              !const {
+                'longestSleepMinutes',
+                'bestEfficiencyPercent',
+                'shortestLatencyMinutes',
+                'longestStreakDays',
+              }.contains(item['metric']) ||
+              item['value'] is! num ||
+              !(item['value'] as num).toDouble().isFinite ||
+              item['achievedAt'] is! String ||
+              DateTime.tryParse(item['achievedAt'] as String) == null) {
+            continue;
+          }
+          if (identities.add(item['id'] as String)) count++;
+        }
+        return count;
       case 'sleep_records_history_v1':
         if (imported is! List) return 0;
         final identities = <String>{};
