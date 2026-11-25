@@ -264,7 +264,8 @@ class SleepPersonalRecordEvent {
     final id = map['id'];
     final metric = map['metric'];
     final rawValue = map['value'];
-    final date = DateTime.tryParse(map['achievedAt'] as String? ?? '');
+    final rawDate = map['achievedAt'];
+    final date = rawDate is String ? DateTime.tryParse(rawDate) : null;
     final sessionId = map['sessionId'];
     if (id is! String || id.isEmpty ||
         metric is! String || !metricKeys.contains(metric) ||
