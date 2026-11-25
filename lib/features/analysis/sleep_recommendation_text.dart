@@ -29,17 +29,17 @@ class SleepRecommendationText {
 
     if ((label.contains('коф') || label.contains('кофеин')) &&
         (metricKey == 'awakenings' || metricKey == 'sleepLatency' ||
-            metricKey == 'duration' || metricKey == 'score')) {
+            metricKey == 'duration' || metricKey == 'score' || metricKey == 'efficiency' || metricKey == 'subjectiveQuality' || metricKey == 'wellbeing')) {
       return 'Можно понаблюдать за временем последнего кофеина и сравнить следующие ночи, когда напиток был раньше или позже. Меняйте по одному фактору; это наблюдение не доказывает причину.';
     }
     if ((label.contains('ужин') || label.contains('еда')) &&
         (metricKey == 'awakenings' || metricKey == 'sleepLatency' ||
-            metricKey == 'duration' || metricKey == 'score')) {
+            metricKey == 'duration' || metricKey == 'score' || metricKey == 'efficiency' || metricKey == 'subjectiveQuality' || metricKey == 'wellbeing')) {
       return 'Можно отмечать время ужина и сравнить следующие ночи с более ранним и поздним приёмом пищи. Это поможет проверить, повторяется ли наблюдаемая связь.';
     }
     if ((label.contains('экран') || label.contains('телефон')) &&
         (metricKey == 'awakenings' || metricKey == 'sleepLatency' ||
-            metricKey == 'duration' || metricKey == 'score')) {
+            metricKey == 'duration' || metricKey == 'score' || metricKey == 'efficiency' || metricKey == 'subjectiveQuality' || metricKey == 'wellbeing')) {
       return 'Можно отдельно отмечать использование экрана перед сном и сравнивать ночи с разным временем завершения использования.';
     }
     if (label.contains('трен') || label.contains('нагруз')) {
