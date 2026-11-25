@@ -74,6 +74,38 @@ void main() {
       expect(merged['bestEfficiencySessionId'], 'valid-local');
     });
 
+    test('unions dated history for the four approved personal records', () {
+      final local = {
+        'id': 'longestSleepMinutes|night-1|480.0|2026-11-20T00:00:00.000Z',
+        'metric': 'longestSleepMinutes',
+        'value': 480,
+        'achievedAt': '2026-11-20T00:00:00Z',
+        'sessionId': 'night-1',
+      };
+      final imported = {
+        'id': 'longestSleepMinutes|night-2|510.0|2026-11-22T00:00:00.000Z',
+        'metric': 'longestSleepMinutes',
+        'value': 510,
+        'achievedAt': '2026-11-22T00:00:00Z',
+        'sessionId': 'night-2',
+      };
+      final merged = jsonDecode(mergeAchievementMetadata(
+        key: 'sleep_personal_records_history_v1',
+        localRaw: jsonEncode([local]),
+        importedRaw: jsonEncode([local, imported, {
+          'id': 'sleep_score|night-3',
+          'metric': 'sleepScore',
+          'value': 99,
+          'achievedAt': '2026-11-23T00:00:00Z',
+          'sessionId': 'night-3',
+        }]),
+      )) as List;
+
+      expect(merged, hasLength(2));
+      expect(merged.first['value'], 480);
+      expect(merged.last['value'], 510);
+    });
+
     test('unions record events by metric and session and unions celebrations', () {
       final local = {
         'type': 'sleep_score',
