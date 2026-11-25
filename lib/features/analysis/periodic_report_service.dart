@@ -84,6 +84,11 @@ class PeriodicReportService {
 
   Future<List<PeriodicReportSnapshot>> _generateClosedReports({DateTime? now}) async {
     final current = now ?? DateTime.now();
+    final checkedDate = '${current.year.toString().padLeft(4, '0')}-${current.month.toString().padLeft(2, '0')}-${current.day.toString().padLeft(2, '0')}';
+    const checkedDateKey = 'periodic_report_last_checked_local_date';
+    if (await database.getAppMetadata(checkedDateKey) == checkedDate) {
+      return loadArchive();
+    }
     final sessions = await database.getSessions(limit: null);
     final completed = sessions.where((s) => s.endedAt != null && s.duration != null && s.duration!.inMinutes > 0).toList()
       ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
@@ -138,6 +143,7 @@ class PeriodicReportService {
         cursor = end;
       }
     }
+    await database.setAppMetadata(checkedDateKey, checkedDate);
     return loadArchive();
   }
 
