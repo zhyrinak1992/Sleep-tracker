@@ -32,6 +32,30 @@ class HealthDayTagLibrary {
     return jsonEncode(normalized);
   }
 
+  static bool matches({
+    required Iterable<String> dayTags,
+    required Iterable<String> selectedTags,
+    required bool requireAll,
+  }) {
+    final selected = selectedTags.toSet();
+    if (selected.isEmpty) return false;
+    final available = dayTags.toSet();
+    return requireAll
+        ? selected.every(available.contains)
+        : selected.any(available.contains);
+  }
+
+  static double? percentageOfRecordedDays({
+    required int matchedDays,
+    required int recordedDays,
+  }) {
+    if (recordedDays <= 0) return null;
+    if (matchedDays < 0 || matchedDays > recordedDays) {
+      throw ArgumentError('Количество совпадений должно быть в пределах числа записанных дней.');
+    }
+    return matchedDays / recordedDays * 100;
+  }
+
   static List<String> add(Iterable<String> existing, String label) {
     final value = label.trim();
     if (value.isEmpty) return existing.toSet().toList()..sort();
