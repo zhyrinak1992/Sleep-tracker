@@ -37,6 +37,7 @@ String mergeAchievementMetadata({
     case 'sleep_records_history_v1':
       return jsonEncode(_mergeRecordEvents(local, imported));
     case 'sleep_records_celebrated_v1':
+    case 'sleep_personal_records_celebrated_v1':
       return jsonEncode(_mergeStringSet(local, imported));
     default:
       return importedRaw;
