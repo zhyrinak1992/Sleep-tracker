@@ -260,7 +260,7 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
     final currentSleepiness = currentAnswers['sleepiness'] is num
         ? (currentAnswers['sleepiness'] as num).toDouble()
         : null;
-    final currentAwakenings = metrics.stageBreakdownMinutes.containsKey('Бодрствование')
+    final currentAwakenings = metrics.hasAwakeSamples
         ? metrics.awakeningCount.toDouble()
         : null;
 
