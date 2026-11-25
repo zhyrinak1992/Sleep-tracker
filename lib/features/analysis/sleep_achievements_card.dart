@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../data/sleep_database.dart';
 import '../../models/sleep_session.dart';
+import '../diary/sleep_session_detail_screen.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import 'sleep_achievement_service.dart';
@@ -18,6 +20,7 @@ class SleepAchievementsCard extends StatefulWidget {
 
 class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
   late Future<SleepAchievementState> _state;
+  bool _celebrationsScheduled = false;
 
   @override
   void initState() {
@@ -30,6 +33,146 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.sessions, widget.sessions)) {
       _state = SleepAchievementService.instance.load(widget.sessions);
+      _celebrationsScheduled = false;
+    }
+  }
+
+  SleepPersonalRecordEvent? _previousRecordEvent(
+    SleepPersonalRecordEvent event,
+    List<SleepPersonalRecordEvent> history,
+  ) {
+    final previous = history.where((candidate) =>
+        candidate.metric == event.metric &&
+        candidate.id != event.id &&
+        candidate.achievedAt.isBefore(event.achievedAt)).toList()
+      ..sort((a, b) => a.achievedAt.compareTo(b.achievedAt));
+    return previous.isEmpty ? null : previous.last;
+  }
+
+  String _recordComparison(
+    SleepPersonalRecordEvent event,
+    SleepPersonalRecordEvent? previous,
+  ) {
+    if (previous == null) return 'Это первый подтверждённый рекорд по этому показателю.';
+    final difference = event.metric == 'fewestAwakenings'
+        ? previous.value - event.value
+        : event.value - previous.value;
+    return switch (event.metric) {
+      'longestSleepMinutes' =>
+        'Предыдущий рекорд: ${_duration(previous.value.round())}. Улучшение: ${_duration(difference.round())}.',
+      'bestSleepScore' =>
+        'Предыдущий рекорд: ${previous.value.round()} из 100. Улучшение: +${difference.round()} балл.',
+      'bestEfficiencyPercent' =>
+        'Предыдущий рекорд: ${previous.value.toStringAsFixed(1)}%. Улучшение: +${difference.toStringAsFixed(1)} п.п.',
+      'fewestAwakenings' =>
+        'Предыдущий рекорд: ${previous.value.round()} за ночь. На ${difference.round()} пробуждений меньше.',
+      _ => 'Предыдущее значение сохранено в истории.',
+    };
+  }
+
+  IconData _recordIcon(String metric) => switch (metric) {
+    'longestSleepMinutes' => Icons.bedtime_outlined,
+    'bestSleepScore' => Icons.stars_rounded,
+    'bestEfficiencyPercent' => Icons.trending_up_rounded,
+    'fewestAwakenings' => Icons.nightlight_outlined,
+    _ => Icons.emoji_events_outlined,
+  };
+
+  Future<void> _showRecordCelebration(
+    SleepPersonalRecordEvent event,
+    List<SleepPersonalRecordEvent> history,
+  ) async {
+    final service = SleepAchievementService.instance;
+    if (!mounted || await service.isRecordCelebrated(event)) return;
+    while (!service.tryClaimRecordCelebration(event)) {
+      await Future<void>.delayed(const Duration(milliseconds: 180));
+      if (!mounted || await service.isRecordCelebrated(event)) return;
+    }
+    try {
+      if (!mounted || await service.isRecordCelebrated(event)) return;
+      final previous = _previousRecordEvent(event, history);
+      final title = 'Новый рекорд: ${_recordHistoryMetricLabel(event.metric)}!';
+      final value = _recordHistoryValue(event);
+      final date = DateFormat('d MMMM yyyy', 'ru').format(event.achievedAt);
+      final openNight = await showDialog<bool>(
+        context: context,
+        barrierDismissible: true,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: const Color(0xFF202746),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.65, end: 1),
+                duration: const Duration(milliseconds: 650),
+                curve: Curves.elasticOut,
+                builder: (context, scale, child) => Transform.scale(scale: scale, child: child),
+                child: Container(
+                  width: 88,
+                  height: 88,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [AppTheme.teal.withOpacity(0.95), const Color(0xFF5368C8)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    boxShadow: [BoxShadow(color: AppTheme.teal.withOpacity(0.25), blurRadius: 24)],
+                  ),
+                  child: Icon(_recordIcon(event.metric), size: 48, color: Colors.white),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(title, textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text(value, textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700, color: AppTheme.teal)),
+              const SizedBox(height: 8),
+              Text(date, style: const TextStyle(color: AppTheme.muted)),
+              const SizedBox(height: 12),
+              Text(_recordComparison(event, previous),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: AppTheme.muted, height: 1.4)),
+              const SizedBox(height: 8),
+              const Text('Результат сохранён в истории личных достижений.',
+                  textAlign: TextAlign.center, style: TextStyle(height: 1.4)),
+            ],
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Позже'),
+            ),
+            if (event.sessionId != null)
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                icon: const Icon(Icons.nightlight_round),
+                label: const Text('Открыть эту ночь'),
+              ),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      await service.markRecordCelebrated(event);
+      if (openNight == true && event.sessionId != null && mounted) {
+        final database = SleepDatabase.instance;
+        final session = await database.getSessionById(event.sessionId!);
+        if (!mounted) return;
+        if (session == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Запись этой ночи больше недоступна.')),
+          );
+          return;
+        }
+        await Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => SleepSessionDetailScreen(database: database, session: session),
+        ));
+      }
+    } finally {
+      service.releaseRecordCelebration(event);
     }
   }
 
@@ -209,7 +352,7 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
       child: ExpansionTile(
         tilePadding: EdgeInsets.zero,
         childrenPadding: EdgeInsets.zero,
-        title: Text('История личных рекордов (${events.length})',
+        title: Text('История личных рекордов (${visibleEvents.length})',
             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
         children: rows,
       ),
@@ -321,6 +464,15 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
       }
       final state = snapshot.data!;
       final earned = state.earnedAt;
+      if (!_celebrationsScheduled && state.pendingRecordEvents.isNotEmpty) {
+        _celebrationsScheduled = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          for (final event in state.pendingRecordEvents) {
+            if (!mounted) break;
+            await _showRecordCelebration(event, state.recordHistory);
+          }
+        });
+      }
       final total = SleepAchievementCatalog.achievements.length;
       final count = earned.length;
       return SectionCard(
