@@ -57,6 +57,27 @@ class SleepAnalytics {
     return DateTime(start.year - 1);
   }
 
+  /// Returns the start of the immediately preceding period with the same
+  /// number of local calendar days. UTC date arithmetic avoids 23/25-hour
+  /// local days shifting the boundary away from midnight across DST.
+  static DateTime previousEqualPeriodStart(
+    DateTime start,
+    DateTime endExclusive,
+  ) {
+    if (!endExclusive.isAfter(start)) {
+      throw ArgumentError('The period end must be after its start.');
+    }
+    final startDay = DateTime(start.year, start.month, start.day);
+    final endDay = DateTime(endExclusive.year, endExclusive.month, endExclusive.day);
+    final startUtc = DateTime.utc(startDay.year, startDay.month, startDay.day);
+    final endUtc = DateTime.utc(endDay.year, endDay.month, endDay.day);
+    final calendarDays = endUtc.difference(startUtc).inDays;
+    if (calendarDays < 1) {
+      throw ArgumentError('The period must contain at least one calendar day.');
+    }
+    return addCalendarDays(startDay, -calendarDays);
+  }
+
   static SleepPeriodSummary summarize(
     Iterable<SleepSession> all,
     DateTime start,
