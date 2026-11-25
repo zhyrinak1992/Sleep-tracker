@@ -62,7 +62,7 @@ class SleepSessionMetricsCard extends StatelessWidget {
           ),
           _row('Время засыпания', _duration(metrics.sleepLatencyMinutes)),
           _row('Первое зарегистрированное пробуждение', _time(metrics.firstAwakeningAt)),
-          _row('Количество эпизодов бодрствования', metrics.awakeningCount == 0 ? 'Нет зарегистрированных' : '${metrics.awakeningCount}'),
+          _row('Количество эпизодов бодрствования', metrics.hasAwakeSamples ? '${metrics.awakeningCount}' : 'Нет данных Apple Health'),
           _row('Общее бодрствование', _duration(metrics.awakeStageMinutes)),
           _row('Окончательное пробуждение', _time(metrics.finalWakeAt)),
           if (metrics.stageBreakdownMinutes.isNotEmpty) ...[
