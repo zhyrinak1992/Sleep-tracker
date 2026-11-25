@@ -118,6 +118,7 @@ class SleepAchievementState {
     required this.records,
     required this.newRecordKeys,
     required this.recordHistory,
+    required this.pendingRecordEvents,
   });
 
   final Map<String, DateTime> earnedAt;
@@ -125,6 +126,7 @@ class SleepAchievementState {
   final SleepPersonalRecords records;
   final Set<String> newRecordKeys;
   final List<SleepPersonalRecordEvent> recordHistory;
+  final List<SleepPersonalRecordEvent> pendingRecordEvents;
 }
 
 class SleepAchievementService {
@@ -135,6 +137,8 @@ class SleepAchievementService {
   static const _displayKey = 'sleep_achievements_display_enabled';
   static const _recordsKey = 'sleep_personal_records_v1';
   static const _recordHistoryKey = SleepPersonalRecordHistory.metadataKey;
+  static const _recordCelebratedKey = 'sleep_personal_records_celebrated_v1';
+  static String? _activeRecordCelebrationId;
 
   Future<SleepAchievementState> load(Iterable<SleepSession> sessions) async {
     final database = SleepDatabase.instance;
@@ -221,6 +225,8 @@ class SleepAchievementService {
     // Migrate the earlier SleepScore/awakening record stream into the unified
     // dated history. The legacy key remains supported by backup merging.
     final legacyRecordHistoryRaw = await database.getAppMetadata('sleep_records_history_v1');
+    final isFirstRecordInitialization = recordsRaw == null &&
+        recordHistoryRaw == null && legacyRecordHistoryRaw == null;
     if (legacyRecordHistoryRaw != null && legacyRecordHistoryRaw.isNotEmpty) {
       try {
         final decodedLegacy = jsonDecode(legacyRecordHistoryRaw);
@@ -279,7 +285,7 @@ class SleepAchievementService {
             : historyBest.preserveBest(previousRecords);
 
     final newRecordKeys = <String>{};
-    if (recordBaseline != null) {
+    if (recordBaseline != null && !needsRecordBaselineMigration) {
       if (calculatedRecords.longestSleepMinutes != null &&
           (recordBaseline.longestSleepMinutes == null ||
               calculatedRecords.longestSleepMinutes! >
@@ -338,6 +344,34 @@ class SleepAchievementService {
     }
 
     final enabled = await database.getAppMetadata(_displayKey) != 'false';
+    final celebratedRaw = await database.getAppMetadata(_recordCelebratedKey);
+    final celebratedIds = <String>{};
+    if (celebratedRaw != null) {
+      try {
+        final decoded = jsonDecode(celebratedRaw);
+        if (decoded is List) {
+          celebratedIds.addAll(decoded.whereType<String>());
+        }
+      } on FormatException {
+        // A malformed acknowledgement list must not affect record history.
+      }
+    }
+    if (isFirstRecordInitialization || needsRecordBaselineMigration || !enabled) {
+      celebratedIds.addAll(recordHistory.map((event) => event.id));
+    }
+    final encodedCelebrated = jsonEncode(celebratedIds.toList()..sort());
+    if (celebratedRaw != encodedCelebrated) {
+      await database.setAppMetadata(_recordCelebratedKey, encodedCelebrated);
+    }
+    final pendingRecordEvents = enabled
+        ? recordHistory.where((event) =>
+            const {
+              'longestSleepMinutes',
+              'bestSleepScore',
+              'bestEfficiencyPercent',
+              'fewestAwakenings',
+            }.contains(event.metric) && !celebratedIds.contains(event.id)).toList()
+        : const <SleepPersonalRecordEvent>[];
     return SleepAchievementState(
       earnedAt: {
         for (final entry in history.entries)
@@ -347,7 +381,45 @@ class SleepAchievementService {
       records: records,
       newRecordKeys: newRecordKeys,
       recordHistory: recordHistory,
+      pendingRecordEvents: pendingRecordEvents,
     );
+  }
+
+  Future<bool> isRecordCelebrated(SleepPersonalRecordEvent event) async {
+    final raw = await SleepDatabase.instance.getAppMetadata(_recordCelebratedKey);
+    if (raw == null) return false;
+    try {
+      final decoded = jsonDecode(raw);
+      return decoded is List && decoded.whereType<String>().contains(event.id);
+    } on FormatException {
+      return false;
+    }
+  }
+
+  Future<void> markRecordCelebrated(SleepPersonalRecordEvent event) async {
+    final database = SleepDatabase.instance;
+    final raw = await database.getAppMetadata(_recordCelebratedKey);
+    final ids = <String>{};
+    if (raw != null) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) ids.addAll(decoded.whereType<String>());
+      } on FormatException {
+        // Replace malformed acknowledgement metadata with the current event.
+      }
+    }
+    ids.add(event.id);
+    await database.setAppMetadata(_recordCelebratedKey, jsonEncode(ids.toList()..sort()));
+  }
+
+  bool tryClaimRecordCelebration(SleepPersonalRecordEvent event) {
+    if (_activeRecordCelebrationId != null) return false;
+    _activeRecordCelebrationId = event.id;
+    return true;
+  }
+
+  void releaseRecordCelebration(SleepPersonalRecordEvent event) {
+    if (_activeRecordCelebrationId == event.id) _activeRecordCelebrationId = null;
   }
 
   Future<void> setDisplayEnabled(bool enabled) =>
