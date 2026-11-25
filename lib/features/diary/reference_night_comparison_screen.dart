@@ -119,8 +119,13 @@ class _ReferenceNightComparisonScreenState extends State<ReferenceNightCompariso
                         _metric('Эффективность', metric.sleepEfficiencyPercent == null ? 'Нет данных' : '${metric.sleepEfficiencyPercent!.toStringAsFixed(1)}%'),
                         _metric(
                           'Пробуждения',
-                          metric.hasAwakeSamples
-                              ? '${metric.awakeningCount} · ${_delta(metric.awakeningCount, baseline.hasAwakeSamples ? baseline.awakeningCount : null, unit: "эп.")}'
+                          metric.hasAwakeSamples && metric.stageCoveragePercent != null && metric.stageCoveragePercent! >= 80
+                              ? '${metric.awakeningCount} · ${_delta(
+                                  metric.awakeningCount,
+                                  baseline.hasAwakeSamples && baseline.stageCoveragePercent != null && baseline.stageCoveragePercent! >= 80
+                                      ? baseline.awakeningCount : null,
+                                  unit: "эп.",
+                                )}'
                               : 'Нет данных',
                         ),
                         _metric('Бодрствование', _duration(metric.awakeStageMinutes)),
