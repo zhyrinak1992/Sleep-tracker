@@ -346,17 +346,20 @@ class SleepAchievementService {
     final enabled = await database.getAppMetadata(_displayKey) != 'false';
     final celebratedRaw = await database.getAppMetadata(_recordCelebratedKey);
     final celebratedIds = <String>{};
+    var hasValidCelebratedMetadata = false;
     if (celebratedRaw != null) {
       try {
         final decoded = jsonDecode(celebratedRaw);
         if (decoded is List) {
+          hasValidCelebratedMetadata = true;
           celebratedIds.addAll(decoded.whereType<String>());
         }
       } on FormatException {
         // A malformed acknowledgement list must not affect record history.
       }
     }
-    if (isFirstRecordInitialization || needsRecordBaselineMigration || !enabled || celebratedRaw == null) {
+    if (isFirstRecordInitialization || needsRecordBaselineMigration || !enabled ||
+        !hasValidCelebratedMetadata) {
       celebratedIds.addAll(recordHistory.map((event) => event.id));
     }
     final encodedCelebrated = jsonEncode(celebratedIds.toList()..sort());
