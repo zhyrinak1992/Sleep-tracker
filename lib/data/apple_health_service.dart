@@ -53,6 +53,11 @@ class AppleHealthService {
     HealthDataType.RESPIRATORY_RATE,
     HealthDataType.BLOOD_OXYGEN,
     HealthDataType.HEART_RATE_VARIABILITY_SDNN,
+  ];
+
+  // Wrist temperature is supported by newer iOS versions only. Query it
+  // separately so an unsupported OS version cannot block the core metrics.
+  static const List<HealthDataType> _optionalMetricTypes = [
     HealthDataType.SLEEP_WRIST_TEMPERATURE,
   ];
 
@@ -134,6 +139,24 @@ class AppleHealthService {
       }
     } catch (_) {
       // Sleep remains useful on its own; optional metrics can be retried later.
+    }
+
+    for (final type in _optionalMetricTypes) {
+      if (!_health.isDataTypeAvailable(type)) continue;
+      try {
+        final authorized = await _health.requestAuthorization(
+          [type],
+          permissions: [HealthDataAccess.READ],
+        );
+        if (!authorized) continue;
+        metricData.addAll(await _health.getHealthDataFromTypes(
+          types: [type],
+          startTime: start,
+          endTime: end,
+        ));
+      } catch (_) {
+        // Newer HealthKit types must not block metrics supported by older iOS.
+      }
     }
 
     final unique = _health.removeDuplicates([...sleepData, ...metricData]);
