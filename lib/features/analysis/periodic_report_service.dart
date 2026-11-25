@@ -68,7 +68,7 @@ class PeriodicReportService {
 
   Future<List<PeriodicReportSnapshot>> generateClosedReports({DateTime? now}) async {
     final current = now ?? DateTime.now();
-    final sessions = await database.getSessions(limit: 10000);
+    final sessions = await database.getSessions(limit: null);
     final completed = sessions.where((s) => s.endedAt != null && s.duration != null && s.duration!.inMinutes > 0).toList()
       ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
     if (completed.isEmpty) return loadArchive();
