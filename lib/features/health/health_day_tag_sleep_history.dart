@@ -72,12 +72,6 @@ class HealthDayTagNightHistory {
         stages: sessionStages,
       );
       final coverage = metrics.stageCoveragePercent;
-      final hasAwakeSamples = sessionStages.any((stage) {
-        final name = (stage['stage'] ?? stage['stage_type'] ?? stage['type'] ?? '')
-            .toString()
-            .toLowerCase();
-        return name.contains('awake') || name.contains('бодрств');
-      });
       final value = switch (metric) {
         HealthDayTagNightMetric.sleepDuration =>
           metrics.sleepDurationMinutes == null
@@ -88,7 +82,7 @@ class HealthDayTagNightHistory {
         HealthDayTagNightMetric.sleepLatency =>
           metrics.sleepLatencyMinutes?.toDouble(),
         HealthDayTagNightMetric.awakenings =>
-          coverage != null && coverage >= 80 && hasAwakeSamples
+          coverage != null && coverage >= 80 && metrics.hasAwakeSamples
               ? metrics.awakeningCount.toDouble()
               : null,
         HealthDayTagNightMetric.morningRating =>
