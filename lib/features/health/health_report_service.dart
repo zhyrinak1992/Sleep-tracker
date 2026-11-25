@@ -31,6 +31,7 @@ class HealthReportSnapshot {
   String get kind => data['kind'] as String;
   DateTime get start => DateTime.parse(data['start'] as String);
   DateTime get endExclusive => DateTime.parse(data['endExclusive'] as String);
+  DateTime get endInclusive => DateTime(endExclusive.year, endExclusive.month, endExclusive.day - 1);
   int get nights => data['nights'] as int? ?? 0;
   List<Map<String, Object?>> get metrics => (data['metrics'] as List)
       .whereType<Map>()
