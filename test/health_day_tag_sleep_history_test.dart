@@ -18,7 +18,6 @@ void main() {
       id: id,
       startedAt: actualStart,
       endedAt: actualEnd,
-      duration: actualEnd.difference(actualStart),
       deletedAt: deletedAt,
       morningRating: rating,
     );
