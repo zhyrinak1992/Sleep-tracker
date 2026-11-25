@@ -70,7 +70,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   }
 
   DateTime _bucketStart(DateTime periodStart, int index) {
-    if (_period == AnalysisPeriod.week) return periodStart.add(Duration(days: index));
+    if (_period == AnalysisPeriod.week) return SleepAnalytics.addCalendarDays(periodStart, index);
     if (_period == AnalysisPeriod.month) {
       return DateTime(periodStart.year, periodStart.month, index * 7 + 1);
     }
@@ -78,7 +78,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   }
 
   DateTime _bucketEnd(DateTime periodStart, int index) {
-    if (_period == AnalysisPeriod.week) return periodStart.add(Duration(days: index + 1));
+    if (_period == AnalysisPeriod.week) return SleepAnalytics.addCalendarDays(periodStart, index + 1);
     if (_period == AnalysisPeriod.year) return DateTime(periodStart.year, index + 2);
     final next = DateTime(periodStart.year, periodStart.month, (index + 1) * 7 + 1);
     final monthEnd = DateTime(periodStart.year, periodStart.month + 1);
@@ -110,7 +110,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       return value == null ? 'Нет данных' : _duration(value);
     }
     String bucketTitle(DateTime start, DateTime end) =>
-      '${DateFormat('d MMM', 'ru').format(start)} — ${DateFormat('d MMM', 'ru').format(end.subtract(const Duration(days: 1)))}';
+      '${DateFormat('d MMM', 'ru').format(start)} — ${DateFormat('d MMM', 'ru').format(SleepAnalytics.addCalendarDays(end, -1))}';
 
     Widget sessionList(List<SleepSession> sessions) {
       if (sessions.isEmpty) return const Text('Нет завершённых записей', style: TextStyle(color: AppTheme.muted));
@@ -159,7 +159,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
   String _periodTitle(DateTime start) {
     if (_period == AnalysisPeriod.week) {
-      final end = start.add(const Duration(days: 6));
+      final end = SleepAnalytics.addCalendarDays(start, 6);
       return '${DateFormat('d MMM', 'ru').format(start)} — ${DateFormat('d MMM', 'ru').format(end)}';
     }
     if (_period == AnalysisPeriod.year) return start.year.toString();
