@@ -138,8 +138,11 @@ class SleepSessionMetrics {
   static bool _isAsleep(String stage) {
     if (_isAwake(stage)) return false;
     return stage.contains('сон') || stage.contains('asleep') ||
-        stage.contains('core') || stage.contains('deep') ||
-        stage.contains('light') || stage.contains('rem');
+        stage.contains('core') || stage.contains('основн') ||
+        stage.contains('deep') || stage.contains('глубок') ||
+        stage.contains('light') || stage.contains('лёгк') ||
+        stage.contains('легк') || stage.contains('rem') ||
+        stage.contains('быстр');
   }
 
   static int _mergedMinutes(List<_SleepInterval> intervals) =>
