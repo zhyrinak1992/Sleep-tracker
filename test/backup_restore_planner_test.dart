@@ -29,6 +29,10 @@ void main() {
            'achievedAt': '2026-11-20T07:00:00Z'},
         ])},
         {'key': 'sleep_records_celebrated_v1', 'value': jsonEncode(['x'])},
+        {'key': 'sleep_personal_records_history_v1', 'value': jsonEncode([
+          {'id': 'record-1', 'metric': 'longestSleepMinutes', 'value': 480,
+           'achievedAt': '2026-11-20T00:00:00Z', 'sessionId': 'night-1'},
+        ])},
       ];
       archive['app_metadata'] = [
         {'key': 'sleep_achievements_history_v1', 'value': jsonEncode({
@@ -48,6 +52,12 @@ void main() {
            'achievedAt': '2026-11-21T07:00:00Z'},
         ])},
         {'key': 'sleep_records_celebrated_v1', 'value': jsonEncode(['x', 'y', 'z'])},
+        {'key': 'sleep_personal_records_history_v1', 'value': jsonEncode([
+          {'id': 'record-1', 'metric': 'longestSleepMinutes', 'value': 480,
+           'achievedAt': '2026-11-20T00:00:00Z', 'sessionId': 'night-1'},
+          {'id': 'record-2', 'metric': 'longestSleepMinutes', 'value': 510,
+           'achievedAt': '2026-11-22T00:00:00Z', 'sessionId': 'night-2'},
+        ])},
       ];
 
       final impact = BackupRestorePlanner.calculate(
@@ -56,7 +66,7 @@ void main() {
         availableBytes: 100 * 1024 * 1024,
       );
 
-      expect(impact.merge.historyEntriesToMerge, 7);
+      expect(impact.merge.historyEntriesToMerge, 8);
     });
 
 
