@@ -69,6 +69,41 @@ void main() {
       expect(report.title, 'Физиологический отчёт — октября 2026');
     });
 
+
+    test('keeps weekly and monthly trend boundaries at local midnight across DST', () {
+      final nextWeek = HealthReportService.nextPeriodStartForTesting(
+        DateTime(2026, 3, 23),
+        HealthReportKind.week,
+      );
+      expect(nextWeek, DateTime(2026, 3, 30));
+      expect(nextWeek.hour, 0);
+
+      final previousWeek = HealthReportService.previousPeriodStartForTesting(
+        DateTime(2026, 3, 30),
+        HealthReportKind.week,
+      );
+      expect(previousWeek, DateTime(2026, 3, 23));
+      expect(previousWeek.hour, 0);
+
+      final week = HealthReportService.trendIntervalsForTesting(
+        HealthReportKind.week,
+        DateTime(2026, 3, 23),
+        DateTime(2026, 3, 30),
+      );
+      expect(week.last.$1, DateTime(2026, 3, 29));
+      expect(week.last.$2, DateTime(2026, 3, 30));
+      expect(week.every((interval) => interval.$1.hour == 0 && interval.$2.hour == 0), isTrue);
+
+      final month = HealthReportService.trendIntervalsForTesting(
+        HealthReportKind.month,
+        DateTime(2026, 3, 1),
+        DateTime(2026, 4, 1),
+      );
+      expect(month.map((interval) => interval.$1.day).toList(), [1, 8, 15, 22, 29]);
+      expect(month.last.$2, DateTime(2026, 4, 1));
+      expect(month.every((interval) => interval.$1.hour == 0 && interval.$2.hour == 0), isTrue);
+    });
+
     test('does not create metric summaries for absent data', () {
       expect(
         HealthReportService.summarizeMetrics(rows: [], sessionsById: sessions),
