@@ -21,7 +21,7 @@ class BackupService {
   static const format = 'sleep_tracker_backup';
   static const formatVersion = 5;
 
-  Future<void> exportToFiles({String? password}) async {
+  Future<void> exportToFiles({required String password}) async {
     final snapshot = await SleepDatabase.instance.exportSnapshot();
     final audioRows = (snapshot['audio_events'] as List).cast<Map<String, Object?>>();
     var audioBytesTotal = 0;
@@ -48,21 +48,19 @@ class BackupService {
       'data': snapshot,
     };
     final plaintext = const JsonEncoder.withIndent('  ').convert(document);
-    final encrypted = password != null && password.isNotEmpty;
-    final outputBytes = encrypted
-        ? await BackupCrypto.encryptDocument(plaintext: plaintext, password: password)
-        : utf8.encode(plaintext);
+    final outputBytes = await BackupCrypto.encryptDocument(
+      plaintext: plaintext,
+      password: password,
+    );
     final temp = await getTemporaryDirectory();
     final stamp = DateTime.now().toIso8601String().replaceAll(':', '-').split('.').first;
-    final extension = encrypted ? 'stbackup' : 'sleepbackup';
+    const extension = 'stbackup';
     final file = File(p.join(temp.path, 'SleepTracker-backup-$stamp.$extension'));
     await file.writeAsBytes(outputBytes, flush: true);
     await Share.shareXFiles(
       [XFile(file.path, mimeType: 'application/octet-stream', name: p.basename(file.path))],
       subject: 'Резервная копия Sleep Tracker',
-      text: encrypted
-          ? 'Зашифрованная резервная копия. Для восстановления потребуется заданный пароль.'
-          : 'Резервная копия Sleep Tracker. Дополнительный пароль не требуется.',
+      text: 'Зашифрованная резервная копия. Для восстановления потребуется заданный пароль.',
     );
   }
 
