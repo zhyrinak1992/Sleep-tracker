@@ -80,11 +80,9 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
     for (final session in widget.sessions) {
       final stages = stagesBySession[session.id] ?? const <Map<String, Object?>>[];
       final metrics = SleepSessionMetrics.calculate(session: session, stages: stages);
-      final hasAwakeSamples = stages.any((row) {
-        final stage = (row['stage'] as String? ?? '').toLowerCase();
-        return stage.contains('бодрств') || stage == 'awake' || stage.contains('awake');
-      });
-      if (hasAwakeSamples) {
+      // A missing or malformed awake interval is not evidence of zero
+      // awakenings. Keep only an actually parsed, positive event count.
+      if (metrics.awakeningCount > 0) {
         awakeningCounts[session.id] = metrics.awakeningCount;
       }
       if (metrics.sleepEfficiencyPercent != null) {
