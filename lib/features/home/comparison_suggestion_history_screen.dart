@@ -142,6 +142,8 @@ class ComparisonSuggestionHistoryDetailScreen extends StatelessWidget {
 
   String _differenceUnit(TagSleepMetric metric) => switch (metric) {
     TagSleepMetric.sleepDuration => 'мин',
+    TagSleepMetric.sleepEfficiency => 'п. п.',
+    TagSleepMetric.sleepLatency => 'мин',
     TagSleepMetric.morningRating => 'балла',
     TagSleepMetric.awakeningCount => 'эпизода',
   };
