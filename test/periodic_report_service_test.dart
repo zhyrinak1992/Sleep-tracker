@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqflite/sqflite.dart' show databaseFactory;
+import 'package:sqflite/sqflite.dart' show Database, databaseFactory;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' show databaseFactoryFfi, sqfliteFfiInit;
 import 'package:sleep_tracker/data/sleep_database.dart';
 import 'package:sleep_tracker/features/analysis/periodic_report_service.dart';
@@ -91,13 +91,16 @@ void main() {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
     final directory = await Directory.systemTemp.createTemp('periodic-reports-');
+    Database? openedDatabase;
     addTearDown(() async {
+      await openedDatabase?.close();
       SleepDatabase.instance.setDatabaseForTesting(null);
       SleepDatabase.instance.setDatabasePathForTesting(null);
       if (await directory.exists()) await directory.delete(recursive: true);
     });
     SleepDatabase.instance.setDatabasePathForTesting('${directory.path}/sleep.sqlite');
     final db = await SleepDatabase.instance.database;
+    openedDatabase = db;
 
     Future<void> addNight(String id, DateTime start) async {
       await db.insert('sleep_sessions', {
