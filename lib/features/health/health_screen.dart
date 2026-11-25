@@ -799,7 +799,7 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
           ),
           const SizedBox(height: 5),
           Text(
-            historyRange.description + ' · ' + selectedPeriodDates.length.toString() +
+            _selectedHistoryPeriod.label + ' · ' + historyRange.description + ' · ' + selectedPeriodDates.length.toString() +
                 ' из ' + recordedDaysInSelectedPeriod.toString() + ' дней с записями' +
                 (percentage == null ? '' : ' · ' + _number(percentage) + '%'),
             style: const TextStyle(color: AppTheme.muted, fontSize: 10),
