@@ -88,7 +88,9 @@ class TagSleepComparison {
     final withSessionIds = <String>[];
     final withoutSessionIds = <String>[];
     for (final session in sessions) {
-      if (session.startedAt.isBefore(start) || !session.startedAt.isBefore(endExclusive)) {
+      if (session.deletedAt != null ||
+          session.startedAt.isBefore(start) ||
+          !session.startedAt.isBefore(endExclusive)) {
         continue;
       }
       if (session.endedAt == null || !session.endedAt!.isAfter(session.startedAt)) continue;
