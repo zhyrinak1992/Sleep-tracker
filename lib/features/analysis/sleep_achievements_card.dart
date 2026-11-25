@@ -105,8 +105,8 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
             children: [
               TweenAnimationBuilder<double>(
                 tween: Tween(begin: 0.65, end: 1),
-                duration: const Duration(milliseconds: 650),
-                curve: Curves.elasticOut,
+                duration: const Duration(milliseconds: 520),
+                curve: Curves.easeOutBack,
                 builder: (context, scale, child) => Transform.scale(scale: scale, child: child),
                 child: Container(
                   width: 88,
