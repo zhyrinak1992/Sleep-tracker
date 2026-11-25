@@ -107,11 +107,7 @@ class SleepScoreCalculator {
     final report = morningReports[session.id];
     final qualityValue = report?['sleep_quality'];
     final quality = qualityValue is num ? qualityValue.toInt() : null;
-    final hasExplicitAwakeSamples = stages.any((row) {
-      final stage = (row['stage'] as String? ?? '').toLowerCase();
-      return stage.contains('бодрств') || stage.contains('awake');
-    });
-    final hasAwakeningCoverage = hasExplicitAwakeSamples &&
+    final hasAwakeningCoverage = metrics.hasAwakeSamples &&
       metrics.stageCoveragePercent != null &&
       metrics.stageCoveragePercent! >= 80;
     return calculate(
