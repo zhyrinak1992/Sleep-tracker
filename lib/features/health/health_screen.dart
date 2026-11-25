@@ -1345,7 +1345,7 @@ class _HealthDayTagDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(initialTag)),
+    appBar: AppBar(title: const Text('История отметок')),
     body: SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
