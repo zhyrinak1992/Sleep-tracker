@@ -278,7 +278,9 @@ class HealthDayTagMonthlyReportService {
           generatedAt: current,
         );
         await database.setAppMetadata(metadataKey, jsonEncode(report.toJson()));
-        await NotificationService.instance.healthDayTagMonthlyReportReady(key);
+        if (month.year == lastClosedMonth.year && month.month == lastClosedMonth.month) {
+          await NotificationService.instance.healthDayTagMonthlyReportReady(key);
+        }
       }
       month = DateTime(month.year, month.month + 1);
     }
