@@ -12,6 +12,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/screen_header.dart';
 import '../../widgets/section_card.dart';
 import 'periodic_report_service.dart';
+import 'sleep_recommendation_text.dart';
 import 'periodic_report_export.dart';
 
 class PeriodicReportsScreen extends StatefulWidget {
@@ -213,6 +214,11 @@ class _ReportCard extends StatelessWidget {
                     return (difference > 0 ? 'выше на ' : 'ниже на ') + display(difference.abs());
                   }
                   final repeated = insight['repeatsPreviousPeriod'] == true;
+                  final recommendation = SleepRecommendationText.forObservedPattern(
+                    tagLabel: (insight['tagLabel'] ?? '').toString(),
+                    metricKey: metricKey,
+                    difference: difference.toDouble(),
+                  );
                   final withObservations = insight['withTagObservations'] is List
                     ? (insight['withTagObservations'] as List).whereType<Map>().toList() : const <Map>[];
                   final withoutObservations = insight['withoutTagObservations'] is List
@@ -246,6 +252,20 @@ class _ReportCard extends StatelessWidget {
                       children: [
                         _ReportLine(label: 'С отметкой', value: display(withAverage) + ' · n=$samplesWith'),
                         _ReportLine(label: 'Без отметки', value: display(withoutAverage) + ' · n=$samplesWithout'),
+                        if (recommendation != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Что можно проверить',
+                                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11)),
+                                const SizedBox(height: 3),
+                                Text(recommendation,
+                                  style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4)),
+                              ],
+                            ),
+                          ),
                         if (insight['previousDifference'] is num)
                           _ReportLine(
                             label: 'Разница в предыдущем периоде',
