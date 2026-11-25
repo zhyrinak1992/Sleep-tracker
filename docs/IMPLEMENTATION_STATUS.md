@@ -93,7 +93,7 @@
 
 ## Текущая версия
 
-Исходники: **v0.23.0+24**. SQLite schema: **v8**. Формат резервной копии: **v5** (`.sleepbackup` без отдельного пароля; legacy `.stbackup` с паролем поддерживается). Нормативное ТЗ: **v258** от 23.11.2026. Рабочая ветка: `feature/unified-achievements`; PR #123 остаётся черновым. Bundle ID: `ru.sleeptracker.app`. Последняя подтверждённая проверка полного набора: GitHub Actions run `45692530036` (workflow #802), коммит `b3e66d1`: Dart analyze, проверки DST, SQLite metadata restore и 308 тестов успешно. Облачная iOS-сборка ожидает macOS runner; установка через AltStore и проверка на устройстве ещё не подтверждены; `main` не изменялся.
+Исходники: **v0.23.0+24**. SQLite schema: **v8**. Формат резервной копии: **v5** (`.sleepbackup` без отдельного пароля; legacy `.stbackup` с паролем поддерживается). Нормативное ТЗ: **v258** от 23.11.2026. Рабочая ветка: `feature/unified-achievements`; PR #123 остаётся черновым. Bundle ID: `ru.sleeptracker.app`. Последняя подтверждённая проверка полного набора: GitHub Actions run `45693364409` (workflow #814), code commit `5f1eda6`: Dart analyze, проверки DST, SQLite metadata restore и 308 тестов успешно. Облачная iOS-сборка ожидает macOS runner; установка через AltStore и проверка на устройстве ещё не подтверждены; `main` не изменялся.
 
 ## Изменения после v0.23.0+24 — сравнение ночей
 
