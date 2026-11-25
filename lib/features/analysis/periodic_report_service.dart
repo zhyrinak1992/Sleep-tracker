@@ -144,7 +144,7 @@ class PeriodicReportService {
         byId[report.id] = report;
       } catch (_) {}
     }
-    // New v8 snapshots win; older v1-v7 snapshots remain readable and intact.
+    // New v9 snapshots win; older v1-v8 snapshots remain readable and intact.
     for (final value in olderV6.values) {
       try {
         final report = PeriodicReportSnapshot.decode(value);
@@ -496,7 +496,7 @@ class PeriodicReportService {
     }).toList();
 
     final data = <String, Object?>{
-      'schemaVersion': 8, 'id': _id(kind, start), 'kind': kind.name,
+      'schemaVersion': 9, 'id': _id(kind, start), 'kind': kind.name,
       'start': start.toIso8601String(), 'endExclusive': end.toIso8601String(),
       'generatedAt': DateTime.now().toIso8601String(),
       ...current, 'audioEventCount': events.length, 'audioCategories': categories,
