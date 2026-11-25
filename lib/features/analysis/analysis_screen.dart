@@ -59,9 +59,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   Future<void> _generateClosedReports() async {
     try {
       await PeriodicReportService(widget.database).generateClosedReports();
+    } catch (_) {
+      // Periodic report generation must not block the primary analysis screen.
+    }
+    try {
       await HealthDayTagMonthlyReportService(widget.database).generateClosedReports();
     } catch (_) {
-      // Report generation must not block the primary analysis screen.
+      // Health tag reports must not block the primary analysis screen.
     }
   }
 
