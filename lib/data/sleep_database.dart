@@ -905,6 +905,30 @@ class SleepDatabase {
     return session;
   }
 
+  /// Removes a session created for a start attempt that never began recording.
+  /// Only an active session can be discarded; completed history is never removed.
+  Future<void> discardUnstartedSession(String id) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'sleep_sessions',
+        columns: ['id', 'ended_at'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      if (rows.single['ended_at'] != null) {
+        throw StateError('Нельзя отменить уже завершённую ночную сессию.');
+      }
+      await txn.delete(
+        'sleep_sessions',
+        where: 'id = ? AND ended_at IS NULL',
+        whereArgs: [id],
+      );
+    });
+  }
+
   Future<SleepSession> finishSession(String id) async {
     final db = await database;
     final now = DateTime.now();
