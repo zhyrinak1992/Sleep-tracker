@@ -198,15 +198,59 @@ class SleepPersonalRecords {
   /// Merges a new calculation with the persisted all-time bests. Deleting or
   /// editing an old night therefore cannot silently erase an earned record.
   SleepPersonalRecords preserveBest(SleepPersonalRecords previous) {
-    final keepSleep = previous.longestSleepMinutes != null &&
-        (longestSleepMinutes == null ||
-            previous.longestSleepMinutes! >= longestSleepMinutes!);
-    final keepEfficiency = previous.bestEfficiencyPercent != null &&
-        (bestEfficiencyPercent == null ||
-            previous.bestEfficiencyPercent! >= bestEfficiencyPercent!);
-    final keepLatency = previous.shortestLatencyMinutes != null &&
-        (shortestLatencyMinutes == null ||
-            previous.shortestLatencyMinutes! <= shortestLatencyMinutes!);
+    bool keepPrevious({
+      required num? currentValue,
+      required num? previousValue,
+      required DateTime? currentAt,
+      required DateTime? previousAt,
+      required String? currentSessionId,
+      required String? previousSessionId,
+      bool lowerIsBetter = false,
+    }) {
+      if (previousValue == null) return false;
+      if (currentValue == null) return true;
+      final previousIsBetter = lowerIsBetter
+          ? previousValue < currentValue
+          : previousValue > currentValue;
+      if (previousIsBetter) return true;
+      final currentIsBetter = lowerIsBetter
+          ? currentValue < previousValue
+          : currentValue > previousValue;
+      if (currentIsBetter) return false;
+      // When values tie, prefer the entry with confirmed source metadata.
+      if (previousAt == null && currentAt != null) return false;
+      if (previousSessionId == null && currentSessionId != null) return false;
+      return true;
+    }
+
+    final keepSleep = keepPrevious(
+      currentValue: longestSleepMinutes,
+      previousValue: previous.longestSleepMinutes,
+      currentAt: longestSleepAt,
+      previousAt: previous.longestSleepAt,
+      currentSessionId: longestSleepSessionId,
+      previousSessionId: previous.longestSleepSessionId,
+    );
+    final keepEfficiency = keepPrevious(
+      currentValue: bestEfficiencyPercent,
+      previousValue: previous.bestEfficiencyPercent,
+      currentAt: bestEfficiencyAt,
+      previousAt: previous.bestEfficiencyAt,
+      currentSessionId: bestEfficiencySessionId,
+      previousSessionId: previous.bestEfficiencySessionId,
+    );
+    final keepLatency = keepPrevious(
+      currentValue: shortestLatencyMinutes,
+      previousValue: previous.shortestLatencyMinutes,
+      currentAt: shortestLatencyAt,
+      previousAt: previous.shortestLatencyAt,
+      currentSessionId: shortestLatencySessionId,
+      previousSessionId: previous.shortestLatencySessionId,
+      lowerIsBetter: true,
+    );
+    final keepStreak = longestStreakDays < previous.longestStreakDays ||
+        (longestStreakDays == previous.longestStreakDays &&
+            (previous.longestStreakAt != null || longestStreakAt == null));
     return SleepPersonalRecords(
       longestSleepMinutes: keepSleep ? previous.longestSleepMinutes : longestSleepMinutes,
       longestSleepSessionId: keepSleep ? previous.longestSleepSessionId : longestSleepSessionId,
@@ -217,12 +261,8 @@ class SleepPersonalRecords {
       shortestLatencyMinutes: keepLatency ? previous.shortestLatencyMinutes : shortestLatencyMinutes,
       shortestLatencySessionId: keepLatency ? previous.shortestLatencySessionId : shortestLatencySessionId,
       shortestLatencyAt: keepLatency ? previous.shortestLatencyAt : shortestLatencyAt,
-      longestStreakDays: longestStreakDays > previous.longestStreakDays
-          ? longestStreakDays
-          : previous.longestStreakDays,
-      longestStreakAt: longestStreakDays > previous.longestStreakDays
-          ? longestStreakAt
-          : previous.longestStreakAt,
+      longestStreakDays: keepStreak ? previous.longestStreakDays : longestStreakDays,
+      longestStreakAt: keepStreak ? previous.longestStreakAt : longestStreakAt,
     );
   }
 }
