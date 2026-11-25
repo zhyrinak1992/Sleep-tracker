@@ -356,7 +356,7 @@ class SleepAchievementService {
         // A malformed acknowledgement list must not affect record history.
       }
     }
-    if (isFirstRecordInitialization || needsRecordBaselineMigration || !enabled) {
+    if (isFirstRecordInitialization || needsRecordBaselineMigration || !enabled || celebratedRaw == null) {
       celebratedIds.addAll(recordHistory.map((event) => event.id));
     }
     final encodedCelebrated = jsonEncode(celebratedIds.toList()..sort());
