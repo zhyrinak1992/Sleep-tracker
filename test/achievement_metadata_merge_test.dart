@@ -132,12 +132,17 @@ void main() {
       )) as List;
 
       expect(merged, hasLength(4));
-      final byMetric = {
-        for (final event in merged) event['metric']: event,
-      };
-      expect(byMetric['longestSleepMinutes']!['value'], 480);
-      expect(byMetric['bestSleepScore']!['value'], 98);
-      expect(byMetric['fewestAwakenings']!['value'], 0);
+      final durationValues = merged
+          .where((event) => event['metric'] == 'longestSleepMinutes')
+          .map((event) => event['value'])
+          .toList();
+      expect(durationValues, [480, 510]);
+      expect(merged.singleWhere(
+        (event) => event['metric'] == 'bestSleepScore',
+      )['value'], 98);
+      expect(merged.singleWhere(
+        (event) => event['metric'] == 'fewestAwakenings',
+      )['value'], 0);
     });
 
     test('unions record events by metric and session and unions celebrations', () {
