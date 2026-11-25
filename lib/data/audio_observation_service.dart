@@ -64,6 +64,13 @@ class AudioObservationService {
       observing.value = false;
       _paused = false;
       paused.value = false;
+      await _subscription?.cancel();
+      _subscription = null;
+      try {
+        await _recorder.stop();
+      } catch (cleanupError) {
+        debugPrint('Audio recorder cleanup after start failure failed: $cleanupError');
+      }
       await SleepDatabase.instance.setAppMetadata('audio_observation_user_paused', 'false');
       rethrow;
     }
@@ -83,14 +90,14 @@ class AudioObservationService {
       return;
     }
     if (_paused) return;
-    if (_observing) {
-      var nativeRecording = false;
-      try {
-        nativeRecording = await _recorder.isRecording();
-      } catch (error) {
-        debugPrint('Could not inspect native recorder state: $error');
-      }
-      if (nativeRecording) return;
+    var nativeRecording = false;
+    try {
+      nativeRecording = await _recorder.isRecording();
+    } catch (error) {
+      debugPrint('Could not inspect native recorder state: $error');
+    }
+    if (_observing && nativeRecording) return;
+    if (_observing || nativeRecording) {
       _observing = false;
       observing.value = false;
       await _subscription?.cancel();
