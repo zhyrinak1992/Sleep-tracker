@@ -127,28 +127,27 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
   String _recordTitle(String key) {
     switch (key) {
       case 'longestSleep': return 'самая продолжительная ночь';
+      case 'bestSleepScore': return 'лучшая оценка сна';
       case 'bestEfficiency': return 'лучшая эффективность';
-      case 'shortestLatency': return 'минимальная задержка засыпания';
-      case 'longestStreak': return 'самая длинная серия';
+      case 'fewestAwakenings': return 'минимум пробуждений';
       default: return 'личный рекорд';
     }
   }
 
   String _recordHistoryMetricLabel(String metric) => switch (metric) {
     'longestSleepMinutes' => 'Самая продолжительная ночь',
+    'bestSleepScore' => 'Лучшая оценка сна (SleepScore)',
     'bestEfficiencyPercent' => 'Лучшая эффективность сна',
-    'shortestLatencyMinutes' => 'Минимальная задержка засыпания',
-    'longestStreakDays' => 'Самая длинная серия',
+    'fewestAwakenings' => 'Минимальное количество пробуждений',
     _ => 'Личный рекорд',
   };
 
   String _recordHistoryValue(SleepPersonalRecordEvent event) =>
       switch (event.metric) {
         'longestSleepMinutes' => _duration(event.value.round()),
+        'bestSleepScore' => '${event.value.round()} из 100',
         'bestEfficiencyPercent' => '${event.value.toStringAsFixed(1)}%',
-        'shortestLatencyMinutes' => _duration(event.value.round()),
-        'longestStreakDays' =>
-          '${event.value.round()} ${_dayWord(event.value.round())}',
+        'fewestAwakenings' => '${event.value.round()} за ночь',
         _ => event.value.toString(),
       };
 
@@ -157,27 +156,32 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
     SleepPersonalRecordEvent? previous,
   ) {
     if (previous == null) return 'Первый зафиксированный рекорд';
-    final improvement = event.metric == 'shortestLatencyMinutes'
+    final improvement = event.metric == 'shortestLatencyMinutes' ||
+            event.metric == 'fewestAwakenings'
         ? previous.value - event.value
         : event.value - previous.value;
     if (improvement <= 0) return 'Значение сохранено в истории';
     return switch (event.metric) {
       'longestSleepMinutes' => 'Улучшение на ${_duration(improvement.round())}',
+      'bestSleepScore' => 'Улучшение на ${improvement.round()} балл.',
       'bestEfficiencyPercent' =>
         'Улучшение на ${improvement.toStringAsFixed(1)} п.п.',
-      'shortestLatencyMinutes' =>
-        'Быстрее на ${_duration(improvement.round())}',
-      'longestStreakDays' =>
-        'Увеличение на ${improvement.round()} ${_dayWord(improvement.round())}',
+      'fewestAwakenings' => 'На ${improvement.round()} пробуждений меньше',
       _ => 'Рекорд улучшен',
     };
   }
 
   Widget _recordHistorySection(List<SleepPersonalRecordEvent> events) {
-    if (events.isEmpty) return const SizedBox.shrink();
+    final visibleEvents = events.where((event) => const {
+      'longestSleepMinutes',
+      'bestSleepScore',
+      'bestEfficiencyPercent',
+      'fewestAwakenings',
+    }.contains(event.metric)).toList();
+    if (visibleEvents.isEmpty) return const SizedBox.shrink();
     final previousByMetric = <String, SleepPersonalRecordEvent>{};
     final rows = <Widget>[];
-    for (final event in events) {
+    for (final event in visibleEvents) {
       final previous = previousByMetric[event.metric];
       final sourceDeleted = event.sessionId != null &&
           !widget.sessions.any((session) => session.id == event.sessionId);
@@ -287,6 +291,15 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
         isNew: newKeys.contains('longestSleep'),
       ),
       _personalRecordRow(
+        icon: Icons.stars_rounded,
+        title: 'Лучшая оценка сна (SleepScore)',
+        value: records.bestSleepScore == null
+            ? 'Пока нет достоверных данных'
+            : records.bestSleepScore.toString() + ' из 100',
+        sourceLabel: _recordSourceLabel(records.bestSleepScoreAt, records.bestSleepScoreSessionId),
+        isNew: newKeys.contains('bestSleepScore'),
+      ),
+      _personalRecordRow(
         icon: Icons.trending_up_rounded,
         title: 'Лучшая эффективность сна',
         value: records.bestEfficiencyPercent == null
@@ -296,22 +309,13 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
         isNew: newKeys.contains('bestEfficiency'),
       ),
       _personalRecordRow(
-        icon: Icons.timer_outlined,
-        title: 'Минимальная задержка засыпания',
-        value: records.shortestLatencyMinutes == null
-            ? 'Пока нет подтверждённого времени засыпания'
-            : _duration(records.shortestLatencyMinutes),
-        sourceLabel: _recordSourceLabel(records.shortestLatencyAt, records.shortestLatencySessionId),
-        isNew: newKeys.contains('shortestLatency'),
-      ),
-      _personalRecordRow(
-        icon: Icons.local_fire_department_outlined,
-        title: 'Самая длинная серия записей',
-        value: records.longestStreakDays == 0
-            ? 'Пока нет завершённых ночей'
-            : records.longestStreakDays.toString() + ' ' + _dayWord(records.longestStreakDays) + ' подряд',
-        sourceLabel: '',
-        isNew: newKeys.contains('longestStreak'),
+        icon: Icons.nightlight_outlined,
+        title: 'Минимальное количество пробуждений',
+        value: records.fewestAwakenings == null
+            ? 'Пока нет достоверных данных'
+            : records.fewestAwakenings.toString() + ' за ночь',
+        sourceLabel: _recordSourceLabel(records.fewestAwakeningsAt, records.fewestAwakeningsSessionId),
+        isNew: newKeys.contains('fewestAwakenings'),
       ),
     ]);
 
