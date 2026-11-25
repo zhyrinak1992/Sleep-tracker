@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'data/notification_service.dart';
 import 'data/audio_observation_service.dart';
+import 'data/climate_polling_policy.dart';
 import 'data/sleep_database.dart';
 import 'data/yandex_smart_home_service.dart';
 import 'features/home/home_screen.dart';
@@ -186,7 +187,13 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     } else if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
-      _stopClimatePolling();
+      final keepPollingForActiveNight =
+          state != AppLifecycleState.detached &&
+          shouldKeepClimatePollingInBackground(
+            audioObservationActive: AudioObservationService.instance.observing.value,
+            audioObservationPaused: AudioObservationService.instance.paused.value,
+          );
+      if (!keepPollingForActiveNight) _stopClimatePolling();
     }
   }
 
