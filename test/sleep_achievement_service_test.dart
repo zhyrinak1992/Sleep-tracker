@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -119,5 +120,41 @@ void main() {
           .value,
       540,
     );
+  });
+
+  test('migrates legacy SleepScore and awakening record history', () async {
+    await database.insert('app_metadata', {
+      'key': 'sleep_records_history_v1',
+      'value': jsonEncode([
+        {
+          'type': 'sleep_score',
+          'sessionId': 'legacy-score-night',
+          'value': 96,
+          'achievedAt': '2026-11-19T07:00:00Z',
+        },
+        {
+          'type': 'awakening_count',
+          'sessionId': 'legacy-awakening-night',
+          'value': 1,
+          'achievedAt': '2026-11-19T07:00:00Z',
+        },
+      ]),
+    });
+
+    final first = night(
+      id: 'current-night',
+      start: DateTime(2026, 11, 20, 22),
+      actualMinutes: 480,
+    );
+    final state = await SleepAchievementService.instance.load([first]);
+
+    expect(state.records.bestSleepScore, 96);
+    expect(state.records.fewestAwakenings, 1);
+    expect(state.recordHistory.any(
+      (event) => event.metric == 'bestSleepScore' && event.value == 96,
+    ), isTrue);
+    expect(state.recordHistory.any(
+      (event) => event.metric == 'fewestAwakenings' && event.value == 1,
+    ), isTrue);
   });
 }
