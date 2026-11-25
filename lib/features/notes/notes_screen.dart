@@ -55,7 +55,7 @@ class _NotesScreenState extends State<NotesScreen> {
   }
 
   void _reload() {
-    _sessions = widget.database.getSessions(limit: 500);
+    _sessions = widget.database.getSessions(limit: null);
     _notes = widget.database.getNotes(search: _query, month: _month);
     _taggedSessionIds = widget.database.getSessionIdsWithTags(_selectedTags.toList());
     _refreshTagData();
