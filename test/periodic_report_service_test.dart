@@ -56,5 +56,29 @@ void main() {
     test('rejects malformed snapshot JSON', () {
       expect(() => PeriodicReportSnapshot.decode('[]'), throwsFormatException);
     });
-  });
+  })
+    test('formats quarterly and half-year report titles', () {
+      final quarter = PeriodicReportSnapshot.decode('''
+        {
+          "id": "quarter_2026-04-01",
+          "kind": "quarter",
+          "start": "2026-04-01T00:00:00.000",
+          "endExclusive": "2026-07-01T00:00:00.000",
+          "nights": 12
+        }
+      ''');
+      final halfYear = PeriodicReportSnapshot.decode('''
+        {
+          "id": "halfYear_2026-07-01",
+          "kind": "halfYear",
+          "start": "2026-07-01T00:00:00.000",
+          "endExclusive": "2027-01-01T00:00:00.000",
+          "nights": 20
+        }
+      ''');
+
+      expect(quarter.title, '2 квартал 2026');
+      expect(halfYear.title, 'II полугодие 2026');
+    });
+;
 }
