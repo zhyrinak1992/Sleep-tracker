@@ -33,6 +33,10 @@ class SleepSessionMetrics {
   final int awakeningCount;
   final Map<String, int> stageBreakdownMinutes;
 
+  /// Whether the source supplied any valid awake-stage interval.
+  /// A count of zero is meaningful only when this is true.
+  bool get hasAwakeSamples => stageBreakdownMinutes.containsKey('Бодрствование');
+
   static SleepSessionMetrics calculate({
     required SleepSession session,
     required List<Map<String, Object?>> stages,
