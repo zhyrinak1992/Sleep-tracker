@@ -37,26 +37,78 @@ class SleepAchievementCatalog {
     SleepAchievementDefinition(id: 'streak_thirty', title: 'Месяц регулярности', description: 'В дневнике есть записи за 30 календарных дней подряд.', streakDays: 30),
   ];
 
-  static Set<String> evaluate(Iterable<SleepSession> sessions) {
+  static Set<String> evaluate(Iterable<SleepSession> sessions) =>
+      evaluateDates(sessions).keys.toSet();
+
+  /// Returns the calendar date on which each achievement was first reached.
+  /// Existing history is retained by the service, so later deletion of a
+  /// source night cannot revoke an already earned achievement.
+  static Map<String, DateTime> evaluateDates(
+    Iterable<SleepSession> sessions,
+  ) {
     final valid = sessions.where((session) {
       final duration = session.duration;
       return session.deletedAt == null &&
           session.endedAt != null &&
           duration != null &&
           duration.inMinutes > 0;
-    }).toList(growable: false);
-    final rated = valid.where((session) => session.morningRating != null).length;
-    final streak = SleepPersonalRecords.longestStreak(valid);
+    }).toList()
+      ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
+    final rated = valid
+        .where((session) => session.morningRating != null)
+        .toList(growable: false);
+    final days = valid.map((session) {
+      final date = session.startedAt.toLocal();
+      return DateTime(date.year, date.month, date.day);
+    }).toSet().toList()
+      ..sort();
 
-    return achievements.where((achievement) {
-      final nightReached = achievement.completedNights == 0 ||
-          valid.length >= achievement.completedNights;
-      final ratingReached = achievement.morningRatings == 0 ||
-          rated >= achievement.morningRatings;
-      final streakReached = achievement.streakDays == 0 ||
-          streak >= achievement.streakDays;
-      return nightReached && ratingReached && streakReached;
-    }).map((achievement) => achievement.id).toSet();
+    DateTime? firstStreakDate(int target) {
+      if (days.length < target) return null;
+      var streak = 1;
+      for (var i = 1; i < days.length; i++) {
+        final previous = DateTime.utc(
+          days[i - 1].year, days[i - 1].month, days[i - 1].day,
+        );
+        final current = DateTime.utc(
+          days[i].year, days[i].month, days[i].day,
+        );
+        if (current.difference(previous).inDays == 1) {
+          streak++;
+        } else {
+          streak = 1;
+        }
+        if (streak >= target) return days[i];
+      }
+      return null;
+    }
+
+    final result = <String, DateTime>{};
+    for (final achievement in achievements) {
+      final earnedDates = <DateTime>[];
+      if (achievement.completedNights > 0) {
+        if (valid.length < achievement.completedNights) continue;
+        earnedDates.add(
+          valid[achievement.completedNights - 1].startedAt.toLocal(),
+        );
+      }
+      if (achievement.morningRatings > 0) {
+        if (rated.length < achievement.morningRatings) continue;
+        earnedDates.add(
+          rated[achievement.morningRatings - 1].startedAt.toLocal(),
+        );
+      }
+      if (achievement.streakDays > 0) {
+        final date = firstStreakDate(achievement.streakDays);
+        if (date == null) continue;
+        earnedDates.add(date);
+      }
+      if (earnedDates.isEmpty) continue;
+      result[achievement.id] = earnedDates.reduce(
+        (a, b) => a.isAfter(b) ? a : b,
+      );
+    }
+    return result;
   }
 }
 
@@ -110,11 +162,11 @@ class SleepAchievementService {
     // restoring or repairing partial metadata cannot replay old celebrations.
 
     var changed = false;
-    final earnedNow = SleepAchievementCatalog.evaluate(sessionList);
-    final now = DateTime.now().toUtc().toIso8601String();
-    for (final id in earnedNow) {
-      if (!history.containsKey(id)) {
-        history[id] = now;
+    final earnedDates = SleepAchievementCatalog.evaluateDates(sessionList);
+    for (final entry in earnedDates.entries) {
+      final previous = DateTime.tryParse(history[entry.key] ?? '');
+      if (previous == null || entry.value.isBefore(previous.toLocal())) {
+        history[entry.key] = entry.value.toUtc().toIso8601String();
         changed = true;
       }
     }
