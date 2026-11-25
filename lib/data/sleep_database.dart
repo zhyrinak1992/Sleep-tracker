@@ -878,7 +878,7 @@ class SleepDatabase {
     return rows.isEmpty ? null : SleepSession.fromMap(rows.first);
   }
 
-  Future<List<SleepSession>> getSessions({int limit = 100}) async {
+  Future<List<SleepSession>> getSessions({int? limit = 100}) async {
     final db = await database;
     final rows = await db.query(
       'sleep_sessions',
