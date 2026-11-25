@@ -112,6 +112,66 @@ void main() {
       expect(merged.longestStreakDays, 12);
     });
 
+    test('keeps dated history for each of the four approved record types', () {
+      final previous = SleepPersonalRecords(
+        longestSleepMinutes: 480,
+        longestSleepSessionId: 'sleep-old',
+        longestSleepAt: DateTime(2026, 11, 1),
+        bestEfficiencyPercent: 90,
+        bestEfficiencySessionId: 'eff-old',
+        bestEfficiencyAt: DateTime(2026, 11, 2),
+        shortestLatencyMinutes: 15,
+        shortestLatencySessionId: 'latency-old',
+        shortestLatencyAt: DateTime(2026, 11, 3),
+        longestStreakDays: 5,
+        longestStreakAt: DateTime(2026, 11, 5),
+      );
+      final current = SleepPersonalRecords(
+        longestSleepMinutes: 510,
+        longestSleepSessionId: 'sleep-new',
+        longestSleepAt: DateTime(2026, 11, 20),
+        bestEfficiencyPercent: 94,
+        bestEfficiencySessionId: 'eff-new',
+        bestEfficiencyAt: DateTime(2026, 11, 21),
+        shortestLatencyMinutes: 8,
+        shortestLatencySessionId: 'latency-new',
+        shortestLatencyAt: DateTime(2026, 11, 22),
+        longestStreakDays: 8,
+        longestStreakAt: DateTime(2026, 11, 24),
+      );
+
+      final baseline = SleepPersonalRecordHistory.fromRecords(previous);
+      final improvements = SleepPersonalRecordHistory.improvements(
+        current: current,
+        previous: previous,
+      );
+      final history = SleepPersonalRecordHistory.merge(baseline, improvements);
+      final restored = SleepPersonalRecordHistory.decode(
+        SleepPersonalRecordHistory.encode(history),
+      );
+      final best = SleepPersonalRecordHistory.bestRecords(restored)!;
+
+      expect(baseline, hasLength(4));
+      expect(improvements, hasLength(4));
+      expect(restored, hasLength(8));
+      expect(best.longestSleepMinutes, 510);
+      expect(best.bestEfficiencyPercent, 94);
+      expect(best.shortestLatencyMinutes, 8);
+      expect(best.longestStreakDays, 8);
+      expect(best.longestStreakAt, DateTime(2026, 11, 24));
+    });
+
+    test('does not invent history dates when a record has no confirmed date', () {
+      const records = SleepPersonalRecords(
+        longestSleepMinutes: 480,
+        bestEfficiencyPercent: 90,
+        shortestLatencyMinutes: 8,
+        longestStreakDays: 5,
+      );
+
+      expect(SleepPersonalRecordHistory.fromRecords(records), isEmpty);
+    });
+
     test('round-trips the version-independent metadata payload', () {
       final original = SleepPersonalRecords(
         longestSleepMinutes: 480,
