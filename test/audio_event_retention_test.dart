@@ -43,6 +43,63 @@ void main() {
     }
   });
 
+  test('automatic classification never overwrites a manual correction', () async {
+    final now = DateTime.utc(2026, 11, 24, 12);
+    await database.insert('audio_events', {
+      'id': 'manually-corrected',
+      'file_path': null,
+      'category': 'cough',
+      'confidence': null,
+      'captured_at': now.toIso8601String(),
+      'expires_at': now.add(const Duration(days: 7)).toIso8601String(),
+      'duration_ms': 1200,
+      'user_corrected': 0,
+    });
+    await database.insert('audio_events', {
+      'id': 'not-yet-corrected',
+      'file_path': null,
+      'category': 'unknown',
+      'confidence': null,
+      'captured_at': now.toIso8601String(),
+      'expires_at': now.add(const Duration(days: 7)).toIso8601String(),
+      'duration_ms': 1200,
+      'user_corrected': 0,
+    });
+
+    await SleepDatabase.instance.updateAudioCategory(
+      'manually-corrected',
+      'snore',
+    );
+    await SleepDatabase.instance.updateAudioClassification(
+      'manually-corrected',
+      'cough',
+      0.97,
+    );
+    await SleepDatabase.instance.updateAudioClassification(
+      'not-yet-corrected',
+      'snore',
+      0.91,
+    );
+
+    final corrected = (await database.query(
+      'audio_events',
+      where: 'id = ?',
+      whereArgs: ['manually-corrected'],
+    )).single;
+    expect(corrected['category'], 'snore');
+    expect(corrected['confidence'], isNull);
+    expect(corrected['user_corrected'], 1);
+
+    final automatic = (await database.query(
+      'audio_events',
+      where: 'id = ?',
+      whereArgs: ['not-yet-corrected'],
+    )).single;
+    expect(automatic['category'], 'snore');
+    expect(automatic['confidence'], 0.91);
+    expect(automatic['user_corrected'], 0);
+  });
+
   test('removes expired audio files but retains event history', () async {
     final now = DateTime.utc(2026, 11, 24, 12);
     final expiredFile = File('${temporaryDirectory.path}/expired.wav');
