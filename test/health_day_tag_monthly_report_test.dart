@@ -45,6 +45,13 @@ void main() {
       expect(report.tags.single.differencePercentagePoints, isNull);
     });
 
+    test('keeps unavailable progress distinct from a real zero share', () {
+      expect(HealthDayTagMonthlyReportEntry.progressFraction(null), isNull);
+      expect(HealthDayTagMonthlyReportEntry.progressFraction(0), 0);
+      expect(HealthDayTagMonthlyReportEntry.progressFraction(50), 0.5);
+      expect(HealthDayTagMonthlyReportEntry.progressFraction(125), 1);
+    });
+
     test('serializes and restores report snapshots', () {
       final report = HealthDayTagMonthlyReportService.buildReport(
         monthKey: '2026-11',
