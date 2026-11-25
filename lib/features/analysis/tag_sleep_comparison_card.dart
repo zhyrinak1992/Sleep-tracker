@@ -75,17 +75,24 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
       widget.sessions.map((session) => session.id).toList(),
     );
     final awakeningCounts = <String, int>{};
+    final efficiencyBySession = <String, double>{};
+    final sleepLatencyBySession = <String, int>{};
     for (final session in widget.sessions) {
       final stages = stagesBySession[session.id] ?? const <Map<String, Object?>>[];
+      final metrics = SleepSessionMetrics.calculate(session: session, stages: stages);
       final hasAwakeSamples = stages.any((row) {
         final stage = (row['stage'] as String? ?? '').toLowerCase();
         return stage.contains('бодрств') || stage == 'awake' || stage.contains('awake');
       });
-      if (!hasAwakeSamples) continue;
-      awakeningCounts[session.id] = SleepSessionMetrics.calculate(
-        session: session,
-        stages: stages,
-      ).awakeningCount;
+      if (hasAwakeSamples) {
+        awakeningCounts[session.id] = metrics.awakeningCount;
+      }
+      if (metrics.sleepEfficiencyPercent != null) {
+        efficiencyBySession[session.id] = metrics.sleepEfficiencyPercent!;
+      }
+      if (metrics.sleepLatencyMinutes != null) {
+        sleepLatencyBySession[session.id] = metrics.sleepLatencyMinutes!;
+      }
     }
     final templates = await _store.load();
     final customTags = await CustomSleepTagStore(
@@ -104,6 +111,8 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
     return _TagComparisonData(
       tagsBySession: tags,
       awakeningCountsBySession: awakeningCounts,
+      efficiencyBySession: efficiencyBySession,
+      sleepLatencyBySession: sleepLatencyBySession,
       templates: templates,
       customTags: customTags,
       suggestions: suggestions,
@@ -125,6 +134,12 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
     if (metric == TagSleepMetric.awakeningCount) {
       return '$sign${absolute.round()} эпизодов';
     }
+    if (metric == TagSleepMetric.sleepEfficiency) {
+      return '$sign${absolute.toStringAsFixed(1)} п. п.';
+    }
+    if (metric == TagSleepMetric.sleepLatency) {
+      return '$sign${absolute.round()} мин';
+    }
     return '$sign${absolute.toStringAsFixed(1)} балла';
   }
 
@@ -136,6 +151,12 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
     }
     if (metric == TagSleepMetric.awakeningCount) {
       return '${value.round()} эпизодов';
+    }
+    if (metric == TagSleepMetric.sleepEfficiency) {
+      return '${value.toStringAsFixed(1)}%';
+    }
+    if (metric == TagSleepMetric.sleepLatency) {
+      return '${value.round()} мин';
     }
     return '${value.toStringAsFixed(1)} из 5';
   }
@@ -301,6 +322,8 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
         endExclusive: widget.endExclusive,
         metric: _metric,
         awakeningCountsBySession: data.awakeningCountsBySession,
+        efficiencyBySession: data.efficiencyBySession,
+        sleepLatencyBySession: data.sleepLatencyBySession,
       );
       final matchingTemplates = data.templates.where((item) => item.id == _activeTemplateId);
       final activeTemplate = matchingTemplates.isEmpty ? null : matchingTemplates.first;
@@ -493,12 +516,16 @@ class _TagComparisonData {
   const _TagComparisonData({
     required this.tagsBySession,
     required this.awakeningCountsBySession,
+    required this.efficiencyBySession,
+    required this.sleepLatencyBySession,
     required this.templates,
     required this.customTags,
     required this.suggestions,
   });
   final Map<String, Set<String>> tagsBySession;
   final Map<String, int> awakeningCountsBySession;
+  final Map<String, double> efficiencyBySession;
+  final Map<String, int> sleepLatencyBySession;
   final List<TagComparisonTemplate> templates;
   final List<SleepTag> customTags;
   final List<TagCombinationSuggestion> suggestions;
