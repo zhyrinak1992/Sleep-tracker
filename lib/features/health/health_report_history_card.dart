@@ -25,7 +25,7 @@ class _HealthReportHistoryCardState extends State<HealthReportHistoryCard> {
   @override
   Widget build(BuildContext context) => SectionCard(
     child: FutureBuilder<List<HealthReportSnapshot>>(
-      future: reports,
+      future: widget.reports,
       builder: (context, snapshot) {
         final items = snapshot.data ?? const <HealthReportSnapshot>[];
         final visibleItems = _showAll ? items : items.take(12).toList();
@@ -50,7 +50,7 @@ class _HealthReportHistoryCardState extends State<HealthReportHistoryCard> {
                 'Отчёты появятся после завершения недели, месяца или календарного года, если за период есть физиологические измерения.',
                 style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4),
               )
-            else
+            else ...[
               ...visibleItems.map((report) {
                 final end = report.endInclusive;
                 final range = '${DateFormat('dd.MM.yyyy').format(report.start)} — ${DateFormat('dd.MM.yyyy').format(end)}';
@@ -69,6 +69,15 @@ class _HealthReportHistoryCardState extends State<HealthReportHistoryCard> {
                   ),
                 );
               }),
+              if (items.length > 12)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: () => setState(() => _showAll = !_showAll),
+                    child: Text(_showAll ? 'Свернуть список' : 'Показать все отчёты (${items.length})'),
+                  ),
+                ),
+            ],
           ],
         );
       },
