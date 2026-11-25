@@ -269,6 +269,11 @@ class HealthDayTagMonthlyReportService {
     DateTime? now,
   }) async {
     final current = now ?? DateTime.now();
+    final checkedDate = '${current.year.toString().padLeft(4, '0')}-${current.month.toString().padLeft(2, '0')}-${current.day.toString().padLeft(2, '0')}';
+    const checkedDateKey = 'health_day_monthly_reports_checked_local_date';
+    if (await database.getAppMetadata(checkedDateKey) == checkedDate) {
+      return loadReports();
+    }
     final currentMonth = DateTime(current.year, current.month);
     final lastClosedMonth = DateTime(currentMonth.year, currentMonth.month - 1);
     final entries = await _loadEntries();
@@ -297,6 +302,7 @@ class HealthDayTagMonthlyReportService {
       }
       month = DateTime(month.year, month.month + 1);
     }
+    await database.setAppMetadata(checkedDateKey, checkedDate);
     return loadReports();
   }
 }
