@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 import '../../data/sleep_database.dart';
 import '../../models/sleep_session.dart';
 
@@ -277,6 +279,19 @@ class HealthReportService {
       ...?rowsBySession[session.id],
   ];
 
+  @visibleForTesting
+  static DateTime nextPeriodStartForTesting(DateTime value, HealthReportKind kind) =>
+      _nextPeriodStart(value, kind);
+
+  @visibleForTesting
+  static DateTime previousPeriodStartForTesting(DateTime value, HealthReportKind kind) =>
+      _previousPeriodStart(value, kind);
+
+  @visibleForTesting
+  static List<(DateTime, DateTime, String)> trendIntervalsForTesting(
+    HealthReportKind kind, DateTime start, DateTime end,
+  ) => _trendIntervals(kind, start, end);
+
   static DateTime _periodStart(DateTime value, HealthReportKind kind) => switch (kind) {
     HealthReportKind.week => DateTime(value.year, value.month, value.day - (value.weekday - 1)),
     HealthReportKind.month => DateTime(value.year, value.month),
@@ -284,13 +299,13 @@ class HealthReportService {
   };
 
   static DateTime _nextPeriodStart(DateTime value, HealthReportKind kind) => switch (kind) {
-    HealthReportKind.week => value.add(const Duration(days: 7)),
+    HealthReportKind.week => DateTime(value.year, value.month, value.day + 7),
     HealthReportKind.month => DateTime(value.year, value.month + 1),
     HealthReportKind.year => DateTime(value.year + 1),
   };
 
   static DateTime _previousPeriodStart(DateTime value, HealthReportKind kind) => switch (kind) {
-    HealthReportKind.week => value.subtract(const Duration(days: 7)),
+    HealthReportKind.week => DateTime(value.year, value.month, value.day - 7),
     HealthReportKind.month => DateTime(value.year, value.month - 1),
     HealthReportKind.year => DateTime(value.year - 1),
   };
@@ -303,14 +318,15 @@ class HealthReportService {
     final intervals = <(DateTime, DateTime, String)>[];
     if (kind == HealthReportKind.week) {
       for (var i = 0; i < 7; i++) {
-        final from = start.add(Duration(days: i));
-        intervals.add((from, from.add(const Duration(days: 1)), '${from.day.toString().padLeft(2, '0')}.${from.month.toString().padLeft(2, '0')}'));
+        final from = DateTime(start.year, start.month, start.day + i);
+        final to = DateTime(from.year, from.month, from.day + 1);
+        intervals.add((from, to, '${from.day.toString().padLeft(2, '0')}.${from.month.toString().padLeft(2, '0')}'));
       }
     } else if (kind == HealthReportKind.month) {
       var from = start;
       var index = 1;
       while (from.isBefore(end)) {
-        final toCandidate = from.add(const Duration(days: 7));
+        final toCandidate = DateTime(from.year, from.month, from.day + 7);
         final to = toCandidate.isBefore(end) ? toCandidate : end;
         intervals.add((from, to, 'Неделя $index'));
         from = to;
