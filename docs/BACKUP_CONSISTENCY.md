@@ -14,10 +14,10 @@ Audio attachments are written to new app-managed files before the database resto
 
 ## Portable archive format and confidentiality
 
-- Current exports are plain portable JSON documents with a `sleep_tracker_backup` header and format version 5.
-- A separate archive password is intentionally not required, in accordance with the approved TЗ v191 decision. The app relies on iOS app-container protection for local data; exported files are controlled by the destination selected by the user in the system share sheet.
+- Current exports are plain portable JSON documents in a `.sleepbackup` file with a `sleep_tracker_backup` header and format version 5.
+- A separate archive password is intentionally not required for new `.sleepbackup` files, in accordance with the later v256 decision recorded in the current v258 workbook. This supersedes the earlier 22 November password-encryption approval. The app relies on iOS app-container protection for local data; exported files are controlled by the destination selected by the user in the system share sheet.
 - Integrity is checked independently of encryption: the manifest contains a SHA-256 digest of the complete data payload, table counts, and SHA-256/size entries for every included audio attachment.
-- New exports must not be wrapped in the legacy password-encrypted envelope. Import remains backward-compatible with earlier encrypted envelopes and asks for their password only when such an archive is selected.
+- New exports must not be wrapped in the legacy password-encrypted envelope. Import remains backward-compatible with older `.stbackup` encrypted envelopes and asks for their password only when such an archive is selected.
 - The export includes only audio files that still exist and remain within the seven-day retention window; event cards remain in the database after their audio file expires.
 
 ## Remaining platform verification
