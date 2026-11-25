@@ -20,7 +20,7 @@ class HealthDayTagHistoryRange {
 
   String get description =>
       _formatDate(start) + ' — ' +
-      _formatDate(endExclusive.subtract(const Duration(days: 1)));
+      _formatDate(DateTime(endExclusive.year, endExclusive.month, endExclusive.day - 1));
 
   static String _formatDate(DateTime date) =>
       date.day.toString().padLeft(2, '0') + '.' +
@@ -49,10 +49,10 @@ class HealthDayTagHistoryPeriodCalculator {
     DateTime? earliestEntry,
   }) {
     final today = DateTime(now.year, now.month, now.day);
-    final endExclusive = today.add(const Duration(days: 1));
+    final endExclusive = DateTime(today.year, today.month, today.day + 1);
     final start = switch (period) {
       HealthDayTagHistoryPeriod.week =>
-        today.subtract(const Duration(days: 6)),
+        DateTime(today.year, today.month, today.day - 6),
       HealthDayTagHistoryPeriod.month => DateTime(today.year, today.month),
       HealthDayTagHistoryPeriod.halfYear =>
         DateTime(today.year, today.month - 5),
@@ -78,7 +78,7 @@ class HealthDayTagHistoryPeriodCalculator {
         : DateTime(range.start.year, range.start.month);
     while (cursor.isBefore(range.endExclusive)) {
       final next = daily
-          ? cursor.add(const Duration(days: 1))
+          ? DateTime(cursor.year, cursor.month, cursor.day + 1)
           : DateTime(cursor.year, cursor.month + 1);
       final end = next.isAfter(range.endExclusive)
           ? range.endExclusive
