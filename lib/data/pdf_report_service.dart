@@ -485,6 +485,148 @@ class PdfReportService {
     await Share.shareXFiles([XFile(file.path, mimeType: 'application/pdf')], subject: 'Sleep Tracker — $title');
   }
 
+
+  static Future<void> exportHealthSnapshot(
+    Map<String, Object?> snapshot,
+    String title,
+  ) async {
+    final regular = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Regular.ttf'));
+    final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));
+    final doc = pw.Document();
+    final start = DateTime.parse(snapshot['start'] as String);
+    final endExclusive = DateTime.parse(snapshot['endExclusive'] as String);
+    final end = endExclusive.subtract(const Duration(days: 1));
+    final metrics = (snapshot['metrics'] as List? ?? const [])
+        .whereType<Map>()
+        .map((row) => Map<String, Object?>.from(row))
+        .toList();
+    final previous = snapshot['previous'] is Map
+        ? Map<String, Object?>.from(snapshot['previous'] as Map)
+        : <String, Object?>{};
+    final previousMetrics = (previous['metrics'] as List? ?? const [])
+        .whereType<Map>()
+        .map((row) => Map<String, Object?>.from(row))
+        .toList();
+    final previousByKey = {
+      for (final metric in previousMetrics)
+        '${metric['type']}::${metric['unit']}': metric,
+    };
+    String value(Object? raw) => raw is num ? raw.toStringAsFixed(1) : '—';
+
+    final content = <pw.Widget>[
+      pw.Text(title, style: pw.TextStyle(fontSize: 19, fontWeight: pw.FontWeight.bold)),
+      pw.SizedBox(height: 8),
+      pw.Text('Период: ${DateFormat('dd.MM.yyyy').format(start)} — ${DateFormat('dd.MM.yyyy').format(end)}'),
+      pw.Text('Ночей с физиологическими измерениями: ${snapshot['nights'] ?? 0}'),
+      pw.SizedBox(height: 12),
+      pw.Text('Фактические показатели по ночам',
+        style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+      pw.SizedBox(height: 5),
+    ];
+
+    if (metrics.isEmpty) {
+      content.add(pw.Text('За период нет пригодных физиологических измерений.'));
+    } else {
+      content.add(pw.Table.fromTextArray(
+        headers: const ['Показатель', 'Ед.', 'Среднее', 'Медиана', 'Мин.', 'Макс.', 'Ночей', 'Измерений', 'Пред. период'],
+        data: [
+          for (final metric in metrics)
+            [
+              metric['type'] ?? '',
+              metric['unit'] ?? '',
+              value(metric['average']),
+              value(metric['median']),
+              value(metric['minimum']),
+              value(metric['maximum']),
+              metric['nightCount'] ?? 0,
+              metric['measurementCount'] ?? 0,
+              previousByKey['${metric['type']}::${metric['unit']}'] is Map
+                  ? value((previousByKey['${metric['type']}::${metric['unit']}'] as Map)['average'])
+                  : '—',
+            ],
+        ],
+        headerStyle: pw.TextStyle(font: bold, fontSize: 7),
+        cellStyle: pw.TextStyle(font: regular, fontSize: 7),
+        headerDecoration: const pw.BoxDecoration(color: PdfColor(0.90, 0.92, 0.95)),
+        cellAlignment: pw.Alignment.centerLeft,
+        cellPadding: const pw.EdgeInsets.all(4),
+      ));
+      content.add(pw.SizedBox(height: 4));
+      content.add(pw.Text(
+        'Для предыдущего периода: ${previous['nights'] ?? 0} ночей с измерениями. '
+        'Сравнение средних является описательным; число ночей и измерений указано отдельно.',
+        style: pw.TextStyle(font: regular, fontSize: 8),
+      ));
+    }
+
+    final trendPoints = (snapshot['trendPoints'] as List? ?? const [])
+        .whereType<Map>()
+        .map((row) => Map<String, Object?>.from(row))
+        .toList();
+    if (trendPoints.isNotEmpty) {
+      content.add(pw.SizedBox(height: 14));
+      content.add(pw.Text('Динамика внутри периода',
+        style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)));
+      for (final point in trendPoints) {
+        final pointMetrics = (point['metrics'] as List? ?? const [])
+            .whereType<Map>()
+            .map((row) => Map<String, Object?>.from(row))
+            .toList();
+        if (pointMetrics.isEmpty) continue;
+        content.add(pw.SizedBox(height: 6));
+        content.add(pw.Text('${point['label'] ?? ''} · ${point['nights'] ?? 0} ночей',
+          style: pw.TextStyle(font: bold, fontSize: 9)));
+        content.add(pw.Table.fromTextArray(
+          headers: const ['Показатель', 'Среднее', 'Ночей', 'Измерений', 'Единицы'],
+          data: [
+            for (final metric in pointMetrics)
+              [
+                metric['type'] ?? '',
+                value(metric['average']),
+                metric['nightCount'] ?? 0,
+                metric['measurementCount'] ?? 0,
+                metric['unit'] ?? '',
+              ],
+          ],
+          headerStyle: pw.TextStyle(font: bold, fontSize: 7),
+          cellStyle: pw.TextStyle(font: regular, fontSize: 7),
+          headerDecoration: const pw.BoxDecoration(color: PdfColor(0.94, 0.95, 0.97)),
+          cellPadding: const pw.EdgeInsets.all(3),
+        ));
+      }
+    }
+
+    content.add(pw.SizedBox(height: 14));
+    content.add(pw.Text('Методика и ограничения',
+      style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)));
+    final notes = (snapshot['methodologyNotes'] as List? ?? const []).whereType<String>();
+    for (final note in notes) {
+      content.add(pw.Padding(
+        padding: const pw.EdgeInsets.only(top: 4),
+        child: pw.Text('• $note', style: pw.TextStyle(font: regular, fontSize: 8)),
+      ));
+    }
+    content.add(pw.SizedBox(height: 8));
+    content.add(pw.Text(
+      'В отчёт включены только фактические измерения, сохранённые источником. '
+      'Отсутствующие значения не заменяются нулями, редкие точки не интерполируются.',
+      style: pw.TextStyle(font: regular, fontSize: 8),
+    ));
+
+    doc.addPage(pw.MultiPage(
+      maxPages: 1000,
+      theme: pw.ThemeData.withFont(base: regular, bold: bold),
+      build: (_) => content,
+    ));
+    final dir = await getTemporaryDirectory();
+    final file = File(p.join(dir.path, 'SleepTracker-health-${DateTime.now().millisecondsSinceEpoch}.pdf'));
+    await file.writeAsBytes(await doc.save(), flush: true);
+    await Share.shareXFiles(
+      [XFile(file.path, mimeType: 'application/pdf')],
+      subject: 'Sleep Tracker — $title',
+    );
+  }
+
   static Future<void> exportHistory({int days = 30, DateTime? from, DateTime? to, bool includeNotes = false}) async {
     if ((from == null) != (to == null)) {
       throw ArgumentError('Для произвольного периода укажите обе даты: начало и окончание.');
