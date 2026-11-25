@@ -9,6 +9,7 @@ import 'features/home/home_screen.dart';
 import 'features/diary/diary_screen.dart';
 import 'features/analysis/analysis_screen.dart';
 import 'features/health/health_screen.dart';
+import 'features/health/health_day_tag_monthly_report.dart';
 import 'features/notes/notes_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'theme/app_theme.dart';
@@ -93,6 +94,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     _cleanupTrash();
     _startClimatePolling();
     _ensureNightReminders();
+    _generateClosedHealthTagReports();
   }
 
   Future<void> _ensureNightReminders() async {
@@ -153,6 +155,14 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       debugPrint('Trash cleanup failed: $error\\n$stackTrace');
     }
   }
+
+  Future<void> _generateClosedHealthTagReports() async {
+    try {
+      await HealthDayTagMonthlyReportService(_database).generateClosedReports();
+    } catch (error, stackTrace) {
+      debugPrint('Monthly health tag report generation failed: $error\\n$stackTrace');
+    }
+  }
   Future<void> _refreshClimate() async {
     if (_climateRefreshInProgress) return;
     _climateRefreshInProgress = true;
@@ -172,6 +182,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       _cleanupAudio();
       _cleanupTrash();
       _ensureNightReminders();
+      _generateClosedHealthTagReports();
     } else if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
