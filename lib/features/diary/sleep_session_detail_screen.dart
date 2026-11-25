@@ -233,7 +233,7 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
       if (duration != null && duration > 0) previousDurations.add(duration.toDouble());
       final efficiency = previousMetrics.sleepEfficiencyPercent;
       if (efficiency != null) previousEfficiencies.add(efficiency);
-      if (previousMetrics.stageBreakdownMinutes.containsKey('Бодрствование')) {
+      if (previousMetrics.hasAwakeSamples) {
         previousAwakenings.add(previousMetrics.awakeningCount.toDouble());
       }
     }
