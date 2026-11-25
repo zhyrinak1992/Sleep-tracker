@@ -217,7 +217,7 @@ class BackupService {
     }
   }
 
-  Future<BackupImportResult> restorePreparedBackup({required BackupImportDraft draft, required bool merge}) async {
+  Future<BackupImportResult> restorePreparedBackup({required BackupImportDraft draft, required bool merge, Directory? documentsDirectoryForTesting}) async {
     final data = jsonDecode(jsonEncode(draft.data)) as Map<String, dynamic>;
     final freshImpact = await SleepDatabase.instance.previewRestoreImpact(
       data,
@@ -239,7 +239,7 @@ class BackupService {
     final audioRows = ((data['audio_events'] as List?) ?? const [])
         .map((row) => Map<String, dynamic>.from(row as Map)).toList();
 
-    final docs = await getApplicationDocumentsDirectory();
+    final docs = documentsDirectoryForTesting ?? await getApplicationDocumentsDirectory();
     final audioDir = Directory(p.join(docs.path, 'audio_events'));
     await audioDir.create(recursive: true);
     final createdFiles = <File>[];
@@ -301,6 +301,18 @@ class BackupService {
 
 class BackupImportDraft {
   BackupImportDraft._({required this.document, required this.data, required this.preview, required this.impact});
+
+  factory BackupImportDraft.forTesting({
+    required Map<String, dynamic> document,
+    required Map<String, dynamic> data,
+    required BackupImportPreview preview,
+    required BackupRestoreImpact impact,
+  }) => BackupImportDraft._(
+    document: document,
+    data: data,
+    preview: preview,
+    impact: impact,
+  );
   final Map<String, dynamic> document;
   final Map<String, dynamic> data;
   final BackupImportPreview preview;
