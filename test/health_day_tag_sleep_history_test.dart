@@ -120,23 +120,33 @@ void main() {
       startedAt: DateTime(2026, 11, 23, 21),
       endedAt: DateTime(2026, 11, 24, 6),
     );
-    final newer = session('newer');
-    final deleted = session('deleted', deletedAt: DateTime(2026, 11, 25, 7));
+    final newer = session(
+      'newer',
+      startedAt: DateTime(2026, 11, 25, 21),
+      endedAt: DateTime(2026, 11, 26, 6),
+    );
+    final deleted = session(
+      'deleted',
+      startedAt: DateTime(2026, 11, 25, 21),
+      endedAt: DateTime(2026, 11, 26, 6),
+      deletedAt: DateTime(2026, 11, 26, 7),
+    );
     final untagged = session(
       'untagged',
-      startedAt: DateTime(2026, 11, 22, 21),
-      endedAt: DateTime(2026, 11, 23, 6),
+      startedAt: DateTime(2026, 11, 24, 21),
+      endedAt: DateTime(2026, 11, 25, 6),
     );
     final result = HealthDayTagNightHistory.calculate(
       sessions: [newer, deleted, untagged, older],
       tagsByDay: {
         DateTime(2026, 11, 24): ['Кофеин'],
-        DateTime(2026, 11, 25): ['Кофеин'],
+        DateTime(2026, 11, 25): ['Поздний ужин'],
+        DateTime(2026, 11, 26): ['Кофеин'],
       },
       stagesBySession: const {},
       tag: 'Кофеин',
       start: DateTime(2026, 11, 24),
-      endExclusive: DateTime(2026, 11, 26),
+      endExclusive: DateTime(2026, 11, 27),
       metric: HealthDayTagNightMetric.morningRating,
     );
 
