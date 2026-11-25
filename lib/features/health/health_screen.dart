@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../data/sleep_database.dart';
+import '../../data/pdf_report_service.dart';
 import '../diary/sleep_session_detail_screen.dart';
 import '../../models/sleep_session.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/screen_header.dart';
+import 'health_report_service.dart';
+import 'health_report_history_card.dart';
 
 class HealthScreen extends StatefulWidget {
   const HealthScreen({super.key, required this.database});
@@ -17,6 +20,7 @@ class HealthScreen extends StatefulWidget {
 
 class _HealthScreenState extends State<HealthScreen> {
   late Future<_HealthSnapshot> _future;
+  late Future<List<HealthReportSnapshot>> _healthReportsFuture;
   int _days = 30;
   DateTimeRange? _customRange;
   DateTimeRange? _comparisonRange;
@@ -28,6 +32,7 @@ class _HealthScreenState extends State<HealthScreen> {
   void initState() {
     super.initState();
     _future = _load();
+    _healthReportsFuture = _loadHealthReports();
     _dayEntryFuture = _loadDayEntry(_selectedDay);
     _dayEntriesFuture = _loadAllHealthDayEntries();
   }
@@ -129,6 +134,21 @@ class _HealthScreenState extends State<HealthScreen> {
     });
   }
 
+  Future<List<HealthReportSnapshot>> _loadHealthReports() =>
+      HealthReportService(widget.database).generateClosedReports();
+
+  Future<void> _exportHealthReport(HealthReportSnapshot report) async {
+    try {
+      await PdfReportService.exportHealthSnapshot(report.data, report.title);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Не удалось экспортировать отчёт: $error')),
+        );
+      }
+    }
+  }
+
   Future<_HealthSnapshot> _load() async {
     final sessions = await widget.database.getSessions(limit: null);
     final sessionsById = {for (final session in sessions) session.id: session};
@@ -156,8 +176,11 @@ class _HealthScreenState extends State<HealthScreen> {
   }
 
   Future<void> _refresh() async {
-    setState(() => _future = _load());
-    await _future;
+    setState(() {
+      _future = _load();
+      _healthReportsFuture = _loadHealthReports();
+    });
+    await Future.wait([_future, _healthReportsFuture]);
   }
 
   Future<void> _chooseRange() async {
@@ -239,6 +262,11 @@ class _HealthScreenState extends State<HealthScreen> {
           ),
           const SizedBox(height: 12),
           _HealthTagStatsCard(entriesFuture: _dayEntriesFuture, sessions: data?.sessions ?? const []),
+          const SizedBox(height: 12),
+          HealthReportHistoryCard(
+            reports: _healthReportsFuture,
+            onExport: _exportHealthReport,
+          ),
           const SizedBox(height: 12),
           if (snapshot.connectionState == ConnectionState.waiting)
             const Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator()))
