@@ -55,12 +55,21 @@ class NotificationService {
 
   Future<void> healthDayTagMonthlyReportReady(String monthKey) async {
     await initialize();
+    const monthNames = [
+      'январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
+      'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь',
+    ];
+    final parts = monthKey.split('-');
+    final month = parts.length == 2 ? int.tryParse(parts[1]) : null;
+    final monthLabel = month != null && month >= 1 && month <= 12 && parts.length == 2
+        ? '${monthNames[month - 1]} ${parts[0]}'
+        : monthKey;
     final numericMonth = int.tryParse(monthKey.replaceAll('-', '')) ?? 0;
     final notificationId = 6200000 + numericMonth;
     await _plugin.show(
       notificationId,
       'Месячный отчёт по отметкам готов',
-      'Сохранён обзор дневных отметок за $monthKey. Откройте «Моё здоровье», чтобы посмотреть частоту и изменения.',
+      'Сохранён обзор дневных отметок за $monthLabel. Откройте «Моё здоровье», чтобы посмотреть частоту и изменения.',
       const NotificationDetails(
         iOS: DarwinNotificationDetails(presentAlert: true, presentSound: true),
         android: AndroidNotificationDetails(
