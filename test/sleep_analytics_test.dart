@@ -18,6 +18,25 @@ void main() {
     expect(SleepAnalytics.previousPeriodStart(start, AnalysisPeriod.month), DateTime(2026, 10));
   });
 
+
+  test('weekly analysis boundaries remain at local midnight across DST', () {
+    final start = SleepAnalytics.periodStart(DateTime(2026, 3, 29, 12), AnalysisPeriod.week);
+    expect(start, DateTime(2026, 3, 23));
+    expect(start.hour, 0);
+
+    final next = SleepAnalytics.nextPeriodStart(start, AnalysisPeriod.week);
+    expect(next, DateTime(2026, 3, 30));
+    expect(next.hour, 0);
+
+    final previous = SleepAnalytics.previousPeriodStart(next, AnalysisPeriod.week);
+    expect(previous, DateTime(2026, 3, 23));
+    expect(previous.hour, 0);
+
+    final transitionDay = SleepAnalytics.addCalendarDays(DateTime(2026, 3, 29), 1);
+    expect(transitionDay, DateTime(2026, 3, 30));
+    expect(transitionDay.hour, 0);
+  });
+
   test('summary excludes open sessions from duration but keeps real ratings', () {
     final sessions = [
       SleepSession(id: 'a', startedAt: DateTime(2026, 11, 17, 22), endedAt: DateTime(2026, 11, 18, 6), morningRating: 4),
