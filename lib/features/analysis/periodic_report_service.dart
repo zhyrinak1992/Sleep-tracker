@@ -277,9 +277,13 @@ class PeriodicReportService {
       }
       final efficiencies = metrics.map((m) => m.sleepEfficiencyPercent).whereType<double>().toList();
       final awakenings = <int>[];
-      for (var i = 0; i < selected.length; i++) {
-        if ((stages[selected[i].id] ?? const []).isNotEmpty && metrics[i].stageCoveragePercent != null) {
-          awakenings.add(metrics[i].awakeningCount);
+      for (final metric in metrics) {
+        // A zero count is valid only when HealthKit supplied actual awake
+        // intervals and the night has sufficient stage coverage.
+        if (metric.hasAwakeSamples &&
+            metric.stageCoveragePercent != null &&
+            metric.stageCoveragePercent! >= 80) {
+          awakenings.add(metric.awakeningCount);
         }
       }
       final qualities = <num>[], wellbeing = <num>[];
