@@ -298,7 +298,7 @@ class SleepRecordService {
   /// in app_metadata. Existing sleep tables and backup schema remain unchanged.
   Future<SleepRecordState> load() async {
     final database = SleepDatabase.instance;
-    final allSessions = await database.getSessions(limit: 10000);
+    final allSessions = await database.getSessions(limit: null);
     final sessions = allSessions
         .where((session) =>
             session.deletedAt == null &&
