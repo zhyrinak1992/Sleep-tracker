@@ -32,6 +32,10 @@ void main() {
         {'key': 'sleep_personal_records_history_v1', 'value': jsonEncode([
           {'id': 'record-1', 'metric': 'longestSleepMinutes', 'value': 480,
            'achievedAt': '2026-11-20T00:00:00Z', 'sessionId': 'night-1'},
+          // A malformed local event must not hide a valid imported event
+          // with the same ID from the merge preview.
+          {'id': 'record-2', 'metric': 'sleepScore', 'value': 99,
+           'achievedAt': '2026-11-22T00:00:00Z', 'sessionId': 'night-2'},
         ])},
       ];
       archive['app_metadata'] = [
