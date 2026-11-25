@@ -1,4 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite/sqflite.dart' show databaseFactory;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart' show databaseFactoryFfi, sqfliteFfiInit;
+import 'package:sleep_tracker/data/sleep_database.dart';
 import 'package:sleep_tracker/features/analysis/periodic_report_service.dart';
 
 void main() {
@@ -81,4 +86,61 @@ void main() {
       expect(halfYear.title, 'II полугодие 2026');
     });
   });
+
+  test('generates only closed quarterly and half-year archives with correct date bounds', () async {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+    final directory = await Directory.systemTemp.createTemp('periodic-reports-');
+    addTearDown(() async {
+      SleepDatabase.instance.setDatabaseForTesting(null);
+      SleepDatabase.instance.setDatabasePathForTesting(null);
+      if (await directory.exists()) await directory.delete(recursive: true);
+    });
+    SleepDatabase.instance.setDatabasePathForTesting('${directory.path}/sleep.sqlite');
+    final db = await SleepDatabase.instance.database;
+
+    Future<void> addNight(String id, DateTime start) async {
+      await db.insert('sleep_sessions', {
+        'id': id,
+        'started_at': start.toIso8601String(),
+        'ended_at': start.add(const Duration(hours: 8)).toIso8601String(),
+        'source': 'manual',
+        'created_at': start.toIso8601String(),
+        'updated_at': start.toIso8601String(),
+        'user_edited': 0,
+      });
+    }
+
+    await addNight('jan-night', DateTime(2026, 1, 15, 22));
+    await addNight('apr-night', DateTime(2026, 4, 15, 22));
+    await addNight('jul-night', DateTime(2026, 7, 15, 22));
+    await addNight('oct-night', DateTime(2026, 10, 15, 22));
+
+    final service = PeriodicReportService(SleepDatabase.instance);
+    final reports = await service.generateClosedReports(now: DateTime(2026, 11, 25));
+    final quarters = reports.where((report) => report.kind == 'quarter').toList();
+    final halfYears = reports.where((report) => report.kind == 'halfYear').toList();
+
+    expect(quarters.map((report) => report.id).toSet(), {
+      'quarter_2026-01-01',
+      'quarter_2026-04-01',
+      'quarter_2026-07-01',
+    });
+    expect(halfYears.map((report) => report.id).toSet(), {'halfYear_2026-01-01'});
+    expect(reports.any((report) => report.id == 'quarter_2026-10-01'), isFalse);
+    expect(reports.any((report) => report.id == 'halfYear_2026-07-01'), isFalse);
+
+    final q2 = quarters.singleWhere((report) => report.id == 'quarter_2026-04-01');
+    expect(q2.start, DateTime(2026, 4, 1));
+    expect(q2.endExclusive, DateTime(2026, 7, 1));
+    expect(q2.nights, 1);
+    expect((q2.data['months'] as List).length, 1);
+
+    final h1 = halfYears.single;
+    expect(h1.start, DateTime(2026, 1, 1));
+    expect(h1.endExclusive, DateTime(2026, 7, 1));
+    expect(h1.nights, 2);
+    expect((h1.data['months'] as List).length, 2);
+  });
+
 }
