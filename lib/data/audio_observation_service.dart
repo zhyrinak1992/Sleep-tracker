@@ -247,9 +247,11 @@ class AudioObservationService {
       await _recorder.pause();
       if (_eventBytes != null) await _saveCurrentEvent();
     } catch (error) {
-      // Keep UI and service state aligned if the native pause request fails.
+      // Keep UI, in-memory state and persisted privacy state aligned if the
+      // native pause request fails and observation continues.
       _paused = false;
       paused.value = false;
+      await SleepDatabase.instance.setAppMetadata('audio_observation_user_paused', 'false');
       rethrow;
     }
   }
