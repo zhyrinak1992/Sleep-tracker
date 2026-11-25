@@ -137,6 +137,7 @@ void main() {
     expect(q2.start, DateTime(2026, 4, 1));
     expect(q2.endExclusive, DateTime(2026, 7, 1));
     expect(q2.nights, 1);
+    expect(q2.data['schemaVersion'], 9);
     expect((q2.data['months'] as List).length, 1);
 
     final h1 = halfYears.single;
