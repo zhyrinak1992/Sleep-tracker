@@ -71,9 +71,6 @@ class SleepPersonalRecords {
     int? fewestAwakenings;
     String? fewestAwakeningsId;
     DateTime? fewestAwakeningsAt;
-    int? shortestLatency;
-    String? shortestLatencyId;
-    DateTime? shortestLatencyAt;
 
     for (final session in valid) {
       final metrics = SleepSessionMetrics.calculate(
@@ -127,13 +124,6 @@ class SleepPersonalRecords {
         bestEfficiencyAt = session.startedAt;
       }
 
-      final latency = metrics.sleepLatencyMinutes;
-      if (latency != null && latency >= 0 && latency <= 1440 &&
-          (shortestLatency == null || latency < shortestLatency)) {
-        shortestLatency = latency;
-        shortestLatencyId = session.id;
-        shortestLatencyAt = session.startedAt;
-      }
     }
 
     return SleepPersonalRecords(
@@ -149,11 +139,6 @@ class SleepPersonalRecords {
       fewestAwakenings: fewestAwakenings,
       fewestAwakeningsSessionId: fewestAwakeningsId,
       fewestAwakeningsAt: fewestAwakeningsAt,
-      shortestLatencyMinutes: shortestLatency,
-      shortestLatencySessionId: shortestLatencyId,
-      shortestLatencyAt: shortestLatencyAt,
-      longestStreakDays: longestStreakDetails(valid).days,
-      longestStreakAt: longestStreakDetails(valid).achievedAt,
     );
   }
 
