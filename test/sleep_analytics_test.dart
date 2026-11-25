@@ -37,6 +37,28 @@ void main() {
     expect(transitionDay.hour, 0);
   });
 
+  test('previous equal-length period keeps local midnight across spring DST', () {
+    final start = DateTime(2026, 3, 23);
+    final endExclusive = DateTime(2026, 3, 30);
+
+    expect(endExclusive.difference(start).inHours, 167);
+    final previous = SleepAnalytics.previousEqualPeriodStart(start, endExclusive);
+
+    expect(previous, DateTime(2026, 3, 16));
+    expect(previous.hour, 0);
+  });
+
+  test('previous equal-length period keeps local midnight across autumn DST', () {
+    final start = DateTime(2026, 10, 26);
+    final endExclusive = DateTime(2026, 11, 2);
+
+    expect(endExclusive.difference(start).inHours, 169);
+    final previous = SleepAnalytics.previousEqualPeriodStart(start, endExclusive);
+
+    expect(previous, DateTime(2026, 10, 19));
+    expect(previous.hour, 0);
+  });
+
   test('summary excludes open sessions from duration but keeps real ratings', () {
     final sessions = [
       SleepSession(id: 'a', startedAt: DateTime(2026, 11, 17, 22), endedAt: DateTime(2026, 11, 18, 6), morningRating: 4),
