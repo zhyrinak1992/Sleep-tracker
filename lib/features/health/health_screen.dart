@@ -565,6 +565,46 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
   bool _overviewNewestFirst = true;
   DateTime _overviewMonth = DateTime.now();
 
+
+  Future<void> _showMonthDates({
+    required DateTime now,
+    required int monthIndex,
+    required List<DateTime> dates,
+  }) async {
+    final start = DateTime(now.year, now.month - 11 + monthIndex);
+    final end = DateTime(start.year, start.month + 1);
+    final monthDates = dates
+        .where((day) => !day.isBefore(start) && day.isBefore(end))
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
+    final selectedDate = await showDialog<DateTime>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Отметка за ${_monthLabel(start)} · ${monthDates.length}'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: monthDates.isEmpty
+              ? const Text('В этом месяце отметка не использовалась.')
+              : ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final day in monthDates)
+                      ListTile(
+                        dense: true,
+                        title: Text(_date(day)),
+                        onTap: () => Navigator.pop(dialogContext, day),
+                      ),
+                  ],
+                ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Закрыть')),
+        ],
+      ),
+    );
+    if (selectedDate != null) widget.onSelectDate(selectedDate);
+  }
+
   @override
   Widget build(BuildContext context) => FutureBuilder<Map<DateTime, _HealthDayEntry>>(
     future: widget.entriesFuture,
@@ -662,7 +702,25 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
           const SizedBox(height: 14),
           const Text('Частота за 12 месяцев', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
-          SizedBox(height: 70, width: double.infinity, child: CustomPaint(painter: _MonthlyTagBarsPainter(monthlyCounts))),
+          LayoutBuilder(
+            builder: (context, constraints) => GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapUp: (details) {
+                if (constraints.maxWidth <= 0) return;
+                final index = (details.localPosition.dx / constraints.maxWidth * 12)
+                    .floor()
+                    .clamp(0, 11);
+                _showMonthDates(now: now, monthIndex: index, dates: recentDates);
+              },
+              child: SizedBox(
+                height: 70,
+                width: double.infinity,
+                child: CustomPaint(painter: _MonthlyTagBarsPainter(monthlyCounts)),
+              ),
+            ),
+          ),
+          const Text('Нажмите на месяц, чтобы открыть список дат.',
+            style: TextStyle(color: AppTheme.muted, fontSize: 10)),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             Text(_monthLabel(DateTime(now.year, now.month - 11)), style: const TextStyle(color: AppTheme.muted, fontSize: 10)),
             Text(_monthLabel(now), style: const TextStyle(color: AppTheme.muted, fontSize: 10)),
