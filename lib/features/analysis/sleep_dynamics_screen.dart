@@ -48,7 +48,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
   }
 
   Future<_DynamicsData> _load() async {
-    final sessions = await widget.database.getSessions(limit: 10000);
+    final sessions = await widget.database.getSessions(limit: null);
     final ids = sessions.where((s) => s.endedAt != null).map((s) => s.id).toList();
     final stages = await widget.database.getStagesForSessions(ids);
     final morning = await widget.database.getMorningReportsForSessions(ids);
