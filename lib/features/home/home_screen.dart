@@ -318,7 +318,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _refreshInternal() async {
     final open = await widget.database.getOpenSession();
-    final sessions = await widget.database.getSessions(limit: 10000);
+    final sessions = await widget.database.getSessions(limit: null);
     ComparisonSuggestionRecord? suggestion;
     Map<String, String> labels = const {};
     try {
