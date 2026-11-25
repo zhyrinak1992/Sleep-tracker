@@ -11,6 +11,7 @@ import 'features/diary/diary_screen.dart';
 import 'features/analysis/analysis_screen.dart';
 import 'features/health/health_screen.dart';
 import 'features/health/health_day_tag_monthly_report.dart';
+import 'features/analysis/periodic_report_service.dart';
 import 'features/notes/notes_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'theme/app_theme.dart';
@@ -100,6 +101,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     _startClimatePolling();
     _ensureNightReminders();
     _generateClosedHealthTagReports();
+    _generateClosedPeriodicReports();
   }
 
   Future<void> _ensureNightReminders() async {
@@ -190,6 +192,14 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       debugPrint('Monthly health tag report generation failed: $error\\n$stackTrace');
     }
   }
+
+  Future<void> _generateClosedPeriodicReports() async {
+    try {
+      await PeriodicReportService(_database).generateClosedReports();
+    } catch (error, stackTrace) {
+      debugPrint('Periodic report generation failed: $error\\n$stackTrace');
+    }
+  }
   Future<void> _refreshClimate() async {
     if (_climateRefreshInProgress) return;
     _climateRefreshInProgress = true;
@@ -212,6 +222,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       _cleanupTrash();
       _ensureNightReminders();
       _generateClosedHealthTagReports();
+      _generateClosedPeriodicReports();
     } else if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.paused ||
