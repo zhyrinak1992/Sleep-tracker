@@ -4,6 +4,27 @@ import 'package:health/health.dart';
 
 import 'sleep_database.dart';
 
+
+/// Merges a fresh HealthKit result into the existing night record.
+/// Values absent from the latest query remain intact; current values win.
+String mergeNightActivityMetadata({
+  required String? previousRaw,
+  required Map<String, Object?> current,
+}) {
+  final merged = <String, Object?>{};
+  if (previousRaw != null && previousRaw.isNotEmpty) {
+    final decoded = jsonDecode(previousRaw);
+    if (decoded is! Map) {
+      throw const FormatException('Архив активности повреждён.');
+    }
+    if (decoded['sessionId'] == current['sessionId']) {
+      merged.addAll(Map<String, Object?>.from(decoded));
+    }
+  }
+  merged.addAll(current);
+  return jsonEncode(merged);
+}
+
 class AppleHealthSyncResult {
   const AppleHealthSyncResult({required this.imported, required this.found});
   final int imported;
@@ -290,10 +311,19 @@ class AppleHealthService {
             key == 'steps' || key == 'activeEnergyKcal' ||
             key == 'exerciseMinutes' || key == 'workoutCount' ||
             key == 'workoutDurationMinutes')) {
-          await SleepDatabase.instance.setAppMetadata(
-            'sleep_tracker_activity_v1_$sessionId',
-            jsonEncode(activity),
-          );
+          final metadataKey = 'sleep_tracker_activity_v1_$sessionId';
+          final previousRaw = await SleepDatabase.instance.getAppMetadata(metadataKey);
+          String merged;
+          try {
+            merged = mergeNightActivityMetadata(
+              previousRaw: previousRaw,
+              current: activity,
+            );
+          } on FormatException {
+            // Never replace an existing activity record that cannot be read.
+            continue;
+          }
+          await SleepDatabase.instance.setAppMetadata(metadataKey, merged);
         }
       }
     }
