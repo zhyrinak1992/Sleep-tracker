@@ -332,6 +332,7 @@ class BackupRestorePlanner {
             const mergeableAchievementKeys = {
               'sleep_achievements_history_v1',
               'sleep_personal_records_v1',
+              'sleep_personal_records_history_v1',
               'sleep_records_history_v1',
               'sleep_records_celebrated_v1',
             };
