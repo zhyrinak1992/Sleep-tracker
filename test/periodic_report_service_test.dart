@@ -56,7 +56,7 @@ void main() {
     test('rejects malformed snapshot JSON', () {
       expect(() => PeriodicReportSnapshot.decode('[]'), throwsFormatException);
     });
-  })
+
     test('formats quarterly and half-year report titles', () {
       final quarter = PeriodicReportSnapshot.decode('''
         {
@@ -80,5 +80,5 @@ void main() {
       expect(quarter.title, '2 квартал 2026');
       expect(halfYear.title, 'II полугодие 2026');
     });
-;
+  });
 }
