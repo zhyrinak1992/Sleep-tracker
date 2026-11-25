@@ -407,7 +407,17 @@ void main() {
     final archiveBytes = [0, 1, 2, 127, 128, 254, 255];
     final archive = <String, dynamic>{
       'schemaVersion': 8,
-      'sleep_sessions': [session('replacement-night', 'archive')],
+      'sleep_sessions': [
+        {
+          'id': 'replacement-night',
+          'started_at': timestamp,
+          'ended_at': '2026-11-25T07:00:00.000Z',
+          'source': 'manual',
+          'created_at': timestamp,
+          'updated_at': timestamp,
+          'user_edited': 1,
+        },
+      ],
       'sleep_session_tags': <Map<String, Object?>>[],
       'sleep_notes': <Map<String, Object?>>[],
       'app_metadata': <Map<String, Object?>>[],
