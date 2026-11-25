@@ -240,7 +240,23 @@ class HealthDayTagMonthlyReportService {
     return reports;
   }
 
+  static Future<List<HealthDayTagMonthlyReport>>? _generationInFlight;
+
   Future<List<HealthDayTagMonthlyReport>> generateClosedReports({
+    DateTime? now,
+  }) {
+    final inFlight = _generationInFlight;
+    if (inFlight != null) return inFlight;
+    final future = _generateClosedReports(now: now);
+    _generationInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_generationInFlight, future)) {
+        _generationInFlight = null;
+      }
+    });
+  }
+
+  Future<List<HealthDayTagMonthlyReport>> _generateClosedReports({
     DateTime? now,
   }) async {
     final current = now ?? DateTime.now();
