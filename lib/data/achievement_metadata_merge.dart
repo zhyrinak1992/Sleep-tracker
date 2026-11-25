@@ -134,6 +134,12 @@ Map<String, Object?> _mergePersonalRecords(Object? local, Object? imported) {
   final a = _stringKeyedMap(local);
   final b = _stringKeyedMap(imported);
   final result = Map<String, Object?>.from(a);
+  final versions = [a['recordSchemaVersion'], b['recordSchemaVersion']]
+      .whereType<int>()
+      .toList();
+  if (versions.isNotEmpty) {
+    result['recordSchemaVersion'] = versions.reduce((x, y) => x > y ? x : y);
+  }
 
   num? validRecordValue(String key, Object? value) {
     if (value is! num || !value.isFinite || value < 0) return null;
