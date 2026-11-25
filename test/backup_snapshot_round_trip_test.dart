@@ -246,6 +246,16 @@ void main() {
       'body': 'Local note', 'created_at': timestamp, 'updated_at': timestamp,
     });
     await destination.insert('app_metadata', {'key': 'theme', 'value': 'local'});
+    await destination.insert('app_metadata', {
+      'key': 'sleep_personal_records_history_v1',
+      'value': jsonEncode([{
+        'id': 'record-local',
+        'metric': 'longestSleepMinutes',
+        'value': 480,
+        'achievedAt': '2026-11-20T00:00:00Z',
+        'sessionId': 'same-night',
+      }]),
+    });
     await destination.insert('audio_events', {
       'id': 'same-audio', 'session_id': 'same-night',
       'file_path': 'local-audio.m4a', 'category': 'user-category',
@@ -282,6 +292,22 @@ void main() {
       'app_metadata': [
         {'key': 'theme', 'value': 'archive'},
         {'key': 'archive-only-setting', 'value': 'imported'},
+        {'key': 'sleep_personal_records_history_v1', 'value': jsonEncode([
+          {
+            'id': 'record-local',
+            'metric': 'longestSleepMinutes',
+            'value': 470,
+            'achievedAt': '2026-11-20T00:00:00Z',
+            'sessionId': 'same-night',
+          },
+          {
+            'id': 'record-archive',
+            'metric': 'longestSleepMinutes',
+            'value': 510,
+            'achievedAt': '2026-11-22T00:00:00Z',
+            'sessionId': 'archive-only-night',
+          },
+        ])},
       ],
       'sleep_stages': [
         {
@@ -365,6 +391,15 @@ void main() {
           where: 'key = ?', whereArgs: ['archive-only-setting'])).single['value'],
       'imported',
     );
+    final recordHistoryRaw = (await destination.query(
+      'app_metadata',
+      where: 'key = ?',
+      whereArgs: ['sleep_personal_records_history_v1'],
+    )).single['value'] as String;
+    final recordHistory = jsonDecode(recordHistoryRaw) as List;
+    expect(recordHistory, hasLength(2));
+    expect(recordHistory.first['value'], 480);
+    expect(recordHistory.last['value'], 510);
     expect(await destination.query('sleep_stages'), hasLength(1));
     expect(await destination.query('sleep_metrics'), hasLength(1));
     final audioRows = await destination.query('audio_events', orderBy: 'id');
