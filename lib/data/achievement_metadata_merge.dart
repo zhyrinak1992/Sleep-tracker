@@ -32,6 +32,8 @@ String mergeAchievementMetadata({
       return jsonEncode(_mergeAchievementDates(local, imported));
     case 'sleep_personal_records_v1':
       return jsonEncode(_mergePersonalRecords(local, imported));
+    case 'sleep_personal_records_history_v1':
+      return jsonEncode(_mergePersonalRecordHistory(local, imported));
     case 'sleep_records_history_v1':
       return jsonEncode(_mergeRecordEvents(local, imported));
     case 'sleep_records_celebrated_v1':
@@ -59,6 +61,68 @@ Map<String, String> _mergeAchievementDates(Object? local, Object? imported) {
   }
   add(local);
   add(imported);
+  return result;
+}
+
+List<Map<String, Object?>> _mergePersonalRecordHistory(
+  Object? local,
+  Object? imported,
+) {
+  final byId = <String, Map<String, Object?>>{};
+
+  void add(Object? value) {
+    if (value is! List) return;
+    for (final item in value) {
+      if (item is! Map) continue;
+      final id = item['id'];
+      final metric = item['metric'];
+      final rawValue = item['value'];
+      final achievedAt = item['achievedAt'];
+      final sessionId = item['sessionId'];
+      if (id is! String || id.isEmpty ||
+          metric is! String ||
+          !const {
+            'longestSleepMinutes',
+            'bestEfficiencyPercent',
+            'shortestLatencyMinutes',
+            'longestStreakDays',
+          }.contains(metric) ||
+          rawValue is! num || !rawValue.toDouble().isFinite ||
+          achievedAt is! String ||
+          DateTime.tryParse(achievedAt) == null ||
+          (sessionId != null && sessionId is! String)) {
+        continue;
+      }
+      final number = rawValue.toDouble();
+      final valid = switch (metric) {
+        'longestSleepMinutes' => number > 0 && number % 1 == 0,
+        'bestEfficiencyPercent' => number >= 0 && number <= 100,
+        'shortestLatencyMinutes' =>
+          number >= 0 && number <= 1440 && number % 1 == 0,
+        'longestStreakDays' => number >= 1 && number % 1 == 0,
+        _ => false,
+      };
+      if (!valid) continue;
+      byId.putIfAbsent(id, () => {
+        'id': id,
+        'metric': metric,
+        'value': number,
+        'achievedAt': DateTime.parse(achievedAt).toUtc().toIso8601String(),
+        'sessionId': sessionId,
+      });
+    }
+  }
+
+  add(local);
+  add(imported);
+  final result = byId.values.toList()
+    ..sort((a, b) {
+      final aDate = DateTime.parse(a['achievedAt']! as String);
+      final bDate = DateTime.parse(b['achievedAt']! as String);
+      final date = aDate.compareTo(bDate);
+      if (date != 0) return date;
+      return (a['metric']! as String).compareTo(b['metric']! as String);
+    });
   return result;
 }
 
