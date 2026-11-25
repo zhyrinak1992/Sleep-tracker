@@ -56,6 +56,21 @@ void main() {
       expect(records.longestSleepSessionId, 'night-1');
     });
 
+    test('records 100% efficiency when asleep stages cover the full time in bed', () {
+      final start = DateTime(2026, 11, 20, 22);
+      final records = SleepPersonalRecords.calculate(
+        sessions: [session('night-full-coverage', start)],
+        morningReports: const {},
+        stagesBySession: {
+          'night-full-coverage': [
+            stage('Light', start, start.add(const Duration(hours: 8))),
+          ],
+        },
+      );
+
+      expect(records.bestEfficiencyPercent, 100);
+    });
+
     test('does not invent efficiency or latency when coverage/boundaries are absent', () {
       final start = DateTime(2026, 11, 20, 22);
       final records = SleepPersonalRecords.calculate(
