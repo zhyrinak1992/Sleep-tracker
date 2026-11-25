@@ -13,6 +13,7 @@ import 'health_report_history_card.dart';
 import 'health_day_tag_library.dart';
 import 'health_day_tag_period_comparison.dart';
 import 'health_day_tag_history_period.dart';
+import 'health_day_tag_sleep_history.dart';
 import 'health_day_tag_monthly_report.dart';
 import 'health_day_tag_monthly_reports_screen.dart';
 
@@ -486,7 +487,7 @@ class _HealthScreenState extends State<HealthScreen> {
             onEdit: _editHealthDay,
           ),
           const SizedBox(height: 12),
-          _HealthTagStatsCard(entriesFuture: _dayEntriesFuture, sessions: data?.sessions ?? const [], onSelectDay: _selectHealthDay),
+          _HealthTagStatsCard(database: widget.database, entriesFuture: _dayEntriesFuture, sessions: data?.sessions ?? const [], onSelectDay: _selectHealthDay),
           const SizedBox(height: 12),
           _HealthTagPeriodComparisonCard(entriesFuture: _dayEntriesFuture),
           const SizedBox(height: 12),
@@ -581,12 +582,14 @@ class _HealthDayEntry {
 
 class _HealthTagStatsCard extends StatefulWidget {
   const _HealthTagStatsCard({
+    required this.database,
     required this.entriesFuture,
     required this.sessions,
     required this.onSelectDay,
     this.initialTag,
     this.showDetailButton = true,
   });
+  final SleepDatabase database;
   final Future<Map<DateTime, _HealthDayEntry>> entriesFuture;
   final List<SleepSession> sessions;
   final ValueChanged<DateTime> onSelectDay;
@@ -800,6 +803,7 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
                 onPressed: () => Navigator.of(context).push(MaterialPageRoute(
                   builder: (_) => _HealthDayTagDetailScreen(
                     initialTag: selected,
+                    database: widget.database,
                     entriesFuture: widget.entriesFuture,
                     sessions: widget.sessions,
                     onSelectDay: widget.onSelectDay,
@@ -958,6 +962,14 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
             const Text('Сопоставление описательное, не доказывает влияние отметки на сон. День сопоставляется с ночью по дате её окончания.', style: TextStyle(color: AppTheme.muted, fontSize: 10, height: 1.35)),
           ],
           const Divider(height: 20),
+          _HealthTagMetricHistoryChart(
+            database: widget.database,
+            sessions: sessionsInPeriod,
+            entries: entries,
+            tag: selected,
+            range: historyRange,
+          ),
+          const SizedBox(height: 12),
           Text('Даты использования · ${selectedPeriodDates.length}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
           const SizedBox(height: 6),
           SizedBox(height: 130, child: ListView.builder(
@@ -1333,12 +1345,14 @@ class _HealthTagOverviewCalendar extends StatelessWidget {
 class _HealthDayTagDetailScreen extends StatelessWidget {
   const _HealthDayTagDetailScreen({
     required this.initialTag,
+    required this.database,
     required this.entriesFuture,
     required this.sessions,
     required this.onSelectDay,
   });
 
   final String initialTag;
+  final SleepDatabase database;
   final Future<Map<DateTime, _HealthDayEntry>> entriesFuture;
   final List<SleepSession> sessions;
   final ValueChanged<DateTime> onSelectDay;
@@ -1356,6 +1370,7 @@ class _HealthDayTagDetailScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _HealthTagStatsCard(
+            database: database,
             entriesFuture: entriesFuture,
             sessions: sessions,
             initialTag: initialTag,
@@ -1369,6 +1384,208 @@ class _HealthDayTagDetailScreen extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _HealthTagMetricHistoryChart extends StatefulWidget {
+  const _HealthTagMetricHistoryChart({
+    required this.database,
+    required this.sessions,
+    required this.entries,
+    required this.tag,
+    required this.range,
+  });
+
+  final SleepDatabase database;
+  final List<SleepSession> sessions;
+  final Map<DateTime, _HealthDayEntry> entries;
+  final String tag;
+  final HealthDayTagHistoryRange range;
+
+  @override
+  State<_HealthTagMetricHistoryChart> createState() =>
+      _HealthTagMetricHistoryChartState();
+}
+
+class _HealthTagMetricHistoryChartState
+    extends State<_HealthTagMetricHistoryChart> {
+  HealthDayTagNightMetric _metric = HealthDayTagNightMetric.sleepDuration;
+  late Future<Map<String, List<Map<String, Object?>>>> _stagesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _stagesFuture = _loadStages();
+  }
+
+  @override
+  void didUpdateWidget(covariant _HealthTagMetricHistoryChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.sessions != widget.sessions) {
+      _stagesFuture = _loadStages();
+    }
+  }
+
+  Future<Map<String, List<Map<String, Object?>>>> _loadStages() =>
+      widget.database.getStagesForSessions(
+        widget.sessions.map((session) => session.id).toList(),
+      );
+
+  @override
+  Widget build(BuildContext context) => SectionCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Динамика ночных показателей по отметке',
+          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+        const SizedBox(height: 4),
+        const Text(
+          'Каждая точка — отдельная завершённая ночь с этой отметкой. Пропущенные измерения не заменяются нулями.',
+          style: TextStyle(color: AppTheme.muted, fontSize: 10, height: 1.35),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<HealthDayTagNightMetric>(
+          value: _metric,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Показатель', isDense: true),
+          items: [
+            for (final metric in HealthDayTagNightMetric.values)
+              DropdownMenuItem(value: metric, child: Text(metric.label)),
+          ],
+          onChanged: (value) {
+            if (value != null) setState(() => _metric = value);
+          },
+        ),
+        const SizedBox(height: 8),
+        FutureBuilder<Map<String, List<Map<String, Object?>>>>(
+          future: _stagesFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const LinearProgressIndicator();
+            }
+            if (snapshot.hasError) {
+              return const Text('Не удалось загрузить этапы сна для графика.',
+                style: TextStyle(color: AppTheme.muted, fontSize: 11));
+            }
+            final tagsByDay = <DateTime, List<String>>{
+              for (final entry in widget.entries.entries)
+                DateTime(entry.key.year, entry.key.month, entry.key.day):
+                    entry.value.tags,
+            };
+            final points = HealthDayTagNightHistory.calculate(
+              sessions: widget.sessions,
+              tagsByDay: tagsByDay,
+              stagesBySession: snapshot.data ?? const {},
+              tag: widget.tag,
+              start: widget.range.start,
+              endExclusive: widget.range.endExclusive,
+              metric: _metric,
+            );
+            final available = points.where((point) => point.value != null).length;
+            if (points.isEmpty) {
+              return const Text('В выбранном периоде нет завершённых ночей с этой отметкой.',
+                style: TextStyle(color: AppTheme.muted, fontSize: 11));
+            }
+            if (available == 0) {
+              return Text(
+                'Ночей с отметкой: ${points.length}. Для показателя «${_metric.label}» пока нет подтверждённых измерений.',
+                style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+              );
+            }
+            final values = points.map((point) => point.value).toList();
+            final availableValues = values.whereType<double>().toList();
+            final minimum = availableValues.reduce((a, b) => a < b ? a : b);
+            final maximum = availableValues.reduce((a, b) => a > b ? a : b);
+            final width = (points.length * 22.0).clamp(300.0, 12000.0).toDouble();
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$available из ${points.length} ночей · ${_number(minimum)}–${_number(maximum)} ${_metric.unit}',
+                  style: const TextStyle(color: AppTheme.muted, fontSize: 10),
+                ),
+                const SizedBox(height: 5),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: width,
+                    height: 116,
+                    child: CustomPaint(
+                      painter: _HealthTagNightMetricPainter(values),
+                    ),
+                  ),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(_date(points.first.date),
+                      style: const TextStyle(color: AppTheme.muted, fontSize: 9)),
+                    Text(_date(points.last.date),
+                      style: const TextStyle(color: AppTheme.muted, fontSize: 9)),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    ),
+  );
+}
+
+class _HealthTagNightMetricPainter extends CustomPainter {
+  const _HealthTagNightMetricPainter(this.values);
+
+  final List<double?> values;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final available = values.whereType<double>().toList();
+    if (available.isEmpty || size.width <= 0 || size.height <= 0) return;
+    final minimum = available.reduce((a, b) => a < b ? a : b);
+    final maximum = available.reduce((a, b) => a > b ? a : b);
+    final spread = maximum - minimum;
+    const top = 10.0;
+    final bottom = size.height - 10.0;
+    final xStep = values.length <= 1 ? 0.0 : size.width / (values.length - 1);
+    final points = <Offset?>[];
+    for (var index = 0; index < values.length; index++) {
+      final value = values[index];
+      if (value == null) {
+        points.add(null);
+        continue;
+      }
+      final normalized = spread == 0 ? 0.5 : (value - minimum) / spread;
+      points.add(Offset(index * xStep, bottom - normalized * (bottom - top)));
+    }
+    final line = Paint()
+      ..color = AppTheme.teal
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final dot = Paint()
+      ..color = AppTheme.teal
+      ..style = PaintingStyle.fill;
+    Path? segment;
+    for (final point in points) {
+      if (point == null) {
+        if (segment != null) canvas.drawPath(segment, line);
+        segment = null;
+        continue;
+      }
+      if (segment == null) {
+        segment = Path()..moveTo(point.dx, point.dy);
+      } else {
+        segment.lineTo(point.dx, point.dy);
+      }
+      canvas.drawCircle(point, 3, dot);
+    }
+    if (segment != null) canvas.drawPath(segment, line);
+  }
+
+  @override
+  bool shouldRepaint(covariant _HealthTagNightMetricPainter oldDelegate) =>
+      oldDelegate.values.toString() != values.toString();
 }
 
 class _SelectedTagHistoryPainter extends CustomPainter {
