@@ -8,6 +8,7 @@ import '../../models/sleep_tag.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import 'tag_sleep_comparison.dart';
+import 'sleep_analytics.dart';
 import 'tag_combination_suggestions.dart';
 import '../diary/sleep_session_metrics.dart';
 
@@ -324,8 +325,10 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
         efficiencyBySession: data.efficiencyBySession,
         sleepLatencyBySession: data.sleepLatencyBySession,
       );
-      final selectedPeriodDuration = widget.endExclusive.difference(widget.start);
-      final previousPeriodStart = widget.start.subtract(selectedPeriodDuration);
+      final previousPeriodStart = SleepAnalytics.previousEqualPeriodStart(
+        widget.start,
+        widget.endExclusive,
+      );
       final previousResult = TagSleepComparison.calculate(
         sessions: widget.sessions,
         tagsBySession: data.tagsBySession,
