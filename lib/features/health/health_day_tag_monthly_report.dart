@@ -206,6 +206,8 @@ class HealthDayTagMonthlyReportService {
       try {
         final decoded = jsonDecode(entry.value);
         if (decoded is! Map || decoded['tags'] is! List) continue;
+        final note = decoded['note'] is String
+            ? (decoded['note'] as String).trim() : '';
         final tags = (decoded['tags'] as List)
             .whereType<String>()
             .map((tag) => tag.trim())
@@ -213,6 +215,7 @@ class HealthDayTagMonthlyReportService {
             .toSet()
             .toList()
           ..sort();
+        if (note.isEmpty && tags.isEmpty) continue;
         result[DateTime(day.year, day.month, day.day)] = tags;
       } catch (_) {
         continue;
