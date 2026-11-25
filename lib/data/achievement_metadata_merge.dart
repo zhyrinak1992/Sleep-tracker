@@ -112,7 +112,7 @@ Map<String, Object?> _mergePersonalRecords(Object? local, Object? imported) {
   chooseMaximum('longestSleepMinutes', ['longestSleepSessionId', 'longestSleepAt']);
   chooseMaximum('bestEfficiencyPercent', ['bestEfficiencySessionId', 'bestEfficiencyAt']);
   chooseMinimum('shortestLatencyMinutes', ['shortestLatencySessionId', 'shortestLatencyAt']);
-  chooseMaximum('longestStreakDays', const []);
+  chooseMaximum('longestStreakDays', ['longestStreakAt']);
   return result;
 }
 
