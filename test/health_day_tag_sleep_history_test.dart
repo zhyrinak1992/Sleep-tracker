@@ -56,11 +56,13 @@ void main() {
     final efficiency = calculate(HealthDayTagNightMetric.sleepEfficiency);
     final latency = calculate(HealthDayTagNightMetric.sleepLatency);
     final rating = calculate(HealthDayTagNightMetric.morningRating);
+    final awakenings = calculate(HealthDayTagNightMetric.awakenings);
 
     expect(duration, hasLength(1));
     expect(duration.single.value, 7.5);
     expect(efficiency.single.value, closeTo(7.5 / 8.5 * 100, 0.001));
     expect(latency.single.value, 30);
+    expect(awakenings.single.value, 2);
     expect(rating.single.value, 4);
   });
 
@@ -97,12 +99,15 @@ void main() {
     final deleted = session('deleted', deletedAt: DateTime(2026, 11, 25, 7));
     final untagged = session(
       'untagged',
-      startedAt: DateTime(2026, 11, 24, 21),
-      endedAt: DateTime(2026, 11, 25, 6),
+      startedAt: DateTime(2026, 11, 22, 21),
+      endedAt: DateTime(2026, 11, 23, 6),
     );
     final result = HealthDayTagNightHistory.calculate(
       sessions: [newer, deleted, untagged, older],
-      tagsByDay: tags,
+      tagsByDay: {
+        DateTime(2026, 11, 24): ['Кофеин'],
+        DateTime(2026, 11, 25): ['Кофеин'],
+      },
       stagesBySession: const {},
       tag: 'Кофеин',
       start: DateTime(2026, 11, 24),
