@@ -105,7 +105,11 @@ class SleepSessionMetrics {
     final coverage = inBed == null || inBed <= 0
         ? null
         : (coverageMinutes / inBed * 100).clamp(0, 100).toDouble();
+    final hasConfirmedSleepBoundaries =
+        session.actualSleepStartedAt != null &&
+        session.actualSleepEndedAt != null;
     final efficiency = inBed != null && inBed > 0 &&
+        (awakeMinutes > 0 || hasConfirmedSleepBoundaries) &&
         coverage != null && coverage >= 80 &&
         asleepMinutes > 0 && asleepMinutes <= inBed
         ? asleepMinutes / inBed * 100
