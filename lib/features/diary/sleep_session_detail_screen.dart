@@ -262,7 +262,9 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
     final currentSleepiness = currentAnswers['sleepiness'] is num
         ? (currentAnswers['sleepiness'] as num).toDouble()
         : null;
-    final currentAwakenings = metrics.hasAwakeSamples
+    final currentAwakenings = metrics.hasAwakeSamples &&
+        metrics.stageCoveragePercent != null &&
+        metrics.stageCoveragePercent! >= 80
         ? metrics.awakeningCount.toDouble()
         : null;
 
