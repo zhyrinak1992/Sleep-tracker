@@ -259,7 +259,8 @@ class _HealthScreenState extends State<HealthScreen> {
               segments: const [
                 ButtonSegment(value: 7, label: Text('7 дней')),
                 ButtonSegment(value: 30, label: Text('30 дней')),
-                ButtonSegment(value: 90, label: Text('90 дней')),
+                ButtonSegment(value: 90, label: Text('3 мес.')),
+                ButtonSegment(value: 180, label: Text('6 мес.')),
                 ButtonSegment(value: 365, label: Text('Год')),
               ],
               selected: {_days},
