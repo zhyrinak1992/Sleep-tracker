@@ -192,10 +192,13 @@ class SleepAchievementService {
 
     final recordsRaw = await database.getAppMetadata(_recordsKey);
     SleepPersonalRecords? previousRecords;
+    var previousRecordSchemaVersion = 0;
     if (recordsRaw != null) {
       try {
         final decoded = jsonDecode(recordsRaw);
         if (decoded is Map) {
+          final rawVersion = decoded['recordSchemaVersion'];
+          if (rawVersion is int) previousRecordSchemaVersion = rawVersion;
           previousRecords = SleepPersonalRecords.fromMap(
             Map<String, Object?>.from(decoded),
           );
@@ -262,6 +265,12 @@ class SleepAchievementService {
         // A damaged legacy history must not affect sleep records or startup.
       }
     }
+    final hasApprovedHistory = recordHistory.any((event) =>
+        event.metric == 'bestSleepScore' || event.metric == 'fewestAwakenings');
+    final needsRecordBaselineMigration =
+        (previousRecords != null && previousRecordSchemaVersion < 2) ||
+        (previousRecords == null && recordHistoryRaw != null && !hasApprovedHistory) ||
+        (previousRecords == null && legacyRecordHistoryRaw != null);
     final historyBest = SleepPersonalRecordHistory.bestRecords(recordHistory);
     final recordBaseline = previousRecords == null
         ? historyBest
@@ -277,7 +286,7 @@ class SleepAchievementService {
                   recordBaseline.longestSleepMinutes!)) {
         newRecordKeys.add('longestSleep');
       }
-      if (calculatedRecords.bestSleepScore != null &&
+      if (!needsRecordBaselineMigration && calculatedRecords.bestSleepScore != null &&
           (recordBaseline.bestSleepScore == null ||
               calculatedRecords.bestSleepScore! > recordBaseline.bestSleepScore!)) {
         newRecordKeys.add('bestSleepScore');
@@ -288,7 +297,7 @@ class SleepAchievementService {
                   recordBaseline.bestEfficiencyPercent!)) {
         newRecordKeys.add('bestEfficiency');
       }
-      if (calculatedRecords.fewestAwakenings != null &&
+      if (!needsRecordBaselineMigration && calculatedRecords.fewestAwakenings != null &&
           (recordBaseline.fewestAwakenings == null ||
               calculatedRecords.fewestAwakenings! < recordBaseline.fewestAwakenings!)) {
         newRecordKeys.add('fewestAwakenings');
