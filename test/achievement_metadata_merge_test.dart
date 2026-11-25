@@ -31,6 +31,7 @@ void main() {
           'shortestLatencyMinutes': 5,
           'shortestLatencySessionId': 'local-latency',
           'longestStreakDays': 8,
+          'longestStreakAt': '2026-11-10T00:00:00Z',
         }),
         importedRaw: jsonEncode({
           'longestSleepMinutes': 480,
@@ -41,6 +42,7 @@ void main() {
           'shortestLatencyMinutes': 2,
           'shortestLatencySessionId': 'archive-latency',
           'longestStreakDays': 14,
+          'longestStreakAt': '2026-11-24T00:00:00Z',
         }),
       )) as Map<String, dynamic>;
 
@@ -51,6 +53,7 @@ void main() {
       expect(merged['shortestLatencyMinutes'], 2);
       expect(merged['shortestLatencySessionId'], 'archive-latency');
       expect(merged['longestStreakDays'], 14);
+      expect(merged['longestStreakAt'], '2026-11-24T00:00:00Z');
       expect(merged['bestEfficiencyAt'], '2026-11-21T00:00:00Z');
     });
 
