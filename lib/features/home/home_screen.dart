@@ -872,11 +872,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         children: [
                           _LatestSleepFact(
                             label: 'Засыпание',
-                            value: _sleepTime(_latest!.actualSleepStartedAt),
+                            value: _sleepTime(
+                              _latestMetrics?.sleepOnsetAt ?? _latest!.actualSleepStartedAt,
+                            ),
                           ),
                           _LatestSleepFact(
                             label: 'Пробуждение',
-                            value: _sleepTime(_latest!.actualSleepEndedAt),
+                            value: _sleepTime(
+                              _latestMetrics?.sleepEndAt ?? _latest!.actualSleepEndedAt,
+                            ),
                           ),
                           _LatestSleepFact(
                             label: 'Звуковые события',
