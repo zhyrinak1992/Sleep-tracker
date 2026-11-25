@@ -32,7 +32,6 @@ class _HealthScreenState extends State<HealthScreen> {
   DateTime _selectedDay = DateTime.now();
   late Future<_HealthDayEntry> _dayEntryFuture;
   late Future<Map<DateTime, _HealthDayEntry>> _dayEntriesFuture;
-  late Future<List<HealthDayTagMonthlyReport>> _monthlyTagReportsFuture;
 
   @override
   void initState() {
@@ -41,7 +40,7 @@ class _HealthScreenState extends State<HealthScreen> {
     _healthReportsFuture = _loadHealthReports();
     _dayEntryFuture = _loadDayEntry(_selectedDay);
     _dayEntriesFuture = _loadAllHealthDayEntries();
-    _monthlyTagReportsFuture = HealthDayTagMonthlyReportService(widget.database).generateClosedReports();
+    unawaited(_generateMonthlyTagReports());
   }
 
   Future<Map<DateTime, _HealthDayEntry>> _loadAllHealthDayEntries() async {
@@ -371,11 +370,20 @@ class _HealthScreenState extends State<HealthScreen> {
     return _HealthSnapshot(sessions: sessions, samples: samples);
   }
 
+  Future<void> _generateMonthlyTagReports() async {
+    try {
+      await HealthDayTagMonthlyReportService(widget.database).generateClosedReports();
+    } catch (_) {
+      // Saved reports remain available; report generation must not block the health screen.
+    }
+  }
+
   Future<void> _refresh() async {
     setState(() {
       _future = _load();
       _healthReportsFuture = _loadHealthReports();
     });
+    unawaited(_generateMonthlyTagReports());
     await Future.wait([_future, _healthReportsFuture]);
   }
 
