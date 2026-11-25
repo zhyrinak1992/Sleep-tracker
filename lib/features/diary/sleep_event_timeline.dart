@@ -97,14 +97,14 @@ class SleepEventTimeline {
       if (at == null) continue;
       final category = (row['category'] as String? ?? '').trim().toLowerCase();
       final title = switch (category) {
-        'snore' => 'Храп',
-        'cough' => 'Кашель',
-        'laugh' => 'Смех',
-        'speech' => 'Разговор',
-        'groan' => 'Стон',
-        'sobbing' => 'Всхлипывания',
-        'noise' => 'Посторонний шум',
-        '' || 'unknown' => 'Неопределённый звук',
+        'snore' || 'храп' => 'Храп',
+        'cough' || 'кашель' => 'Кашель',
+        'laugh' || 'смех' => 'Смех',
+        'speech' || 'разговор' => 'Разговор',
+        'groan' || 'стон' => 'Стон',
+        'sobbing' || 'всхлипывания' => 'Всхлипывания',
+        'noise' || 'посторонний шум' => 'Посторонний шум',
+        '' || 'unknown' || 'неопределённый звук' => 'Неопределённый звук',
         _ => category,
       };
       final duration = row['duration_ms'] is num
