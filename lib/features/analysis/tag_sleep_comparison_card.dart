@@ -83,8 +83,10 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
       final stages = stagesBySession[session.id] ?? const <Map<String, Object?>>[];
       final metrics = SleepSessionMetrics.calculate(session: session, stages: stages);
       // A missing or malformed awake interval is not evidence of zero
-      // awakenings. Keep only an actually parsed, positive event count.
-      if (metrics.awakeningCount > 0) {
+      // awakenings. Require the approved stage-coverage threshold as well.
+      if (metrics.hasAwakeSamples &&
+          metrics.stageCoveragePercent != null &&
+          metrics.stageCoveragePercent! >= 80) {
         awakeningCounts[session.id] = metrics.awakeningCount;
       }
       if (metrics.sleepEfficiencyPercent != null) {
