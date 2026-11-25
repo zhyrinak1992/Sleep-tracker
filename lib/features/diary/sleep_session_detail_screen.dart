@@ -671,11 +671,32 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                         const SizedBox(height: 8),
                         _detailRow('Нажатие «Ложусь спать»', _dateTime(session.buttonStartedAt), icon: Icons.touch_app_outlined),
                         const Divider(height: 1),
-                        _detailRow('Фактическое засыпание', _dateTime(session.actualSleepStartedAt), icon: Icons.bedtime_outlined),
-                        const Divider(height: 1),
-                        _detailRow('Нажатие «Я проснулась»', _dateTime(session.buttonEndedAt), icon: Icons.touch_app_outlined),
-                        const Divider(height: 1),
-                        _detailRow('Фактическое пробуждение', _dateTime(session.actualSleepEndedAt), icon: Icons.wb_sunny_outlined),
+                        FutureBuilder<List<Map<String, Object?>>>(
+                          future: _stagesFuture,
+                          builder: (context, stagesSnapshot) {
+                            final metrics = stagesSnapshot.hasData
+                                ? SleepSessionMetrics.calculate(
+                                    session: session,
+                                    stages: stagesSnapshot.data!,
+                                  )
+                                : null;
+                            return Column(children: [
+                              _detailRow(
+                                'Фактическое засыпание',
+                                _dateTime(metrics?.sleepOnsetAt ?? session.actualSleepStartedAt),
+                                icon: Icons.bedtime_outlined,
+                              ),
+                              const Divider(height: 1),
+                              _detailRow('Нажатие «Я проснулась»', _dateTime(session.buttonEndedAt), icon: Icons.touch_app_outlined),
+                              const Divider(height: 1),
+                              _detailRow(
+                                'Фактическое пробуждение',
+                                _dateTime(metrics?.sleepEndAt ?? session.actualSleepEndedAt),
+                                icon: Icons.wb_sunny_outlined,
+                              ),
+                            ]);
+                          },
+                        ),
                         const Divider(height: 1),
                         _detailRow('Источник записи', session.source == 'manual' || session.source == 'manual_entry'
                             ? 'Вручную' : session.source,
