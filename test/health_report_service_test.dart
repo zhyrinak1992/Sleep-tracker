@@ -1,8 +1,33 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite/sqflite.dart' show Database, databaseFactory;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart' show databaseFactoryFfi, sqfliteFfiInit;
+import 'package:sleep_tracker/data/sleep_database.dart';
 import 'package:sleep_tracker/features/health/health_report_service.dart';
 import 'package:sleep_tracker/models/sleep_session.dart';
 
 void main() {
+  late Directory directory;
+  Database? database;
+
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
+
+  setUp(() async {
+    directory = await Directory.systemTemp.createTemp('health-reports-');
+    SleepDatabase.instance.setDatabasePathForTesting('${directory.path}/health.sqlite');
+    database = await SleepDatabase.instance.database;
+  });
+
+  tearDown(() async {
+    SleepDatabase.instance.setDatabaseForTesting(null);
+    SleepDatabase.instance.setDatabasePathForTesting(null);
+    if (database != null && database!.isOpen) await database!.close();
+    if (await directory.exists()) await directory.delete(recursive: true);
+  });
   group('HealthReportService', () {
     final sessions = {
       'night-a': SleepSession(
@@ -118,6 +143,57 @@ void main() {
       ''');
       expect(report.endInclusive, DateTime(2026, 3, 29));
       expect(report.endInclusive.hour, 0);
+    });
+
+
+    test('generates and persists closed weekly monthly and annual health reports', () async {
+      Future<void> addNight({
+        required String id,
+        required DateTime start,
+      }) async {
+        final end = start.add(const Duration(hours: 8));
+        await database!.insert('sleep_sessions', {
+          'id': id,
+          'started_at': start.toIso8601String(),
+          'ended_at': end.toIso8601String(),
+          'source': 'apple_health:Apple Watch',
+          'created_at': start.toIso8601String(),
+          'updated_at': end.toIso8601String(),
+          'actual_sleep_started_at': start.toIso8601String(),
+          'actual_sleep_ended_at': end.toIso8601String(),
+          'user_edited': 0,
+        });
+        await database!.insert('sleep_metrics', {
+          'id': 'metric-$id',
+          'session_id': id,
+          'metric_type': 'HEART_RATE',
+          'value': 61.0,
+          'unit': 'bpm',
+          'measured_at': start.add(const Duration(hours: 2)).toIso8601String(),
+          'source': 'Apple Watch',
+        });
+      }
+
+      await addNight(id: 'night-2025', start: DateTime.utc(2025, 10, 1, 22));
+      await addNight(id: 'night-2026', start: DateTime.utc(2026, 10, 1, 22));
+
+      final service = HealthReportService(SleepDatabase.instance);
+      final reports = await service.generateClosedReports(now: DateTime(2026, 11, 25));
+      expect(reports.where((report) => report.kind == 'week'), hasLength(2));
+      expect(reports.where((report) => report.kind == 'month'), hasLength(2));
+      expect(reports.where((report) => report.kind == 'year'), hasLength(1));
+      expect(reports.every((report) => report.metrics.isNotEmpty), isTrue);
+
+      final stored = await SleepDatabase.instance.getAppMetadataByPrefix(
+        HealthReportService.storagePrefix,
+      );
+      expect(stored, hasLength(5));
+      final repeated = await service.generateClosedReports(now: DateTime(2026, 11, 25));
+      expect(repeated, hasLength(5));
+      expect(
+        await SleepDatabase.instance.getAppMetadataByPrefix(HealthReportService.storagePrefix),
+        hasLength(5),
+      );
     });
 
     test('does not create metric summaries for absent data', () {
