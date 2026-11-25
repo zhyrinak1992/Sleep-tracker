@@ -580,10 +580,18 @@ class _HealthDayEntry {
 }
 
 class _HealthTagStatsCard extends StatefulWidget {
-  const _HealthTagStatsCard({required this.entriesFuture, required this.sessions, required this.onSelectDay});
+  const _HealthTagStatsCard({
+    required this.entriesFuture,
+    required this.sessions,
+    required this.onSelectDay,
+    this.initialTag,
+    this.showDetailButton = true,
+  });
   final Future<Map<DateTime, _HealthDayEntry>> entriesFuture;
   final List<SleepSession> sessions;
   final ValueChanged<DateTime> onSelectDay;
+  final String? initialTag;
+  final bool showDetailButton;
 
   @override
   State<_HealthTagStatsCard> createState() => _HealthTagStatsCardState();
@@ -675,7 +683,8 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
           ],
         ));
       }
-      final selected = tags.contains(_selectedTag) ? _selectedTag! : tags.first;
+      final preferredTag = _selectedTag ?? widget.initialTag;
+      final selected = tags.contains(preferredTag) ? preferredTag! : tags.first;
       final allDates = [...usage[selected]!]..sort((a, b) => b.compareTo(a));
       DateTime dayOnly(DateTime date) => DateTime(date.year, date.month, date.day);
       final now = DateTime.now();
@@ -784,6 +793,23 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
             items: [for (final tag in tags) DropdownMenuItem(value: tag, child: Text(tag))],
             onChanged: (value) => setState(() => _selectedTag = value),
           ),
+          if (widget.showDetailButton) ...[
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => _HealthDayTagDetailScreen(
+                    initialTag: selected,
+                    entriesFuture: widget.entriesFuture,
+                    sessions: widget.sessions,
+                    onSelectDay: widget.onSelectDay,
+                  ),
+                )),
+                icon: const Icon(Icons.open_in_full, size: 16),
+                label: const Text('Подробная история отметки'),
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           Text(selectedPeriodDates.length.toString() + ' дней с отметкой «' + selected + '»', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
@@ -1302,6 +1328,47 @@ class _HealthTagOverviewCalendar extends StatelessWidget {
       ],
     );
   }
+}
+
+class _HealthDayTagDetailScreen extends StatelessWidget {
+  const _HealthDayTagDetailScreen({
+    required this.initialTag,
+    required this.entriesFuture,
+    required this.sessions,
+    required this.onSelectDay,
+  });
+
+  final String initialTag;
+  final Future<Map<DateTime, _HealthDayEntry>> entriesFuture;
+  final List<SleepSession> sessions;
+  final ValueChanged<DateTime> onSelectDay;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: Text(initialTag)),
+    body: SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        children: [
+          const Text(
+            'Подробная история выбранной отметки. Период, частота использования и сравнение ночных показателей можно менять независимо от общего календаря.',
+            style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4),
+          ),
+          const SizedBox(height: 12),
+          _HealthTagStatsCard(
+            entriesFuture: entriesFuture,
+            sessions: sessions,
+            initialTag: initialTag,
+            showDetailButton: false,
+            onSelectDay: (day) {
+              Navigator.of(context).pop();
+              onSelectDay(day);
+            },
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _SelectedTagHistoryPainter extends CustomPainter {
