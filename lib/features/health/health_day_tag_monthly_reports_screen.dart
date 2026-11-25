@@ -67,6 +67,14 @@ class _HealthDayTagMonthlyReportsScreenState
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
             children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  label: const Text('Назад'),
+                ),
+              ),
               ScreenHeader(
                 title: 'Отчёты по отметкам',
                 subtitle: 'Новые закрытые месяцы формируются при открытии раздела; фоновый запуск зависит от iOS',
@@ -143,7 +151,7 @@ class _HealthDayTagMonthlyReportsScreenState
                               const SizedBox(height: 4),
                               LinearProgressIndicator(
                                 value: entry.share == null
-                                    ? null
+                                    ? 0
                                     : (entry.share! / 100).clamp(0.0, 1.0),
                                 minHeight: 7,
                                 borderRadius: BorderRadius.circular(5),
