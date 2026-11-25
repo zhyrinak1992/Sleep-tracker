@@ -118,7 +118,7 @@ class _HealthDayTagMonthlyReportsScreenState
                           style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                         subtitle: Text(
-                          '${report.recordedDays} из ${report.daysInMonth} дней с дневными записями',
+                          '${report.recordedDays} из ${report.daysInMonth} дней с записями · прошлый месяц: ${report.previousRecordedDays} из ${report.previousDaysInMonth}',
                           style: const TextStyle(color: AppTheme.muted, fontSize: 11),
                         ),
                         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
