@@ -67,6 +67,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   Timer? _cleanupTimer;
   Timer? _climateTimer;
   bool _climateRefreshInProgress = false;
+  bool _appInBackground = false;
+  bool _appDetached = false;
 
   Widget _createPage(int index) {
     switch (index) {
@@ -91,6 +93,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    AudioObservationService.instance.observing.addListener(_syncClimatePolling);
+    AudioObservationService.instance.paused.addListener(_syncClimatePolling);
     _cleanupTimer = Timer.periodic(const Duration(minutes: 30), (_) { _cleanupAudio(); _cleanupTrash(); });
     _cleanupTrash();
     _startClimatePolling();
@@ -117,9 +121,29 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   }
 
   void _startClimatePolling() {
-    _climateTimer?.cancel();
+    if (_climateTimer != null) {
+      _refreshClimate();
+      return;
+    }
     _refreshClimate();
     _climateTimer = Timer.periodic(const Duration(minutes: 15), (_) => _refreshClimate());
+  }
+
+  void _syncClimatePolling() {
+    if (!_appInBackground) {
+      _startClimatePolling();
+      return;
+    }
+    final keepPollingForActiveNight = !_appDetached &&
+        shouldKeepClimatePollingInBackground(
+          audioObservationActive: AudioObservationService.instance.observing.value,
+          audioObservationPaused: AudioObservationService.instance.paused.value,
+        );
+    if (keepPollingForActiveNight) {
+      _startClimatePolling();
+    } else {
+      _stopClimatePolling();
+    }
   }
 
   void _stopClimatePolling() {
@@ -131,6 +155,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   void dispose() {
     _cleanupTimer?.cancel();
     _stopClimatePolling();
+    AudioObservationService.instance.observing.removeListener(_syncClimatePolling);
+    AudioObservationService.instance.paused.removeListener(_syncClimatePolling);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -179,6 +205,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      _appInBackground = false;
+      _appDetached = false;
       _startClimatePolling();
       _cleanupAudio();
       _cleanupTrash();
@@ -188,13 +216,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
-      final keepPollingForActiveNight =
-          state != AppLifecycleState.detached &&
-          shouldKeepClimatePollingInBackground(
-            audioObservationActive: AudioObservationService.instance.observing.value,
-            audioObservationPaused: AudioObservationService.instance.paused.value,
-          );
-      if (!keepPollingForActiveNight) _stopClimatePolling();
+      _appInBackground = true;
+      _appDetached = state == AppLifecycleState.detached;
+      _syncClimatePolling();
     }
   }
 
