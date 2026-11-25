@@ -182,10 +182,21 @@ class BackupRestorePlanner {
               item['value'] is! num ||
               !(item['value'] as num).toDouble().isFinite ||
               item['achievedAt'] is! String ||
-              DateTime.tryParse(item['achievedAt'] as String) == null) {
+              DateTime.tryParse(item['achievedAt'] as String) == null ||
+              (item['sessionId'] != null && item['sessionId'] is! String)) {
             continue;
           }
-          if (identities.add(item['id'] as String)) count++;
+          final value = (item['value'] as num).toDouble();
+          final metric = item['metric'] as String;
+          final validValue = switch (metric) {
+            'longestSleepMinutes' => value > 0 && value % 1 == 0,
+            'bestEfficiencyPercent' => value >= 0 && value <= 100,
+            'shortestLatencyMinutes' =>
+              value >= 0 && value <= 1440 && value % 1 == 0,
+            'longestStreakDays' => value >= 1 && value % 1 == 0,
+            _ => false,
+          };
+          if (validValue && identities.add(item['id'] as String)) count++;
         }
         return count;
       case 'sleep_records_history_v1':
