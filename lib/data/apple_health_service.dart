@@ -53,6 +53,7 @@ class AppleHealthService {
     HealthDataType.RESPIRATORY_RATE,
     HealthDataType.BLOOD_OXYGEN,
     HealthDataType.HEART_RATE_VARIABILITY_SDNN,
+    HealthDataType.WRIST_TEMPERATURE,
   ];
 
   static const List<HealthDataType> _activityTypes = [
@@ -345,6 +346,7 @@ class AppleHealthService {
     HealthDataType.RESPIRATORY_RATE => ('Частота дыхания', 'вдох/мин'),
     HealthDataType.BLOOD_OXYGEN => ('Насыщение кислородом', '%'),
     HealthDataType.HEART_RATE_VARIABILITY_SDNN => ('Вариабельность пульса SDNN', 'мс'),
+    HealthDataType.WRIST_TEMPERATURE => ('Температура запястья', '°C'),
     _ => null,
   };
 
