@@ -83,7 +83,9 @@ List<Map<String, Object?>> _mergePersonalRecordHistory(
           metric is! String ||
           !const {
             'longestSleepMinutes',
+            'bestSleepScore',
             'bestEfficiencyPercent',
+            'fewestAwakenings',
             'shortestLatencyMinutes',
             'longestStreakDays',
           }.contains(metric) ||
@@ -96,7 +98,9 @@ List<Map<String, Object?>> _mergePersonalRecordHistory(
       final number = rawValue.toDouble();
       final valid = switch (metric) {
         'longestSleepMinutes' => number > 0 && number % 1 == 0,
+        'bestSleepScore' => number >= 0 && number <= 100 && number % 1 == 0,
         'bestEfficiencyPercent' => number >= 0 && number <= 100,
+        'fewestAwakenings' => number >= 0 && number % 1 == 0,
         'shortestLatencyMinutes' =>
           number >= 0 && number <= 1440 && number % 1 == 0,
         'longestStreakDays' => number >= 1 && number % 1 == 0,
@@ -133,7 +137,9 @@ Map<String, Object?> _mergePersonalRecords(Object? local, Object? imported) {
 
   num? validRecordValue(String key, Object? value) {
     if (value is! num || !value.isFinite || value < 0) return null;
-    if (key == 'bestEfficiencyPercent') return value <= 100 ? value : null;
+    if (key == 'bestEfficiencyPercent' || key == 'bestSleepScore') {
+      return value <= 100 ? value : null;
+    }
     if (key == 'shortestLatencyMinutes' && value > 1440) return null;
     if (value % 1 != 0) return null;
     return value;
@@ -174,7 +180,9 @@ Map<String, Object?> _mergePersonalRecords(Object? local, Object? imported) {
   }
 
   chooseMaximum('longestSleepMinutes', ['longestSleepSessionId', 'longestSleepAt']);
+  chooseMaximum('bestSleepScore', ['bestSleepScoreSessionId', 'bestSleepScoreAt']);
   chooseMaximum('bestEfficiencyPercent', ['bestEfficiencySessionId', 'bestEfficiencyAt']);
+  chooseMinimum('fewestAwakenings', ['fewestAwakeningsSessionId', 'fewestAwakeningsAt']);
   chooseMinimum('shortestLatencyMinutes', ['shortestLatencySessionId', 'shortestLatencyAt']);
   chooseMaximum('longestStreakDays', ['longestStreakAt']);
   return result;
