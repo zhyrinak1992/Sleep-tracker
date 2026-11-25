@@ -50,7 +50,7 @@ void main() {
       expect(awakenings, hasLength(1));
       expect(awakenings.single.detail, contains('15 мин'));
       expect(pulse, hasLength(5));
-      expect(pulse.where((event) => event.isElevated).map((event) => event.detail), ['110 уд/мин']);
+      expect(pulse.where((event) => event.isElevated).map((event) => event.detail).toList(), ['110 уд/мин']);
       expect(audio, hasLength(1));
       expect(audio.single.title, contains('Храп'));
       expect(events.map((event) => event.at), orderedEquals(
