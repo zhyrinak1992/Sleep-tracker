@@ -1431,8 +1431,7 @@ class _HealthTagMetricHistoryChartState
       );
 
   @override
-  Widget build(BuildContext context) => SectionCard(
-    child: Column(
+  Widget build(BuildContext context) => Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('Динамика ночных показателей по отметке',
@@ -1528,8 +1527,7 @@ class _HealthTagMetricHistoryChartState
           },
         ),
       ],
-    ),
-  );
+    );
 }
 
 class _HealthTagNightMetricPainter extends CustomPainter {
