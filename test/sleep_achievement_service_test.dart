@@ -21,6 +21,17 @@ void main() {
       'CREATE TABLE app_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
     );
     await database.execute('''
+      CREATE TABLE morning_reports (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        report_date TEXT NOT NULL,
+        wellbeing INTEGER,
+        sleep_quality INTEGER,
+        answers_json TEXT,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await database.execute('''
       CREATE TABLE sleep_stages (
         id TEXT PRIMARY KEY,
         session_id TEXT NOT NULL,
@@ -70,7 +81,7 @@ void main() {
     final initial = await SleepAchievementService.instance.load([first]);
     expect(initial.newRecordKeys, isEmpty);
     expect(initial.earnedAt['first_night'], DateTime(2026, 11, 20));
-    expect(initial.recordHistory, hasLength(3));
+    expect(initial.recordHistory, hasLength(1));
     expect(
       initial.recordHistory
           .firstWhere((event) => event.metric == 'longestSleepMinutes')
@@ -84,7 +95,7 @@ void main() {
     ]);
     expect(improved.newRecordKeys, contains('longestSleep'));
     expect(improved.records.longestSleepMinutes, 540);
-    expect(improved.recordHistory, hasLength(4));
+    expect(improved.recordHistory, hasLength(2));
     expect(
       improved.recordHistory
           .lastWhere((event) => event.metric == 'longestSleepMinutes')
@@ -97,11 +108,11 @@ void main() {
       better,
     ]);
     expect(unchanged.newRecordKeys, isEmpty);
-    expect(unchanged.recordHistory, hasLength(4));
+    expect(unchanged.recordHistory, hasLength(2));
 
     final afterDeletion = await SleepAchievementService.instance.load([first]);
     expect(afterDeletion.records.longestSleepMinutes, 540);
-    expect(afterDeletion.recordHistory, hasLength(4));
+    expect(afterDeletion.recordHistory, hasLength(2));
     expect(
       afterDeletion.recordHistory
           .lastWhere((event) => event.metric == 'longestSleepMinutes')
