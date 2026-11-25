@@ -89,9 +89,15 @@ class _SleepSessionComparisonScreenState extends State<SleepSessionComparisonScr
           const Divider(height: 1),
           _row(
             'Количество пробуждений',
-            a.hasAwakeSamples ? a.awakeningCount.toString() : 'Нет данных',
-            b.hasAwakeSamples ? b.awakeningCount.toString() : 'Нет данных',
-            _delta(a.hasAwakeSamples ? a.awakeningCount : null, b.hasAwakeSamples ? b.awakeningCount : null, unit: 'эп.'),
+            a.hasAwakeSamples && a.stageCoveragePercent != null && a.stageCoveragePercent! >= 80
+                ? a.awakeningCount.toString() : 'Нет данных',
+            b.hasAwakeSamples && b.stageCoveragePercent != null && b.stageCoveragePercent! >= 80
+                ? b.awakeningCount.toString() : 'Нет данных',
+            _delta(
+              a.hasAwakeSamples && a.stageCoveragePercent != null && a.stageCoveragePercent! >= 80 ? a.awakeningCount : null,
+              b.hasAwakeSamples && b.stageCoveragePercent != null && b.stageCoveragePercent! >= 80 ? b.awakeningCount : null,
+              unit: 'эп.',
+            ),
           ),
           const Divider(height: 1),
           _row('Суммарное бодрствование', _duration(a.awakeStageMinutes), _duration(b.awakeStageMinutes), _delta(a.awakeStageMinutes, b.awakeStageMinutes)),
