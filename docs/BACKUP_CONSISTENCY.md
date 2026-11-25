@@ -12,6 +12,14 @@ Restore validates the supported schema version, required sections, session ident
 
 Audio attachments are written to new app-managed files before the database restore. If file preparation or database restore fails, those newly written files are removed. During a successful full restore, previous audio files are removed only after the database transaction succeeds. Expired audio clips retain their event metadata with a null file path; active retained clips must have a valid, non-empty attachment in format v3/v4 archives. Import rejects empty decoded audio payloads.
 
+## Portable archive format and confidentiality
+
+- Current exports are plain portable JSON documents with a `sleep_tracker_backup` header and format version 5.
+- A separate archive password is intentionally not required, in accordance with the approved TЗ v191 decision. The app relies on iOS app-container protection for local data; exported files are controlled by the destination selected by the user in the system share sheet.
+- Integrity is checked independently of encryption: the manifest contains a SHA-256 digest of the complete data payload, table counts, and SHA-256/size entries for every included audio attachment.
+- New exports must not be wrapped in the legacy password-encrypted envelope. Import remains backward-compatible with earlier encrypted envelopes and asks for their password only when such an archive is selected.
+- The export includes only audio files that still exist and remain within the seven-day retention window; event cards remain in the database after their audio file expires.
+
 ## Remaining platform verification
 
 Automated Flutter CI validates static analysis and tests in the repository. It does not replace an on-device iOS restore test, a filesystem interruption test, or a real migration test against an existing user database. Those checks remain required before treating the backup workflow as fully device-verified.
