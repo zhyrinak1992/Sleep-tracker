@@ -32,6 +32,32 @@ void main() {
     }
   });
 
+  test('unlimited history query returns records beyond the default page', () async {
+    final path = '${directory.path}/complete-history.sqlite';
+    SleepDatabase.instance.setDatabasePathForTesting(path);
+    migratedDatabase = await SleepDatabase.instance.database;
+
+    for (var index = 0; index < 125; index++) {
+      final startedAt = DateTime.utc(2026, 1, 1).add(Duration(days: index));
+      final endedAt = startedAt.add(const Duration(hours: 8));
+      await migratedDatabase!.insert('sleep_sessions', {
+        'id': 'night-$index',
+        'started_at': startedAt.toIso8601String(),
+        'ended_at': endedAt.toIso8601String(),
+        'source': 'manual',
+        'created_at': startedAt.toIso8601String(),
+        'updated_at': endedAt.toIso8601String(),
+        'user_edited': 1,
+      });
+    }
+
+    expect(await SleepDatabase.instance.getSessions(), hasLength(100));
+    final completeHistory = await SleepDatabase.instance.getSessions(limit: null);
+    expect(completeHistory, hasLength(125));
+    expect(completeHistory.first.id, 'night-124');
+    expect(completeHistory.last.id, 'night-0');
+  });
+
   test('upgrades a v1 database to v8 without losing sleep history or notes',
       () async {
     final path = '${directory.path}/legacy-v1.sqlite';
