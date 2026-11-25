@@ -351,15 +351,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final awakenings = <String, int>{};
       for (final session in relevant) {
         final rows = stages[session.id] ?? const <Map<String, Object?>>[];
-        final hasAwakeSamples = rows.any((row) {
-          final stage = (row['stage'] as String? ?? '').toLowerCase();
-          return stage.contains('бодрств') || stage == 'awake' || stage.contains('awake');
-        });
-        if (hasAwakeSamples) {
-          awakenings[session.id] = SleepSessionMetrics.calculate(
-            session: session,
-            stages: rows,
-          ).awakeningCount;
+        final metrics = SleepSessionMetrics.calculate(
+          session: session,
+          stages: rows,
+        );
+        // A zero awakening count is meaningful only with confirmed awake
+        // samples and sufficient stage coverage.
+        if (metrics.hasAwakeSamples &&
+            metrics.stageCoveragePercent != null &&
+            metrics.stageCoveragePercent! >= 80) {
+          awakenings[session.id] = metrics.awakeningCount;
         }
       }
       final customTags = await CustomSleepTagStore(
