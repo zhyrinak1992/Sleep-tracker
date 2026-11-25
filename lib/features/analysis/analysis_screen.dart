@@ -45,12 +45,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   @override
   void initState() {
     super.initState();
-    _future = widget.database.getSessions(limit: 10000);
+    _future = widget.database.getSessions(limit: null);
     unawaited(_generateClosedReports());
   }
 
   void _reload() {
-    setState(() => _future = widget.database.getSessions(limit: 10000));
+    setState(() => _future = widget.database.getSessions(limit: null));
     unawaited(_generateClosedReports());
   }
 
