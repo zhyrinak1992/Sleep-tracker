@@ -66,11 +66,18 @@ class HealthDayTagNightHistory {
       final tags = tagsByDay[day] ?? const <String>[];
       if (!tags.contains(tag)) continue;
 
+      final sessionStages = stagesBySession[session.id] ?? const [];
       final metrics = SleepSessionMetrics.calculate(
         session: session,
-        stages: stagesBySession[session.id] ?? const [],
+        stages: sessionStages,
       );
       final coverage = metrics.stageCoveragePercent;
+      final hasAwakeSamples = sessionStages.any((stage) {
+        final name = (stage['stage'] ?? stage['stage_type'] ?? stage['type'] ?? '')
+            .toString()
+            .toLowerCase();
+        return name.contains('awake') || name.contains('бодрств');
+      });
       final value = switch (metric) {
         HealthDayTagNightMetric.sleepDuration =>
           metrics.sleepDurationMinutes == null
@@ -81,7 +88,7 @@ class HealthDayTagNightHistory {
         HealthDayTagNightMetric.sleepLatency =>
           metrics.sleepLatencyMinutes?.toDouble(),
         HealthDayTagNightMetric.awakenings =>
-          coverage != null && coverage >= 80
+          coverage != null && coverage >= 80 && hasAwakeSamples
               ? metrics.awakeningCount.toDouble()
               : null,
         HealthDayTagNightMetric.morningRating =>
