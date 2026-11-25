@@ -395,10 +395,81 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<String?> _requestBackupPassword({required bool confirm}) async {
+    final passwordController = TextEditingController();
+    final confirmController = TextEditingController();
+    String? errorText;
+    try {
+      return await showDialog<String>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            title: Text(confirm ? 'Задать пароль копии' : 'Пароль резервной копии'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Пароль не сохраняется в приложении. Он понадобится при восстановлении на этом или другом iPhone. Используйте не менее 10 символов.'),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: passwordController,
+                  obscureText: true,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: const InputDecoration(labelText: 'Пароль', border: OutlineInputBorder()),
+                ),
+                if (confirm) ...[
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: confirmController,
+                    obscureText: true,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    decoration: const InputDecoration(labelText: 'Повторите пароль', border: OutlineInputBorder()),
+                  ),
+                ],
+                if (errorText != null) ...[
+                  const SizedBox(height: 8),
+                  Text(errorText!, style: const TextStyle(color: Colors.red)),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Отмена'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final password = passwordController.text;
+                  if (password.length < 10) {
+                    setDialogState(() => errorText = 'Нужно не менее 10 символов.');
+                    return;
+                  }
+                  if (confirm && password != confirmController.text) {
+                    setDialogState(() => errorText = 'Пароли не совпадают.');
+                    return;
+                  }
+                  Navigator.pop(dialogContext, password);
+                },
+                child: Text(confirm ? 'Создать копию' : 'Продолжить'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } finally {
+      passwordController.dispose();
+      confirmController.dispose();
+    }
+  }
+
   Future<void> _createBackup() async {
+    final password = await _requestBackupPassword(confirm: true);
+    if (password == null || !mounted) return;
     await _run(
-      () => BackupService.instance.exportToFiles(),
-      'Резервная копия подготовлена. Выберите «Сохранить в Файлы».',
+      () => BackupService.instance.exportToFiles(password: password),
+      'Зашифрованная резервная копия подготовлена. Выберите «Сохранить в Файлы».',
     );
   }
 
@@ -634,12 +705,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Text('Резервное копирование', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
           const SizedBox(height: 8),
           const Text(
-            'Резервная копия содержит историю сна, оценки, теги, заметки, показатели, настройки и доступные аудиофрагменты. Архив переносимый, создаётся вручную и не требует отдельного пароля.',
+            'Резервная копия содержит историю сна, оценки, теги, заметки, показатели, настройки и доступные аудиофрагменты. Новый формат шифруется паролем AES-256-GCM и подходит для переноса на другой iPhone.',
             style: TextStyle(color: AppTheme.muted, height: 1.5),
           ),
           const SizedBox(height: 8),
           const Text(
-            'Целостность данных и аудиофайлов проверяется по манифесту и контрольным суммам SHA-256. Старые зашифрованные архивы прежнего формата также можно импортировать с их паролем.',
+            'Пароль не сохраняется в приложении и понадобится при восстановлении. Старые незашифрованные JSON-копии также можно импортировать.',
             style: TextStyle(color: AppTheme.teal, fontSize: 12, height: 1.45),
           ),
           const SizedBox(height: 14),
