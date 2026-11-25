@@ -599,13 +599,26 @@ class SleepDatabase {
   }
 
   Future<void> restoreSessionFromTrash(String sessionId) async {
-    final count = await (await database).update('sleep_sessions', {'deleted_at': null, 'updated_at': DateTime.now().toUtc().toIso8601String()}, where: 'id = ? AND deleted_at IS NOT NULL', whereArgs: [sessionId]);
-    if (count == 0) throw StateError('Запись не найдена в корзине.');
+    // Enforce the 30-day retention boundary even if the periodic cleanup
+    // timer has not run yet (for example, after a long period in the background).
+    await purgeExpiredTrash();
+    final count = await (await database).update(
+      'sleep_sessions',
+      {'deleted_at': null, 'updated_at': DateTime.now().toUtc().toIso8601String()},
+      where: 'id = ? AND deleted_at IS NOT NULL',
+      whereArgs: [sessionId],
+    );
+    if (count == 0) throw StateError('Запись не найдена в корзине или срок хранения истёк.');
   }
 
   Future<int> restoreAllTrashedSessions() async {
+    await purgeExpiredTrash();
     final now = DateTime.now().toUtc().toIso8601String();
-    return (await database).update('sleep_sessions', {'deleted_at': null, 'updated_at': now}, where: 'deleted_at IS NOT NULL');
+    return (await database).update(
+      'sleep_sessions',
+      {'deleted_at': null, 'updated_at': now},
+      where: 'deleted_at IS NOT NULL',
+    );
   }
 
   Future<void> permanentlyDeleteSession(String sessionId) => permanentlyDeleteSessions([sessionId]);
@@ -658,11 +671,13 @@ class SleepDatabase {
   }
 
   Future<List<DateTime>> getTrashExpiryDates() async {
+    await purgeExpiredTrash();
     final rows = await (await database).query('sleep_sessions', columns: ['deleted_at'], where: 'deleted_at IS NOT NULL');
     return rows.map((row) => DateTime.parse(row['deleted_at']! as String).toLocal().add(const Duration(days: 30))).toList();
   }
 
   Future<List<SleepSession>> getTrashedSessions() async {
+    await purgeExpiredTrash();
     final rows = await (await database).query('sleep_sessions', where: 'deleted_at IS NOT NULL', orderBy: 'deleted_at DESC');
     return rows.map(SleepSession.fromMap).toList();
   }
