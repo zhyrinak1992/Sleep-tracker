@@ -282,7 +282,11 @@ class HealthDayTagMonthlyReportService {
         );
         await database.setAppMetadata(metadataKey, jsonEncode(report.toJson()));
         if (month.year == lastClosedMonth.year && month.month == lastClosedMonth.month) {
-          await NotificationService.instance.healthDayTagMonthlyReportReady(key);
+          try {
+            await NotificationService.instance.healthDayTagMonthlyReportReady(key);
+          } catch (_) {
+            // A denied notification must not hide a successfully saved report.
+          }
         }
       }
       month = DateTime(month.year, month.month + 1);
