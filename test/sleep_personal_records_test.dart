@@ -103,19 +103,25 @@ void main() {
       const previous = SleepPersonalRecords(
         longestSleepMinutes: 500,
         longestSleepSessionId: 'old',
+        bestSleepScore: 98,
+        bestSleepScoreSessionId: 'old-score',
         bestEfficiencyPercent: 96,
         bestEfficiencySessionId: 'old',
-        shortestLatencyMinutes: 3,
-        shortestLatencySessionId: 'old',
-        longestStreakDays: 12,
+        fewestAwakenings: 1,
+        fewestAwakeningsSessionId: 'old-awakenings',
       );
-      const current = SleepPersonalRecords(longestStreakDays: 4);
+      const current = SleepPersonalRecords(
+        longestSleepMinutes: 450,
+        bestSleepScore: 90,
+        bestEfficiencyPercent: 88,
+        fewestAwakenings: 3,
+      );
       final merged = current.preserveBest(previous);
 
       expect(merged.longestSleepMinutes, 500);
+      expect(merged.bestSleepScore, 98);
       expect(merged.bestEfficiencyPercent, 96);
-      expect(merged.shortestLatencyMinutes, 3);
-      expect(merged.longestStreakDays, 12);
+      expect(merged.fewestAwakenings, 1);
     });
 
     test('keeps dated history for the four approved record types', () {
