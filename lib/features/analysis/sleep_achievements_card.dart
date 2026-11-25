@@ -124,6 +124,62 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
     ]),
   );
 
+  String _recordTitle(String key) {
+    switch (key) {
+      case 'longestSleep': return 'самая продолжительная ночь';
+      case 'bestEfficiency': return 'лучшая эффективность';
+      case 'shortestLatency': return 'минимальная задержка засыпания';
+      case 'longestStreak': return 'самая длинная серия';
+      default: return 'личный рекорд';
+    }
+  }
+
+  Widget _newRecordCelebration(Set<String> newKeys) {
+    final titles = newKeys.map(_recordTitle).toList()..sort();
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.88, end: 1),
+      duration: const Duration(milliseconds: 620),
+      curve: Curves.easeOutBack,
+      builder: (context, scale, child) => Transform.scale(
+        scale: scale,
+        child: child,
+      ),
+      child: Container(
+        margin: const EdgeInsets.only(top: 12),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF214B59), Color(0xFF20264D)],
+          ),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppTheme.teal.withValues(alpha: 0.55)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.celebration_rounded, color: AppTheme.teal, size: 28),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Новый личный рекорд!',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    titles.join(' · '),
+                    style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _personalRecordsSection(SleepPersonalRecords records, Set<String> newKeys) =>
     Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const SizedBox(height: 14),
@@ -206,6 +262,8 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
               style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4),
             ),
             _personalRecordsSection(state.records, state.newRecordKeys),
+            if (state.displayEnabled && state.newRecordKeys.isNotEmpty)
+              _newRecordCelebration(state.newRecordKeys),
             if (state.displayEnabled) ...[
               const SizedBox(height: 12),
               Text(
