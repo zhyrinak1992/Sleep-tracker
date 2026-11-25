@@ -16,7 +16,7 @@ class SleepAchievementsScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
           const Text(
-            'Все ваши достижения, личные рекорды и история их улучшения.',
+            'Ваши достижения и четыре личных рекорда, рассчитанные по завершённым ночам.',
             style: TextStyle(color: Colors.white70, height: 1.4),
           ),
           const SizedBox(height: 12),
