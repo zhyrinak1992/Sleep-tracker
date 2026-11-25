@@ -69,6 +69,7 @@ void main() {
 
     final initial = await SleepAchievementService.instance.load([first]);
     expect(initial.newRecordKeys, isEmpty);
+    expect(initial.earnedAt['first_night'], first.startedAt);
     expect(initial.recordHistory, hasLength(3));
     expect(
       initial.recordHistory
@@ -86,7 +87,7 @@ void main() {
     expect(improved.recordHistory, hasLength(4));
     expect(
       improved.recordHistory
-          .firstWhere((event) => event.metric == 'longestSleepMinutes')
+          .lastWhere((event) => event.metric == 'longestSleepMinutes')
           .value,
       540,
     );
@@ -103,7 +104,7 @@ void main() {
     expect(afterDeletion.recordHistory, hasLength(4));
     expect(
       afterDeletion.recordHistory
-          .firstWhere((event) => event.metric == 'longestSleepMinutes')
+          .lastWhere((event) => event.metric == 'longestSleepMinutes')
           .value,
       540,
     );
