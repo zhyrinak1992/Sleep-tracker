@@ -171,4 +171,53 @@ void main() {
     final restored = await SleepDatabase.instance.exportSnapshot();
     expect(restored, equals(exported));
   });
+
+  test('failed full restore rolls back and preserves all existing local data', () async {
+    const sessionId = 'local-night-to-protect';
+    const timestamp = '2026-11-24T22:00:00.000Z';
+    await destination.insert('sleep_sessions', {
+      'id': sessionId,
+      'started_at': timestamp,
+      'ended_at': '2026-11-25T07:00:00.000Z',
+      'source': 'manual',
+      'created_at': timestamp,
+      'updated_at': timestamp,
+      'user_edited': 1,
+    });
+    await destination.insert('sleep_notes', {
+      'id': 'local-note-to-protect',
+      'session_id': sessionId,
+      'body': 'Эта заметка должна сохраниться',
+      'created_at': timestamp,
+      'updated_at': timestamp,
+    });
+    await destination.insert('app_metadata', {
+      'key': 'local-setting-to-protect',
+      'value': 'keep-me',
+    });
+
+    SleepDatabase.instance.setDatabaseForTesting(destination);
+    final before = await SleepDatabase.instance.exportSnapshot();
+    final invalidSnapshot = Map<String, dynamic>.from(before);
+    final sessions = (invalidSnapshot['sleep_sessions'] as List)
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList();
+    // This field is rejected by SQLite's NOT NULL constraint during insertion,
+    // after the replacement transaction has already begun deleting old rows.
+    sessions.single['user_edited'] = null;
+    invalidSnapshot['sleep_sessions'] = sessions;
+
+    await expectLater(
+      SleepDatabase.instance.restoreSnapshot(invalidSnapshot),
+      throwsA(anything),
+    );
+
+    final after = await SleepDatabase.instance.exportSnapshot();
+    expect(after, equals(before));
+    expect(after['sleep_notes'], hasLength(1));
+    expect((after['app_metadata'] as List).any(
+      (row) => row['key'] == 'local-setting-to-protect',
+    ), isTrue);
+  });
+
 }
