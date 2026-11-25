@@ -140,6 +140,38 @@ void main() {
       expect(result.recoveryNightsAtThirtyMinutes, 14);
     });
 
+    test('uses a rolling seven-day window and excludes nights older than 7x24 hours', () {
+      final now = DateTime(2026, 11, 23, 12);
+      SleepSession night(String id, DateTime start) => SleepSession(
+        id: id,
+        startedAt: start,
+        endedAt: start.add(const Duration(hours: 8)),
+        source: 'health',
+        actualSleepStartedAt: start,
+        actualSleepEndedAt: start.add(const Duration(hours: 7)),
+      );
+      final sessions = [
+        night('outside', DateTime(2026, 11, 16, 11, 59)),
+        night('inside-1', DateTime(2026, 11, 16, 13)),
+        night('inside-2', DateTime(2026, 11, 17, 22)),
+        night('inside-3', DateTime(2026, 11, 18, 22)),
+        night('inside-4', DateTime(2026, 11, 19, 22)),
+        night('inside-5', DateTime(2026, 11, 20, 22)),
+      ];
+
+      final result = SleepForecastAnalysis.calculate(
+        sessions: sessions,
+        now: now,
+        plannedWakeMinute: 7 * 60,
+        plannedBedtimeMinute: 23 * 60,
+        targetSleepMinutes: 480,
+      );
+
+      expect(result.recentSleepSamples, 5);
+      expect(result.recentSleepMinutes, 5 * 420);
+      expect(result.accumulatedShortfallMinutes, 5 * 60);
+    });
+
     test('falls back to neutral time arithmetic when personal latency sample is insufficient', () {
       final now = DateTime(2026, 11, 23, 12);
       final result = SleepForecastAnalysis.calculate(
