@@ -412,9 +412,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _createBackup() async {
+    final password = await _requestBackupPassword(confirm: true);
+    if (password == null || !mounted) return;
     await _run(
-      () => BackupService.instance.exportToFiles(),
-      'Резервная копия подготовлена без дополнительного пароля. Выберите «Сохранить в Файлы».',
+      () => BackupService.instance.exportToFiles(password: password),
+      'Зашифрованная резервная копия подготовлена. Выберите «Сохранить в Файлы».',
     );
   }
 
