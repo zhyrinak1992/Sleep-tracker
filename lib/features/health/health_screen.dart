@@ -465,7 +465,7 @@ class _HealthScreenState extends State<HealthScreen> {
             onEdit: _editHealthDay,
           ),
           const SizedBox(height: 12),
-          _HealthTagStatsCard(entriesFuture: _dayEntriesFuture, sessions: data?.sessions ?? const []),
+          _HealthTagStatsCard(entriesFuture: _dayEntriesFuture, sessions: data?.sessions ?? const [], onSelectDay: _selectHealthDay),
           const SizedBox(height: 12),
           HealthReportHistoryCard(
             reports: _healthReportsFuture,
@@ -549,9 +549,10 @@ class _HealthDayEntry {
 }
 
 class _HealthTagStatsCard extends StatefulWidget {
-  const _HealthTagStatsCard({required this.entriesFuture, required this.sessions});
+  const _HealthTagStatsCard({required this.entriesFuture, required this.sessions, required this.onSelectDay});
   final Future<Map<DateTime, _HealthDayEntry>> entriesFuture;
   final List<SleepSession> sessions;
+  final ValueChanged<DateTime> onSelectDay;
 
   @override
   State<_HealthTagStatsCard> createState() => _HealthTagStatsCardState();
@@ -561,6 +562,8 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
   String? _selectedTag;
   final Set<String> _overviewTags = {};
   bool _matchAllOverviewTags = false;
+  bool _overviewNewestFirst = true;
+  DateTime _overviewMonth = DateTime.now();
 
   @override
   Widget build(BuildContext context) => FutureBuilder<Map<DateTime, _HealthDayEntry>>(
@@ -616,7 +619,14 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
           selectedTags: overviewTags,
           requireAll: _matchAllOverviewTags,
         )
-      ).toList()..sort((a, b) => b.key.compareTo(a.key));
+      ).toList()
+        ..sort((a, b) => _overviewNewestFirst
+            ? b.key.compareTo(a.key)
+            : a.key.compareTo(b.key));
+      final overviewPercentage = HealthDayTagLibrary.percentageOfRecordedDays(
+        matchedDays: matchedEntries.length,
+        recordedDays: entries.length,
+      );
       final monthlyCounts = List<int>.generate(12, (index) {
         final start = DateTime(now.year, now.month - 11 + index);
         final end = DateTime(start.year, start.month + 1);
@@ -677,6 +687,7 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.event_available_outlined, size: 18),
               title: Text(_date(dates[index]), style: const TextStyle(fontSize: 12)),
+              onTap: () => widget.onSelectDay(dates[index]),
             ),
           )),
           const Divider(height: 22),
@@ -703,9 +714,31 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
               onSelectionChanged: (value) => setState(() => _matchAllOverviewTags = value.first),
             ),
             const SizedBox(height: 8),
-            Text('Найдено дат: ${matchedEntries.length}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+            Text(
+              'Найдено дат: ${matchedEntries.length} · ${matchedEntries.length} из ${entries.length} дней с записями'
+              '${overviewPercentage == null ? '' : ' (${_number(overviewPercentage)}%)'}',
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+            ),
             for (final tag in overviewTags)
-              Text('$tag: ${matchedEntries.where((entry) => entry.value.tags.contains(tag)).length}', style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+              Text('$tag: ${matchedEntries.where((entry) => entry.value.tags.contains(tag)).length}',
+                style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+            const SizedBox(height: 8),
+            _HealthTagOverviewCalendar(
+              month: _overviewMonth,
+              matchedDays: matchedEntries.map((entry) => entry.key).toSet(),
+              onMonthChanged: (month) => setState(() => _overviewMonth = month),
+              onSelectDay: widget.onSelectDay,
+            ),
+            const SizedBox(height: 8),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: true, label: Text('Сначала новые')),
+                ButtonSegment(value: false, label: Text('Сначала старые')),
+              ],
+              selected: {_overviewNewestFirst},
+              onSelectionChanged: (value) => setState(() => _overviewNewestFirst = value.first),
+            ),
+            const SizedBox(height: 6),
             SizedBox(height: 120, child: matchedEntries.isEmpty
               ? const Center(child: Text('Совпадений нет', style: TextStyle(color: AppTheme.muted, fontSize: 11)))
               : ListView.builder(
@@ -719,6 +752,7 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
                       leading: const Icon(Icons.event_note_rounded, size: 18),
                       title: Text(_date(entry.key), style: const TextStyle(fontSize: 12)),
                       subtitle: Text(matched.join(' · '), style: const TextStyle(fontSize: 10)),
+                      onTap: () => widget.onSelectDay(entry.key),
                     );
                   },
                 )),
@@ -728,6 +762,93 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
       ));
     },
   );
+}
+
+class _HealthTagOverviewCalendar extends StatelessWidget {
+  const _HealthTagOverviewCalendar({
+    required this.month,
+    required this.matchedDays,
+    required this.onMonthChanged,
+    required this.onSelectDay,
+  });
+
+  final DateTime month;
+  final Set<DateTime> matchedDays;
+  final ValueChanged<DateTime> onMonthChanged;
+  final ValueChanged<DateTime> onSelectDay;
+
+  @override
+  Widget build(BuildContext context) {
+    final firstWeekday = DateTime(month.year, month.month, 1).weekday - 1;
+    final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
+    final cellCount = ((firstWeekday + daysInMonth + 6) ~/ 7) * 7;
+    const weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Календарь совпадений',
+          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+        Row(children: [
+          IconButton(
+            tooltip: 'Предыдущий месяц',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => onMonthChanged(DateTime(month.year, month.month - 1)),
+            icon: const Icon(Icons.chevron_left_rounded),
+          ),
+          Expanded(child: Center(child: Text(_monthTitle(month),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)))),
+          IconButton(
+            tooltip: 'Следующий месяц',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => onMonthChanged(DateTime(month.year, month.month + 1)),
+            icon: const Icon(Icons.chevron_right_rounded),
+          ),
+        ]),
+        Row(children: [
+          for (final day in weekdays)
+            Expanded(child: Center(child: Text(day,
+              style: const TextStyle(color: AppTheme.muted, fontSize: 9)))),
+        ]),
+        const SizedBox(height: 4),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 7,
+            mainAxisSpacing: 3,
+            crossAxisSpacing: 3,
+          ),
+          itemCount: cellCount,
+          itemBuilder: (context, index) {
+            final day = DateTime(month.year, month.month, index - firstWeekday + 1);
+            final inMonth = day.month == month.month;
+            final matched = inMonth && matchedDays.contains(day);
+            return InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: matched ? () => onSelectDay(day) : null,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: matched ? AppTheme.teal.withValues(alpha: 0.22) : null,
+                  borderRadius: BorderRadius.circular(8),
+                  border: matched ? Border.all(color: AppTheme.teal) : null,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  '${day.day}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: !inMonth ? AppTheme.muted.withValues(alpha: 0.35)
+                        : matched ? AppTheme.teal : AppTheme.muted,
+                    fontWeight: matched ? FontWeight.w800 : FontWeight.w400,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
 }
 
 class _MonthlyTagBarsPainter extends CustomPainter {
