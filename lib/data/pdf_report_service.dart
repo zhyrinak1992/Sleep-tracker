@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart' as pdf;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 import '../models/sleep_session.dart';
@@ -547,7 +548,7 @@ class PdfReportService {
         ],
         headerStyle: pw.TextStyle(font: bold, fontSize: 7),
         cellStyle: pw.TextStyle(font: regular, fontSize: 7),
-        headerDecoration: const pw.BoxDecoration(color: pw.PdfColor(0.90, 0.92, 0.95)),
+        headerDecoration: const pw.BoxDecoration(color: pdf.PdfColor(0.90, 0.92, 0.95)),
         cellAlignment: pw.Alignment.centerLeft,
         cellPadding: const pw.EdgeInsets.all(4),
       ));
@@ -590,7 +591,7 @@ class PdfReportService {
           ],
           headerStyle: pw.TextStyle(font: bold, fontSize: 7),
           cellStyle: pw.TextStyle(font: regular, fontSize: 7),
-          headerDecoration: const pw.BoxDecoration(color: PdfColor(0.94, 0.95, 0.97)),
+          headerDecoration: const pw.BoxDecoration(color: pdf.PdfColor(0.94, 0.95, 0.97)),
           cellPadding: const pw.EdgeInsets.all(3),
         ));
       }
