@@ -505,16 +505,16 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
             ),
             const SizedBox(height: 5),
             if (result.isSufficient && previousResult.isSufficient) ...[
-              _ReportLine(
-                label: 'Предыдущий период',
+              periodLine(
+                'Предыдущий период',
                 '${_formatDifference(previousResult.difference!, _metric)} · ${previousResult.withTag.nights}/${previousResult.withoutTag.nights} ночей',
               ),
-              _ReportLine(
-                label: 'Текущий период',
+              periodLine(
+                'Текущий период',
                 '${_formatDifference(result.difference!, _metric)} · ${result.withTag.nights}/${result.withoutTag.nights} ночей',
               ),
-              _ReportLine(
-                label: 'Изменение разницы',
+              periodLine(
+                'Изменение разницы',
                 '${_formatDifference(periodDifferenceChange!, _metric)}',
               ),
             ] else
