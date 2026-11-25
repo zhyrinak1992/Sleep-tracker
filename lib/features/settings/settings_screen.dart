@@ -798,7 +798,7 @@ class _AudioEventsPanelState extends State<AudioEventsPanel> {
   Future<List<Map<String, Object?>>> _load() => SleepDatabase.instance.getAudioEvents();
   static const categories = <String, String>{
     'unknown': 'Неопределённый звук', 'snore': 'Храп', 'cough': 'Кашель',
-    'speech': 'Разговор', 'laugh': 'Смех', 'groan': 'Стон', 'sobbing': 'Всхлипывание', 'noise': 'Посторонний шум',
+    'speech': 'Разговор', 'laugh': 'Смех', 'groan': 'Стон', 'sobbing': 'Всхлипывания', 'noise': 'Посторонний шум',
   };
   @override
   void dispose() { _player.dispose(); super.dispose(); }
