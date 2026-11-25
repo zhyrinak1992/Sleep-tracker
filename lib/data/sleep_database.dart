@@ -802,7 +802,8 @@ class SleepDatabase {
     if (path is String && path.isNotEmpty) { try { await File(path).delete(); } catch (_) {} }
     await db.delete('audio_events', where: 'id = ?', whereArgs: [id]);
   }
-  Future<void> updateAudioClassification(String id, String category, double confidence) async => (await database).update('audio_events', {'category': category, 'confidence': confidence, 'user_corrected': 0}, where: 'id = ?', whereArgs: [id]);
+  /// Automatic classification must never overwrite a category corrected by the user.
+  Future<void> updateAudioClassification(String id, String category, double confidence) async => (await database).update('audio_events', {'category': category, 'confidence': confidence}, where: 'id = ? AND user_corrected = 0', whereArgs: [id]);
   Future<void> updateAudioCategory(String id, String category) async => (await database).update('audio_events', {'category': category, 'user_corrected': 1}, where: 'id = ?', whereArgs: [id]);
   /// Удаляет только аудиофайлы старше срока хранения; карточки событий
   /// остаются в БД для истории, статистики и резервного копирования.
