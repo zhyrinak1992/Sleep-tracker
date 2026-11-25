@@ -323,6 +323,22 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
         efficiencyBySession: data.efficiencyBySession,
         sleepLatencyBySession: data.sleepLatencyBySession,
       );
+      final selectedPeriodDuration = widget.endExclusive.difference(widget.start);
+      final previousPeriodStart = widget.start.subtract(selectedPeriodDuration);
+      final previousResult = TagSleepComparison.calculate(
+        sessions: widget.sessions,
+        tagsBySession: data.tagsBySession,
+        tagKeys: selectedKeys,
+        start: previousPeriodStart,
+        endExclusive: widget.start,
+        metric: _metric,
+        awakeningCountsBySession: data.awakeningCountsBySession,
+        efficiencyBySession: data.efficiencyBySession,
+        sleepLatencyBySession: data.sleepLatencyBySession,
+      );
+      final periodDifferenceChange = result.isSufficient && previousResult.isSufficient
+          ? result.difference! - previousResult.difference!
+          : null;
       final matchingTemplates = data.templates.where((item) => item.id == _activeTemplateId);
       final activeTemplate = matchingTemplates.isEmpty ? null : matchingTemplates.first;
 
@@ -471,6 +487,34 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
                 'Разница средних: ${_formatDifference(result.difference!, result.metric)} в группе со всеми отметками. Выборки: ${result.withTag.nights} и ${result.withoutTag.nights} ночей.',
                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, height: 1.4),
               ),
+            const SizedBox(height: 12),
+            const Text(
+              'Изменение закономерности относительно предыдущего равного по длительности периода',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+            ),
+            const SizedBox(height: 5),
+            if (result.isSufficient && previousResult.isSufficient) ...[
+              _ReportLine(
+                label: 'Предыдущий период',
+                value: '${_formatDifference(previousResult.difference!, _metric)} · ${previousResult.withTag.nights}/${previousResult.withoutTag.nights} ночей',
+              ),
+              _ReportLine(
+                label: 'Текущий период',
+                value: '${_formatDifference(result.difference!, _metric)} · ${result.withTag.nights}/${result.withoutTag.nights} ночей',
+              ),
+              _ReportLine(
+                label: 'Изменение разницы',
+                value: '${_formatDifference(periodDifferenceChange!, _metric)}',
+              ),
+            ] else
+              Text(
+                'Недостаточно сопоставимых данных для двух периодов. Предыдущий период: ${previousResult.withTag.nights}/${previousResult.withoutTag.nights} ночей; текущий: ${result.withTag.nights}/${result.withoutTag.nights}.',
+                style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
+              ),
+            Text(
+              'Предыдущий период: ${DateFormat('d MMM yyyy', 'ru').format(previousPeriodStart)} — ${DateFormat('d MMM yyyy', 'ru').format(widget.start.subtract(const Duration(days: 1)))}.',
+              style: const TextStyle(color: AppTheme.muted, fontSize: 10),
+            ),
             const SizedBox(height: 5),
             const Text(
               'Учитываются только завершённые ночи с доступным выбранным показателем. Недостающие значения не заменяются нулями. Результат не является медицинским выводом.',
