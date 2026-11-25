@@ -16,6 +16,7 @@ class SleepPersonalRecords {
     this.shortestLatencySessionId,
     this.shortestLatencyAt,
     this.longestStreakDays = 0,
+    this.longestStreakAt,
   });
 
   final int? longestSleepMinutes;
@@ -28,6 +29,7 @@ class SleepPersonalRecords {
   final String? shortestLatencySessionId;
   final DateTime? shortestLatencyAt;
   final int longestStreakDays;
+  final DateTime? longestStreakAt;
 
   static SleepPersonalRecords calculate({
     required Iterable<SleepSession> sessions,
@@ -92,17 +94,23 @@ class SleepPersonalRecords {
       shortestLatencyMinutes: shortestLatency,
       shortestLatencySessionId: shortestLatencyId,
       shortestLatencyAt: shortestLatencyAt,
-      longestStreakDays: longestStreak(valid),
+      longestStreakDays: longestStreakDetails(valid).days,
+      longestStreakAt: longestStreakDetails(valid).achievedAt,
     );
   }
 
-  static int longestStreak(Iterable<SleepSession> sessions) {
+  static int longestStreak(Iterable<SleepSession> sessions) =>
+      longestStreakDetails(sessions).days;
+
+  static ({int days, DateTime? achievedAt}) longestStreakDetails(
+    Iterable<SleepSession> sessions,
+  ) {
     final days = sessions
         .where((session) => session.deletedAt == null &&
             session.endedAt != null &&
             session.duration != null &&
             session.duration!.inMinutes > 0)
-        .map((session) => DateTime.utc(
+        .map((session) => DateTime(
               session.startedAt.year,
               session.startedAt.month,
               session.startedAt.day,
@@ -111,19 +119,29 @@ class SleepPersonalRecords {
         .toList()
       ..sort();
 
-    if (days.isEmpty) return 0;
+    if (days.isEmpty) return (days: 0, achievedAt: null);
     var longest = 1;
     var current = 1;
+    var achievedAt = days.first;
     for (var i = 1; i < days.length; i++) {
-      final difference = days[i].difference(days[i - 1]).inDays;
+      final previousDay = DateTime.utc(
+        days[i - 1].year, days[i - 1].month, days[i - 1].day,
+      );
+      final currentDay = DateTime.utc(
+        days[i].year, days[i].month, days[i].day,
+      );
+      final difference = currentDay.difference(previousDay).inDays;
       if (difference == 1) {
         current++;
-        if (current > longest) longest = current;
+        if (current > longest) {
+          longest = current;
+          achievedAt = days[i];
+        }
       } else if (difference > 1) {
         current = 1;
       }
     }
-    return longest;
+    return (days: longest, achievedAt: achievedAt);
   }
 
   Map<String, Object?> toMap() => {
@@ -137,6 +155,7 @@ class SleepPersonalRecords {
         'shortestLatencySessionId': shortestLatencySessionId,
         'shortestLatencyAt': shortestLatencyAt?.toUtc().toIso8601String(),
         'longestStreakDays': longestStreakDays,
+        'longestStreakAt': longestStreakAt?.toIso8601String(),
       };
 
   factory SleepPersonalRecords.fromMap(Map<String, Object?> map) {
@@ -170,6 +189,7 @@ class SleepPersonalRecords {
       shortestLatencySessionId: string('shortestLatencySessionId'),
       shortestLatencyAt: date('shortestLatencyAt'),
       longestStreakDays: integer('longestStreakDays') ?? 0,
+      longestStreakAt: date('longestStreakAt'),
     );
   }
 
@@ -198,6 +218,9 @@ class SleepPersonalRecords {
       longestStreakDays: longestStreakDays > previous.longestStreakDays
           ? longestStreakDays
           : previous.longestStreakDays,
+      longestStreakAt: longestStreakDays > previous.longestStreakDays
+          ? longestStreakAt
+          : previous.longestStreakAt,
     );
   }
 }
