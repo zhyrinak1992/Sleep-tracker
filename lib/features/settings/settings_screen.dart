@@ -352,11 +352,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         barrierDismissible: false,
         builder: (dialogContext) => StatefulBuilder(
           builder: (dialogContext, setDialogState) => AlertDialog(
-            title: Text(confirm ? 'Задать пароль копии' : 'Пароль резервной копии'),
+            title: const Text('Пароль старой резервной копии'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Пароль не сохраняется в приложении. Он понадобится при восстановлении на этом или другом iPhone. Используйте не менее 10 символов.'),
+                const Text('Этот архив был создан в прежнем зашифрованном формате. Пароль нужен только для чтения такой старой копии; новые резервные копии Sleep Tracker создаются без отдельного пароля.'),
                 const SizedBox(height: 12),
                 TextField(
                   controller: passwordController,
@@ -389,8 +389,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               FilledButton(
                 onPressed: () {
                   final password = passwordController.text;
-                  if (password.length < 10) {
-                    setDialogState(() => errorText = 'Нужно не менее 10 символов.');
+                  if (password.isEmpty) {
+                    setDialogState(() => errorText = 'Введите пароль старой копии.');
                     return;
                   }
                   if (confirm && password != confirmController.text) {
@@ -412,11 +412,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _createBackup() async {
-    final password = await _requestBackupPassword(confirm: true);
-    if (password == null || !mounted) return;
     await _run(
-      () => BackupService.instance.exportToFiles(password: password),
-      'Зашифрованная резервная копия подготовлена. Выберите «Сохранить в Файлы».',
+      () => BackupService.instance.exportToFiles(),
+      'Резервная копия подготовлена. Выберите «Сохранить в Файлы».',
     );
   }
 
@@ -652,12 +650,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Text('Резервное копирование', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
           const SizedBox(height: 8),
           const Text(
-            'Резервная копия содержит историю сна, оценки, теги, заметки, показатели, настройки и сохранённые аудиофрагменты. Новый формат шифруется паролем AES-256-GCM и подходит для переноса на другой iPhone.',
+            'Резервная копия содержит историю сна, оценки, теги, заметки, показатели, настройки и доступные аудиофрагменты. Архив переносимый, создаётся вручную и не требует отдельного пароля.',
             style: TextStyle(color: AppTheme.muted, height: 1.5),
           ),
           const SizedBox(height: 8),
           const Text(
-            'Запомните пароль: приложение не хранит его и не сможет восстановить. Старые незашифрованные JSON-копии также можно импортировать, но при переносе рекомендуется создать новую зашифрованную копию.',
+            'Целостность данных и аудиофайлов проверяется по манифесту и контрольным суммам SHA-256. Старые зашифрованные архивы прежнего формата также можно импортировать с их паролем.',
             style: TextStyle(color: AppTheme.teal, fontSize: 12, height: 1.45),
           ),
           const SizedBox(height: 14),
