@@ -143,6 +143,7 @@ jobs:
                   if value.contains("laugh") { return "laugh" }
                   if value.contains("speech") || value.contains("talking") || value.contains("conversation") || value.contains("human voice") { return "speech" }
                   if value.contains("groan") || value.contains("moan") { return "groan" }
+                  if value.contains("sob") || value.contains("cry") { return "sobbing" }
                   if value.contains("noise") || value.contains("traffic") || value.contains("wind") { return "noise" }
                   return "unknown"
               }
