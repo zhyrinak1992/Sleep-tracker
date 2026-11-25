@@ -14,9 +14,11 @@ void main() {
 
   setUp(() async {
     database = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+    await database.execute('PRAGMA foreign_keys = ON');
     await database.execute('''
       CREATE TABLE sleep_sessions (
         id TEXT PRIMARY KEY,
+        ended_at TEXT,
         deleted_at TEXT,
         updated_at TEXT
       )
@@ -25,7 +27,8 @@ void main() {
       CREATE TABLE audio_events (
         id TEXT PRIMARY KEY,
         session_id TEXT,
-        file_path TEXT
+        file_path TEXT,
+        FOREIGN KEY (session_id) REFERENCES sleep_sessions(id) ON DELETE CASCADE
       )
     ''');
     temporaryDirectory = await Directory.systemTemp.createTemp(
@@ -40,6 +43,102 @@ void main() {
     if (await temporaryDirectory.exists()) {
       await temporaryDirectory.delete(recursive: true);
     }
+  });
+
+  test('moving several sessions to trash is atomic and rejects active sessions', () async {
+    final now = DateTime.now().toUtc();
+    await database.insert('sleep_sessions', {
+      'id': 'finished',
+      'ended_at': now.toIso8601String(),
+      'deleted_at': null,
+      'updated_at': now.toIso8601String(),
+    });
+    await database.insert('sleep_sessions', {
+      'id': 'active',
+      'ended_at': null,
+      'deleted_at': null,
+      'updated_at': now.toIso8601String(),
+    });
+
+    await expectLater(
+      SleepDatabase.instance.moveSessionsToTrash(['finished', 'active']),
+      throwsStateError,
+    );
+    var rows = await database.query('sleep_sessions', orderBy: 'id');
+    expect(rows.every((row) => row['deleted_at'] == null), isTrue);
+
+    await SleepDatabase.instance.moveSessionsToTrash(['finished', 'finished']);
+    rows = await database.query('sleep_sessions', where: 'id = ?', whereArgs: ['finished']);
+    expect(rows.single['deleted_at'], isNotNull);
+  });
+
+  test('selective permanent deletion removes only selected trash and its audio files', () async {
+    final now = DateTime.now().toUtc();
+    final selectedAudio = File('${temporaryDirectory.path}/selected.m4a');
+    final retainedAudio = File('${temporaryDirectory.path}/retained.m4a');
+    await selectedAudio.writeAsBytes([1, 2, 3]);
+    await retainedAudio.writeAsBytes([4, 5, 6]);
+    for (final id in ['selected', 'retained', 'active']) {
+      await database.insert('sleep_sessions', {
+        'id': id,
+        'ended_at': now.toIso8601String(),
+        'deleted_at': id == 'active' ? null : now.toIso8601String(),
+        'updated_at': now.toIso8601String(),
+      });
+    }
+    await database.insert('audio_events', {
+      'id': 'selected-event',
+      'session_id': 'selected',
+      'file_path': selectedAudio.path,
+    });
+    await database.insert('audio_events', {
+      'id': 'retained-event',
+      'session_id': 'retained',
+      'file_path': retainedAudio.path,
+    });
+
+    await SleepDatabase.instance.permanentlyDeleteSessions(['selected']);
+
+    final sessions = await database.query('sleep_sessions');
+    expect(sessions.map((row) => row['id']).toSet(), {'retained', 'active'});
+    final events = await database.query('audio_events');
+    expect(events.map((row) => row['id']).toSet(), {'retained-event'});
+    expect(await selectedAudio.exists(), isFalse);
+    expect(await retainedAudio.exists(), isTrue);
+  });
+
+  test('restoring one item leaves other trashed items untouched', () async {
+    final now = DateTime.now().toUtc();
+    for (final id in ['restore-me', 'leave-in-trash']) {
+      await database.insert('sleep_sessions', {
+        'id': id,
+        'deleted_at': now.toIso8601String(),
+        'updated_at': now.toIso8601String(),
+      });
+    }
+
+    await SleepDatabase.instance.restoreSessionFromTrash('restore-me');
+
+    final rows = await database.query('sleep_sessions', orderBy: 'id');
+    expect(rows.firstWhere((row) => row['id'] == 'restore-me')['deleted_at'], isNull);
+    expect(rows.firstWhere((row) => row['id'] == 'leave-in-trash')['deleted_at'], isNotNull);
+  });
+
+  test('clearing the trash permanently removes trashed rows but keeps active sessions', () async {
+    final now = DateTime.now().toUtc();
+    for (final id in ['trashed-a', 'trashed-b', 'active']) {
+      await database.insert('sleep_sessions', {
+        'id': id,
+        'deleted_at': id == 'active' ? null : now.toIso8601String(),
+        'updated_at': now.toIso8601String(),
+      });
+    }
+
+    await SleepDatabase.instance.permanentlyDeleteAllTrashedSessions();
+
+    final rows = await database.query('sleep_sessions');
+    expect(rows, hasLength(1));
+    expect(rows.single['id'], 'active');
   });
 
   test('single restore cannot revive a record after the 30-day retention period', () async {
