@@ -9,6 +9,7 @@ import '../../widgets/section_card.dart';
 import '../../widgets/screen_header.dart';
 import 'health_report_service.dart';
 import 'health_report_history_card.dart';
+import 'health_day_tag_library.dart';
 
 class HealthScreen extends StatefulWidget {
   const HealthScreen({super.key, required this.database});
@@ -84,10 +85,24 @@ class _HealthScreenState extends State<HealthScreen> {
   Future<void> _editHealthDay() async {
     final existing = await _dayEntryFuture;
     if (!mounted) return;
+    const presets = ['Стресс', 'Кофеин', 'Тренировка', 'Болезнь', 'Боль', 'Лекарства', 'Путешествие', 'Поздний ужин', 'Алкоголь', 'Дневной сон'];
+    final rawCustomTags = await widget.database.getAppMetadata(HealthDayTagLibrary.storageKey);
+    late List<String> customTags;
+    try {
+      customTags = HealthDayTagLibrary.decode(rawCustomTags)
+          .where((tag) => !presets.contains(tag))
+          .toList();
+    } on FormatException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Список собственных отметок повреждён и не был изменён: ${error.message}')),
+        );
+      }
+      return;
+    }
     final noteController = TextEditingController(text: existing.note);
     final tagController = TextEditingController();
     final tags = existing.tags.toSet();
-    const presets = ['Стресс', 'Кофеин', 'Тренировка', 'Болезнь', 'Боль', 'Лекарства', 'Путешествие', 'Поздний ужин', 'Алкоголь', 'Дневной сон'];
     final result = await showDialog<_HealthDayEntry>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -102,15 +117,60 @@ class _HealthScreenState extends State<HealthScreen> {
                 const Text('Отметки дня', style: TextStyle(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
                 Wrap(spacing: 6, runSpacing: 4, children: [
-                  for (final tag in presets)
-                    FilterChip(label: Text(tag), selected: tags.contains(tag), onSelected: (selected) => setDialogState(() { if (selected) { tags.add(tag); } else { tags.remove(tag); } })),
-                  for (final tag in tags.where((tag) => !presets.contains(tag)).toList())
-                    InputChip(label: Text(tag), onDeleted: () => setDialogState(() => tags.remove(tag))),
+                  for (final tag in [...presets, ...customTags])
+                    FilterChip(
+                      label: Text(tag),
+                      selected: tags.contains(tag),
+                      onSelected: (selected) => setDialogState(() {
+                        if (selected) {
+                          tags.add(tag);
+                        } else {
+                          tags.remove(tag);
+                        }
+                      }),
+                    ),
+                  for (final tag in tags.where((tag) =>
+                      !presets.contains(tag) && !customTags.contains(tag)).toList())
+                    InputChip(
+                      label: Text(tag),
+                      onDeleted: () => setDialogState(() => tags.remove(tag)),
+                    ),
                 ]),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () async {
+                      final updated = await _manageCustomHealthTags(customTags);
+                      if (updated == null) return;
+                      customTags = updated;
+                      await widget.database.setAppMetadata(
+                        HealthDayTagLibrary.storageKey,
+                        HealthDayTagLibrary.encode(customTags),
+                      );
+                      if (context.mounted) setDialogState(() {});
+                    },
+                    icon: const Icon(Icons.edit_note_rounded, size: 17),
+                    label: const Text('Управлять своими отметками'),
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Row(children: [
-                  Expanded(child: TextField(controller: tagController, textInputAction: TextInputAction.done, decoration: const InputDecoration(labelText: 'Своя отметка', hintText: 'Например, поздний подъём'))),
-                  IconButton(icon: const Icon(Icons.add_circle_outline), onPressed: () { final value = tagController.text.trim(); if (value.isNotEmpty) { setDialogState(() => tags.add(value)); tagController.clear(); } }),
+                  Expanded(child: TextField(controller: tagController, textInputAction: TextInputAction.done, decoration: const InputDecoration(labelText: 'Новая собственная отметка', hintText: 'Например, поздний подъём'))),
+                  IconButton(
+                    icon: const Icon(Icons.add_circle_outline),
+                    onPressed: () {
+                      final value = tagController.text.trim();
+                      if (value.isEmpty) return;
+                      setDialogState(() {
+                        tags.add(value);
+                        if (!presets.contains(value)) {
+                          customTags = HealthDayTagLibrary.add(customTags, value);
+                        }
+                      });
+                      tagController.clear();
+                    },
+                  ),
                 ]),
                 const SizedBox(height: 12),
                 TextField(controller: noteController, minLines: 3, maxLines: 6, decoration: const InputDecoration(labelText: 'Комментарий к дню', hintText: 'Самочувствие, события, лекарства и другие заметки')),
@@ -127,11 +187,135 @@ class _HealthScreenState extends State<HealthScreen> {
     noteController.dispose();
     tagController.dispose();
     if (result == null || !mounted) return;
+    await widget.database.setAppMetadata(
+      HealthDayTagLibrary.storageKey,
+      HealthDayTagLibrary.encode(customTags),
+    );
     await widget.database.setAppMetadata(_dayMetadataKey(_selectedDay), jsonEncode(result.toJson()));
     if (mounted) setState(() {
       _dayEntryFuture = Future.value(result);
       _dayEntriesFuture = _loadAllHealthDayEntries();
     });
+  }
+
+  Future<List<String>?> _manageCustomHealthTags(List<String> initial) async {
+    var working = [...initial];
+    return showDialog<List<String>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Мои отметки'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Переименование и удаление меняют только список для будущих записей. Уже сохранённые дни останутся без изменений.',
+                    style: TextStyle(fontSize: 12, height: 1.4),
+                  ),
+                  const SizedBox(height: 8),
+                  if (working.isEmpty)
+                    const Text('Собственных отметок пока нет.',
+                      style: TextStyle(color: AppTheme.muted, fontSize: 12)),
+                  for (final tag in working)
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(tag),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'Переименовать',
+                            icon: const Icon(Icons.edit_outlined, size: 18),
+                            onPressed: () async {
+                              final controller = TextEditingController(text: tag);
+                              final value = await showDialog<String>(
+                                context: dialogContext,
+                                builder: (editContext) => AlertDialog(
+                                  title: const Text('Переименовать отметку'),
+                                  content: TextField(
+                                    controller: controller,
+                                    autofocus: true,
+                                    textCapitalization: TextCapitalization.sentences,
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(editContext),
+                                      child: const Text('Отмена'),
+                                    ),
+                                    FilledButton(
+                                      onPressed: () => Navigator.pop(editContext, controller.text.trim()),
+                                      child: const Text('Сохранить'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              controller.dispose();
+                              if (value == null) return;
+                              try {
+                                setDialogState(() {
+                                  working = HealthDayTagLibrary.rename(working, tag, value);
+                                });
+                              } on ArgumentError catch (error) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text(error.message?.toString() ?? 'Не удалось переименовать отметку.')),
+                                  );
+                                }
+                              }
+                            },
+                          ),
+                          IconButton(
+                            tooltip: 'Удалить из списка',
+                            icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                            onPressed: () async {
+                              final confirmed = await showDialog<bool>(
+                                context: dialogContext,
+                                builder: (confirmContext) => AlertDialog(
+                                  title: const Text('Удалить отметку из списка?'),
+                                  content: Text('«$tag» останется в уже сохранённых днях, но больше не будет предлагаться для новых записей.'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(confirmContext, false),
+                                      child: const Text('Отмена'),
+                                    ),
+                                    FilledButton(
+                                      onPressed: () => Navigator.pop(confirmContext, true),
+                                      child: const Text('Удалить'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirmed == true) {
+                                setDialogState(() {
+                                  working = HealthDayTagLibrary.remove(working, tag);
+                                });
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, working),
+              child: const Text('Сохранить'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<List<HealthReportSnapshot>> _loadHealthReports() =>
