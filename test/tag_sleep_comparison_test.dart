@@ -81,6 +81,55 @@ void main() {
       expect(result.difference, 45);
     });
 
+    test('compares efficiency and sleep latency only when actual metrics are available', () {
+      final sessions = <SleepSession>[
+        for (var i = 0; i < 4; i++)
+          _session(id: 'tag-$i', start: start.add(Duration(days: i))),
+        for (var i = 0; i < 4; i++)
+          _session(id: 'plain-$i', start: start.add(Duration(days: i + 5))),
+        _session(id: 'missing-efficiency', start: start.add(const Duration(days: 12))),
+      ];
+      final tags = <String, Set<String>>{
+        for (var i = 0; i < 4; i++) 'tag-$i': {'caffeine'},
+      };
+      final efficiency = <String, double>{
+        for (var i = 0; i < 4; i++) 'tag-$i': 82,
+        for (var i = 0; i < 4; i++) 'plain-$i': 90,
+      };
+      final latency = <String, int>{
+        for (var i = 0; i < 4; i++) 'tag-$i': 28,
+        for (var i = 0; i < 4; i++) 'plain-$i': 16,
+      };
+
+      final efficiencyResult = TagSleepComparison.calculate(
+        sessions: sessions,
+        tagsBySession: tags,
+        tagKeys: {'caffeine'},
+        start: start,
+        endExclusive: end,
+        metric: TagSleepMetric.sleepEfficiency,
+        efficiencyBySession: efficiency,
+      );
+      final latencyResult = TagSleepComparison.calculate(
+        sessions: sessions,
+        tagsBySession: tags,
+        tagKeys: {'caffeine'},
+        start: start,
+        endExclusive: end,
+        metric: TagSleepMetric.sleepLatency,
+        sleepLatencyBySession: latency,
+      );
+
+      expect(efficiencyResult.isSufficient, isTrue);
+      expect(efficiencyResult.withTag.average, 82);
+      expect(efficiencyResult.withoutTag.average, 90);
+      expect(efficiencyResult.difference, -8);
+      expect(latencyResult.isSufficient, isTrue);
+      expect(latencyResult.withTag.average, 28);
+      expect(latencyResult.withoutTag.average, 16);
+      expect(latencyResult.difference, 12);
+    });
+
     test('does not treat manual button times as actual sleep duration', () {
       final sessions = <SleepSession>[
         for (var i = 0; i < 4; i++)
