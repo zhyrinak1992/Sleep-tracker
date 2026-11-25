@@ -499,10 +499,6 @@ class SleepPersonalRecordHistory {
         records.bestEfficiencyAt, records.bestEfficiencySessionId);
     add('fewestAwakenings', records.fewestAwakenings,
         records.fewestAwakeningsAt, records.fewestAwakeningsSessionId);
-    add('shortestLatencyMinutes', records.shortestLatencyMinutes,
-        records.shortestLatencyAt, records.shortestLatencySessionId);
-    add('longestStreakDays', records.longestStreakDays,
-        records.longestStreakAt, null);
     return _sorted(events);
   }
 
@@ -568,20 +564,6 @@ class SleepPersonalRecordHistory {
       achievedAt: current.fewestAwakeningsAt,
       sessionId: current.fewestAwakeningsSessionId,
       lowerIsBetter: true,
-    );
-    addIfBetter(
-      metric: 'shortestLatencyMinutes',
-      currentValue: current.shortestLatencyMinutes,
-      previousValue: previous.shortestLatencyMinutes,
-      achievedAt: current.shortestLatencyAt,
-      sessionId: current.shortestLatencySessionId,
-      lowerIsBetter: true,
-    );
-    addIfBetter(
-      metric: 'longestStreakDays',
-      currentValue: current.longestStreakDays,
-      previousValue: previous.longestStreakDays,
-      achievedAt: current.longestStreakAt,
     );
     return _sorted(events);
   }
