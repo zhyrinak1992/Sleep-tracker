@@ -161,29 +161,25 @@ class BackupRestorePlanner {
         return count;
       case 'sleep_personal_records_history_v1':
         if (imported is! List) return 0;
-        bool isValidHistoryItem(Object? raw) {
-          if (raw is! Map) return false;
-          final id = raw['id'];
-          final metric = raw['metric'];
-          final rawValue = raw['value'];
-          final achievedAt = raw['achievedAt'];
-          final sessionId = raw['sessionId'];
-          if (id is! String || id.isEmpty ||
-              metric is! String ||
+        bool validEvent(Object? item) {
+          if (item is! Map || item['id'] is! String ||
+              (item['id'] as String).isEmpty ||
+              item['metric'] is! String ||
               !const {
                 'longestSleepMinutes',
                 'bestEfficiencyPercent',
                 'shortestLatencyMinutes',
                 'longestStreakDays',
-              }.contains(metric) ||
-              rawValue is! num || !rawValue.toDouble().isFinite ||
-              achievedAt is! String ||
-              DateTime.tryParse(achievedAt) == null ||
-              (sessionId != null && sessionId is! String)) {
+              }.contains(item['metric']) ||
+              item['value'] is! num ||
+              !(item['value'] as num).toDouble().isFinite ||
+              item['achievedAt'] is! String ||
+              DateTime.tryParse(item['achievedAt'] as String) == null ||
+              (item['sessionId'] != null && item['sessionId'] is! String)) {
             return false;
           }
-          final value = rawValue.toDouble();
-          return switch (metric) {
+          final value = (item['value'] as num).toDouble();
+          return switch (item['metric']) {
             'longestSleepMinutes' => value > 0 && value % 1 == 0,
             'bestEfficiencyPercent' => value >= 0 && value <= 100,
             'shortestLatencyMinutes' =>
@@ -192,18 +188,18 @@ class BackupRestorePlanner {
             _ => false,
           };
         }
+
         final identities = <String>{};
         if (local is List) {
           for (final item in local) {
-            if (isValidHistoryItem(item)) {
-              identities.add((item as Map)['id'] as String);
-            }
+            if (validEvent(item)) identities.add(item['id'] as String);
           }
         }
         var count = 0;
         for (final item in imported) {
-          if (!isValidHistoryItem(item)) continue;
-          if (identities.add((item as Map)['id'] as String)) count++;
+          if (validEvent(item) && identities.add(item['id'] as String)) {
+            count++;
+          }
         }
         return count;
       case 'sleep_records_history_v1':
