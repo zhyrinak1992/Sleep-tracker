@@ -129,7 +129,7 @@ class SleepDatabase {
           await db.execute('CREATE INDEX idx_sleep_notes_updated ON sleep_notes(updated_at)');
           final legacyNotes = await db.query('sleep_sessions',
               columns: ['id', 'note', 'created_at', 'updated_at'],
-              where: 'note IS NOT NULL AND TRIM(note) <> ""');
+              where: "note IS NOT NULL AND TRIM(note) <> ''");
           for (final row in legacyNotes) {
             final now = DateTime.now().toUtc().toIso8601String();
             await db.insert('sleep_notes', {
