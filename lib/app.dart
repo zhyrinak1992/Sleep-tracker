@@ -185,6 +185,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       _ensureNightReminders();
       _generateClosedHealthTagReports();
     } else if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       final keepPollingForActiveNight =
