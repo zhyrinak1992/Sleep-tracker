@@ -354,8 +354,9 @@ class PeriodicReportService {
           ),
         ).score;
         if (score != null && score.isFinite) scores[session.id] = score;
-        final sessionStages = stages[session.id] ?? const <Map<String, Object?>>[];
-        if (sessionStages.isNotEmpty && metric.stageCoveragePercent != null) {
+        if (metric.hasAwakeSamples &&
+            metric.stageCoveragePercent != null &&
+            metric.stageCoveragePercent! >= 80) {
           awakeningsBySession[session.id] = metric.awakeningCount.toDouble();
         }
       }
