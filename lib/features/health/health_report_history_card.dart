@@ -5,7 +5,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import 'health_report_service.dart';
 
-class HealthReportHistoryCard extends StatelessWidget {
+class HealthReportHistoryCard extends StatefulWidget {
   const HealthReportHistoryCard({
     super.key,
     required this.reports,
@@ -16,11 +16,19 @@ class HealthReportHistoryCard extends StatelessWidget {
   final ValueChanged<HealthReportSnapshot> onExport;
 
   @override
+  State<HealthReportHistoryCard> createState() => _HealthReportHistoryCardState();
+}
+
+class _HealthReportHistoryCardState extends State<HealthReportHistoryCard> {
+  bool _showAll = false;
+
+  @override
   Widget build(BuildContext context) => SectionCard(
     child: FutureBuilder<List<HealthReportSnapshot>>(
       future: reports,
       builder: (context, snapshot) {
         final items = snapshot.data ?? const <HealthReportSnapshot>[];
+        final visibleItems = _showAll ? items : items.take(12).toList();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -43,7 +51,7 @@ class HealthReportHistoryCard extends StatelessWidget {
                 style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4),
               )
             else
-              ...items.take(12).map((report) {
+              ...visibleItems.map((report) {
                 final end = report.endInclusive;
                 final range = '${DateFormat('dd.MM.yyyy').format(report.start)} — ${DateFormat('dd.MM.yyyy').format(end)}';
                 return ListTile(
@@ -56,7 +64,7 @@ class HealthReportHistoryCard extends StatelessWidget {
                   ),
                   trailing: IconButton(
                     tooltip: 'Экспорт отчёта в PDF',
-                    onPressed: () => onExport(report),
+                    onPressed: () => widget.onExport(report),
                     icon: const Icon(Icons.picture_as_pdf_outlined),
                   ),
                 );
