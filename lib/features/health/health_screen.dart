@@ -709,7 +709,8 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
                 if (constraints.maxWidth <= 0) return;
                 final index = (details.localPosition.dx / constraints.maxWidth * 12)
                     .floor()
-                    .clamp(0, 11);
+                    .clamp(0, 11)
+                    .toInt();
                 _showMonthDates(now: now, monthIndex: index, dates: recentDates);
               },
               child: SizedBox(
