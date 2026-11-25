@@ -1,10 +1,18 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:cross_file/cross_file.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../data/pdf_report_service.dart';
 import '../../data/sleep_database.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/screen_header.dart';
 import '../../widgets/section_card.dart';
 import 'periodic_report_service.dart';
+import 'periodic_report_export.dart';
 
 class PeriodicReportsScreen extends StatefulWidget {
   const PeriodicReportsScreen({super.key, required this.database});
@@ -25,6 +33,16 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
   void _refresh() => setState(() => _future = _load());
   Future<void> _export(PeriodicReportSnapshot report) async {
     await PdfReportService.exportPeriodicSnapshot(report.data, report.title);
+  }
+  Future<void> _exportCsv(PeriodicReportSnapshot report) async {
+    final directory = await getTemporaryDirectory();
+    final file = File(p.join(directory.path, 'SleepTracker-${report.id}.csv'));
+    await file.writeAsString(PeriodicReportExport.toCsv(report.data), encoding: utf8, flush: true);
+    await Share.shareXFiles(
+      [XFile(file.path, mimeType: 'text/csv', name: p.basename(file.path))],
+      subject: 'Табличный отчёт Sleep Tracker',
+      text: 'Табличные данные сохранённого отчёта Sleep Tracker.',
+    );
   }
   String _duration(double? minutes) {
     if (minutes == null) return 'Нет данных';
@@ -62,6 +80,7 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
               duration: _duration(report.averageSleepMinutes),
               average: _average,
               onExport: () => _export(report),
+              onExportCsv: () => _exportCsv(report),
             )),
             const SizedBox(height: 10),
             const Text(
@@ -76,11 +95,12 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
 }
 
 class _ReportCard extends StatelessWidget {
-  const _ReportCard({required this.report, required this.duration, required this.average, required this.onExport});
+  const _ReportCard({required this.report, required this.duration, required this.average, required this.onExport, required this.onExportCsv});
   final PeriodicReportSnapshot report;
   final String duration;
   final String Function(double?, String) average;
   final VoidCallback onExport;
+  final VoidCallback onExportCsv;
 
   @override
   Widget build(BuildContext context) {
@@ -122,6 +142,7 @@ class _ReportCard extends StatelessWidget {
           Row(children: [
             Expanded(child: Text(report.title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16))),
             IconButton(tooltip: 'Экспорт PDF', onPressed: onExport, icon: const Icon(Icons.picture_as_pdf_outlined)),
+            IconButton(tooltip: 'Экспорт CSV', onPressed: onExportCsv, icon: const Icon(Icons.table_chart_outlined)),
           ]),
           const SizedBox(height: 10),
           _ReportLine(label: 'Завершённых ночей', value: report.nights.toString()),
