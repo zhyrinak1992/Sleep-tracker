@@ -87,11 +87,27 @@ void main() {
       final sessions = List.generate(8, (index) => _session(id: index + 1));
       final earned = SleepAchievementCatalog.evaluateDates(sessions);
 
-      expect(earned['first_night'], DateTime(2026, 1, 2, 22));
-      expect(earned['seven_nights'], DateTime(2026, 1, 8, 22));
+      expect(earned['first_night'], DateTime(2026, 1, 2));
+      expect(earned['seven_nights'], DateTime(2026, 1, 8));
       expect(earned['streak_three'], DateTime(2026, 1, 4));
       expect(earned['streak_seven'], DateTime(2026, 1, 8));
       expect(earned.containsKey('streak_fourteen'), isFalse);
+    });
+
+    test('does not count two sessions on one date as two completed nights', () {
+      final sessions = [
+        for (var id = 1; id <= 6; id++) _session(id: id),
+        SleepSession(
+          id: 'duplicate-date',
+          startedAt: DateTime(2026, 1, 2, 23),
+          endedAt: DateTime(2026, 1, 3, 7),
+        ),
+      ];
+
+      final earned = SleepAchievementCatalog.evaluate(sessions);
+
+      expect(earned, isNot(contains('seven_nights')));
+      expect(earned, contains('streak_three'));
     });
 
     test('uses the date of the rated night for rating milestones', () {
