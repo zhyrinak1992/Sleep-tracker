@@ -132,8 +132,12 @@ void main() {
       )) as List;
 
       expect(merged, hasLength(4));
-      expect(merged.first['value'], 480);
-      expect(merged.last['value'], 510);
+      final byMetric = {
+        for (final event in merged) event['metric']: event,
+      };
+      expect(byMetric['longestSleepMinutes']!['value'], 480);
+      expect(byMetric['bestSleepScore']!['value'], 98);
+      expect(byMetric['fewestAwakenings']!['value'], 0);
     });
 
     test('unions record events by metric and session and unions celebrations', () {
