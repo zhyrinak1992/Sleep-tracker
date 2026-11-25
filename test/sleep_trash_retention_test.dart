@@ -17,7 +17,8 @@ void main() {
     await database.execute('''
       CREATE TABLE sleep_sessions (
         id TEXT PRIMARY KEY,
-        deleted_at TEXT
+        deleted_at TEXT,
+        updated_at TEXT
       )
     ''');
     await database.execute('''
@@ -39,6 +40,63 @@ void main() {
     if (await temporaryDirectory.exists()) {
       await temporaryDirectory.delete(recursive: true);
     }
+  });
+
+  test('single restore cannot revive a record after the 30-day retention period', () async {
+    final expiredAt = DateTime.now().toUtc().subtract(
+      const Duration(days: 30, seconds: 2),
+    );
+    await database.insert('sleep_sessions', {
+      'id': 'expired',
+      'deleted_at': expiredAt.toIso8601String(),
+      'updated_at': expiredAt.toIso8601String(),
+    });
+
+    await expectLater(
+      SleepDatabase.instance.restoreSessionFromTrash('expired'),
+      throwsStateError,
+    );
+    expect(await database.query('sleep_sessions'), isEmpty);
+  });
+
+  test('restore all purges expired records and restores only records still within retention', () async {
+    final now = DateTime.now().toUtc();
+    final expiredAt = now.subtract(const Duration(days: 31));
+    final recentAt = now.subtract(const Duration(days: 29));
+    await database.insert('sleep_sessions', {
+      'id': 'expired',
+      'deleted_at': expiredAt.toIso8601String(),
+      'updated_at': expiredAt.toIso8601String(),
+    });
+    await database.insert('sleep_sessions', {
+      'id': 'recent',
+      'deleted_at': recentAt.toIso8601String(),
+      'updated_at': recentAt.toIso8601String(),
+    });
+
+    final restored = await SleepDatabase.instance.restoreAllTrashedSessions();
+
+    expect(restored, 1);
+    final rows = await database.query('sleep_sessions');
+    expect(rows, hasLength(1));
+    expect(rows.single['id'], 'recent');
+    expect(rows.single['deleted_at'], isNull);
+  });
+
+  test('trash listing purges expired records before returning items', () async {
+    final expiredAt = DateTime.now().toUtc().subtract(
+      const Duration(days: 31),
+    );
+    await database.insert('sleep_sessions', {
+      'id': 'expired',
+      'deleted_at': expiredAt.toIso8601String(),
+      'updated_at': expiredAt.toIso8601String(),
+    });
+
+    final items = await SleepDatabase.instance.getTrashedSessions();
+
+    expect(items, isEmpty);
+    expect(await database.query('sleep_sessions'), isEmpty);
   });
 
   test('purges at exactly 30 days and retains newer and active sessions', () async {
