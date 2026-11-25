@@ -578,31 +578,46 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
   Future<void> _showMonthDates({
     required DateTime now,
     required int monthIndex,
-    required List<DateTime> dates,
+    required Map<DateTime, _HealthDayEntry> entries,
   }) async {
     final start = DateTime(now.year, now.month - 11 + monthIndex);
     final end = DateTime(start.year, start.month + 1);
-    final monthDates = dates
-        .where((day) => !day.isBefore(start) && day.isBefore(end))
-        .toList()
-      ..sort((a, b) => b.compareTo(a));
+    final byTag = <String, List<DateTime>>{};
+    for (final entry in entries.entries) {
+      if (entry.key.isBefore(start) || !entry.key.isBefore(end)) continue;
+      for (final tag in entry.value.tags) {
+        byTag.putIfAbsent(tag, () => []).add(entry.key);
+      }
+    }
+    for (final dates in byTag.values) {
+      dates.sort((a, b) => b.compareTo(a));
+    }
+    final orderedTags = byTag.keys.toList()
+      ..sort((a, b) => byTag[b]!.length.compareTo(byTag[a]!.length));
     final selectedDate = await showDialog<DateTime>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('Отметка за ${_monthLabel(start)} · ${monthDates.length}'),
+        title: Text('Отметки за ${_monthLabel(start)}'),
         content: SizedBox(
           width: double.maxFinite,
-          child: monthDates.isEmpty
-              ? const Text('В этом месяце отметка не использовалась.')
+          child: orderedTags.isEmpty
+              ? const Text('В этом месяце дневных отметок нет.')
               : ListView(
                   shrinkWrap: true,
                   children: [
-                    for (final day in monthDates)
-                      ListTile(
-                        dense: true,
-                        title: Text(_date(day)),
-                        onTap: () => Navigator.pop(dialogContext, day),
+                    for (final tag in orderedTags) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8, bottom: 3),
+                        child: Text('$tag · ${byTag[tag]!.length} дней',
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
                       ),
+                      for (final day in byTag[tag]!)
+                        ListTile(
+                          dense: true,
+                          title: Text(_date(day)),
+                          onTap: () => Navigator.pop(dialogContext, day),
+                        ),
+                    ],
                   ],
                 ),
         ),
@@ -676,11 +691,16 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
         matchedDays: matchedEntries.length,
         recordedDays: entries.length,
       );
-      final monthlyCounts = List<int>.generate(12, (index) {
-        final start = DateTime(now.year, now.month - 11 + index);
-        final end = DateTime(start.year, start.month + 1);
-        return recentDates.where((d) => !d.isBefore(start) && d.isBefore(end)).length;
-      });
+      final monthlyCountsByTag = <String, List<int>>{
+        for (final tag in tags)
+          tag: List<int>.generate(12, (index) {
+            final start = DateTime(now.year, now.month - 11 + index);
+            final end = DateTime(start.year, start.month + 1);
+            return (usage[tag] ?? const <DateTime>[])
+                .where((day) => !day.isBefore(start) && day.isBefore(end))
+                .length;
+          }),
+      };
       return SectionCard(child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -722,16 +742,32 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
                     .floor()
                     .clamp(0, 11)
                     .toInt();
-                _showMonthDates(now: now, monthIndex: index, dates: recentDates);
+                _showMonthDates(now: now, monthIndex: index, entries: entries);
               },
               child: SizedBox(
                 height: 70,
                 width: double.infinity,
-                child: CustomPaint(painter: _MonthlyTagBarsPainter(monthlyCounts)),
+                child: CustomPaint(painter: _MonthlyTagBarsPainter(monthlyCountsByTag)),
               ),
             ),
           ),
-          const Text('Нажмите на месяц, чтобы открыть список дат.',
+          Wrap(
+            spacing: 10,
+            runSpacing: 5,
+            children: [
+              for (var i = 0; i < tags.length; i++)
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  Container(width: 8, height: 8, decoration: BoxDecoration(
+                    color: _MonthlyTagBarsPainter.palette[i % _MonthlyTagBarsPainter.palette.length],
+                    shape: BoxShape.circle,
+                  )),
+                  const SizedBox(width: 4),
+                  Text(tags[i], style: const TextStyle(color: AppTheme.muted, fontSize: 10)),
+                ]),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text('Нажмите на месяц, чтобы увидеть все отметки и даты.',
             style: TextStyle(color: AppTheme.muted, fontSize: 10)),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             Text(_monthLabel(DateTime(now.year, now.month - 11)), style: const TextStyle(color: AppTheme.muted, fontSize: 10)),
@@ -1121,23 +1157,62 @@ class _HealthTagOverviewCalendar extends StatelessWidget {
 }
 
 class _MonthlyTagBarsPainter extends CustomPainter {
-  _MonthlyTagBarsPainter(this.counts);
-  final List<int> counts;
+  _MonthlyTagBarsPainter(this.countsByTag);
+
+  static const palette = <Color>[
+    Color(0xFFB9A7FF),
+    Color(0xFF5ED6C2),
+    Color(0xFFFFC36B),
+    Color(0xFF7EA8FF),
+    Color(0xFFFF8FA3),
+    Color(0xFF9BCB7A),
+    Color(0xFFB0A0A0),
+    Color(0xFF69C3E8),
+  ];
+
+  final Map<String, List<int>> countsByTag;
+
   @override
   void paint(Canvas canvas, Size size) {
-    if (counts.isEmpty) return;
-    final maxValue = counts.reduce((a, b) => a > b ? a : b);
-    final barWidth = size.width / (counts.length * 1.7);
-    final gap = (size.width - barWidth * counts.length) / (counts.length - 1);
-    final paint = Paint()..color = const Color(0xFFB9A7FF);
-    for (var i = 0; i < counts.length; i++) {
-      final height = maxValue == 0 ? 2.0 : (counts[i] / maxValue) * (size.height - 4);
-      final left = i * (barWidth + gap);
-      canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(left, size.height - height, barWidth, height), const Radius.circular(3)), paint);
+    if (countsByTag.isEmpty) return;
+    final tags = countsByTag.keys.toList();
+    final totals = List<int>.generate(12, (index) =>
+      tags.fold<int>(0, (sum, tag) => sum + (countsByTag[tag]?[index] ?? 0)));
+    final maxValue = totals.isEmpty ? 0 : totals.reduce((a, b) => a > b ? a : b);
+    const monthCount = 12;
+    final barWidth = size.width / (monthCount * 1.7);
+    final gap = (size.width - barWidth * monthCount) / (monthCount - 1);
+    for (var month = 0; month < monthCount; month++) {
+      final left = month * (barWidth + gap);
+      var bottom = size.height;
+      if (maxValue == 0 || totals[month] == 0) {
+        final paint = Paint()..color = palette[0].withValues(alpha: 0.22);
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(left, size.height - 2, barWidth, 2),
+            const Radius.circular(3),
+          ),
+          paint,
+        );
+        continue;
+      }
+      for (var tagIndex = 0; tagIndex < tags.length; tagIndex++) {
+        final count = countsByTag[tags[tagIndex]]?[month] ?? 0;
+        if (count == 0) continue;
+        final height = count / maxValue * (size.height - 4);
+        final paint = Paint()..color = palette[tagIndex % palette.length];
+        canvas.drawRect(
+          Rect.fromLTWH(left, bottom - height, barWidth, height),
+          paint,
+        );
+        bottom -= height;
+      }
     }
   }
+
   @override
-  bool shouldRepaint(covariant _MonthlyTagBarsPainter oldDelegate) => oldDelegate.counts != counts;
+  bool shouldRepaint(covariant _MonthlyTagBarsPainter oldDelegate) =>
+      oldDelegate.countsByTag != countsByTag;
 }
 
 String _monthLabel(DateTime date) => '${date.month.toString().padLeft(2, '0')}.${date.year}';
