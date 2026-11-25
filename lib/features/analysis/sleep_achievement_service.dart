@@ -3,7 +3,6 @@ import 'dart:convert';
 import '../../data/sleep_database.dart';
 import '../../models/sleep_session.dart';
 import 'sleep_personal_records.dart';
-import 'sleep_record_service.dart';
 
 class SleepAchievementDefinition {
   const SleepAchievementDefinition({
@@ -66,17 +65,13 @@ class SleepAchievementState {
     required this.earnedAt,
     required this.displayEnabled,
     required this.records,
-    required this.newlyEarnedAchievementIds,
     required this.newRecordKeys,
-    required this.recordHistory,
   });
 
   final Map<String, DateTime> earnedAt;
   final bool displayEnabled;
   final SleepPersonalRecords records;
-  final Set<String> newlyEarnedAchievementIds;
   final Set<String> newRecordKeys;
-  final SleepRecordState recordHistory;
 }
 
 class SleepAchievementService {
@@ -113,14 +108,12 @@ class SleepAchievementService {
     // restoring or repairing partial metadata cannot replay old celebrations.
     hasValidHistory = history.isNotEmpty;
 
-    final newlyEarned = <String>{};
     var changed = false;
     final earnedNow = SleepAchievementCatalog.evaluate(sessionList);
     final now = DateTime.now().toUtc().toIso8601String();
     for (final id in earnedNow) {
       if (!history.containsKey(id)) {
         history[id] = now;
-        if (hasValidHistory) newlyEarned.add(id);
         changed = true;
       }
     }
@@ -191,9 +184,6 @@ class SleepAchievementService {
     }
 
     final enabled = await database.getAppMetadata(_displayKey) != 'false';
-    // One screen load now coordinates achievements, four personal bests,
-    // SleepScore/awakening history, and pending record celebrations.
-    final recordHistory = await SleepRecordService.instance.load();
     return SleepAchievementState(
       earnedAt: {
         for (final entry in history.entries)
@@ -201,9 +191,7 @@ class SleepAchievementService {
       },
       displayEnabled: enabled,
       records: records,
-      newlyEarnedAchievementIds: newlyEarned,
       newRecordKeys: newRecordKeys,
-      recordHistory: recordHistory,
     );
   }
 
