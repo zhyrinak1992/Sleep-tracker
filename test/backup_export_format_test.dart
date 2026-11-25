@@ -39,7 +39,7 @@ void main() {
       final envelope = jsonDecode(utf8.decode(encrypted)) as Map<String, dynamic>;
 
       expect(BackupCrypto.isEncryptedEnvelope(envelope), isTrue);
-      expect(envelope['algorithm'], 'AES-256-GCM');
+      expect(envelope['cipher'], 'AES-256-GCM');
       expect(envelope['kdf'], 'PBKDF2-HMAC-SHA256');
 
       final restoredText = await BackupCrypto.decryptDocument(
