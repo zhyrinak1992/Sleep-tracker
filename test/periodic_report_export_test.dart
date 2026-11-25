@@ -1,7 +1,20 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sleep_tracker/features/analysis/periodic_report_export.dart';
+import 'package:sleep_tracker/data/pdf_report_service.dart';
 
 void main() {
+  test('PDF monthly night count handles new, legacy and detail-list snapshots', () {
+    expect(PdfReportService.monthNightCount({
+      'nightCount': 3,
+      'nights': [{'id': 'a'}, {'id': 'b'}],
+    }), 3);
+    expect(PdfReportService.monthNightCount({
+      'nights': [{'id': 'a'}, {'id': 'b'}],
+    }), 2);
+    expect(PdfReportService.monthNightCount({'nights': 5}), 5);
+    expect(PdfReportService.monthNightCount(const {}), 0);
+  });
+
   test('exports summary and report trends as Excel-compatible semicolon CSV', () {
     final csv = PeriodicReportExport.toCsv({
       'kind': 'quarter',
