@@ -134,6 +134,96 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
     }
   }
 
+  String _recordHistoryMetricLabel(String metric) => switch (metric) {
+    'longestSleepMinutes' => 'Самая продолжительная ночь',
+    'bestEfficiencyPercent' => 'Лучшая эффективность сна',
+    'shortestLatencyMinutes' => 'Минимальная задержка засыпания',
+    'longestStreakDays' => 'Самая длинная серия',
+    _ => 'Личный рекорд',
+  };
+
+  String _recordHistoryValue(SleepPersonalRecordEvent event) =>
+      switch (event.metric) {
+        'longestSleepMinutes' => _duration(event.value.round()),
+        'bestEfficiencyPercent' => '${event.value.toStringAsFixed(1)}%',
+        'shortestLatencyMinutes' => _duration(event.value.round()),
+        'longestStreakDays' =>
+          '${event.value.round()} ${_dayWord(event.value.round())}',
+        _ => event.value.toString(),
+      };
+
+  String _recordHistoryChange(
+    SleepPersonalRecordEvent event,
+    SleepPersonalRecordEvent? previous,
+  ) {
+    if (previous == null) return 'Первый зафиксированный рекорд';
+    final improvement = event.metric == 'shortestLatencyMinutes'
+        ? previous.value - event.value
+        : event.value - previous.value;
+    if (improvement <= 0) return 'Значение сохранено в истории';
+    return switch (event.metric) {
+      'longestSleepMinutes' => 'Улучшение на ${_duration(improvement.round())}',
+      'bestEfficiencyPercent' =>
+        'Улучшение на ${improvement.toStringAsFixed(1)} п.п.',
+      'shortestLatencyMinutes' =>
+        'Быстрее на ${_duration(improvement.round())}',
+      'longestStreakDays' =>
+        'Увеличение на ${improvement.round()} ${_dayWord(improvement.round())}',
+      _ => 'Рекорд улучшен',
+    };
+  }
+
+  Widget _recordHistorySection(List<SleepPersonalRecordEvent> events) {
+    if (events.isEmpty) return const SizedBox.shrink();
+    final previousByMetric = <String, SleepPersonalRecordEvent>{};
+    final rows = <Widget>[];
+    for (final event in events) {
+      final previous = previousByMetric[event.metric];
+      final sourceDeleted = event.sessionId != null &&
+          !widget.sessions.any((session) => session.id == event.sessionId);
+      final date = DateFormat('d MMM yyyy', 'ru').format(event.achievedAt);
+      final details = [
+        date,
+        _recordHistoryChange(event, previous),
+        if (sourceDeleted) 'исходная ночь удалена, рекорд сохранён',
+      ].join(' · ');
+      rows.add(Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.emoji_events_outlined,
+                color: AppTheme.teal, size: 18),
+            const SizedBox(width: 9),
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_recordHistoryMetricLabel(event.metric),
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(details, style: const TextStyle(
+                    color: AppTheme.muted, fontSize: 10, height: 1.35)),
+              ],
+            )),
+            const SizedBox(width: 8),
+            Text(_recordHistoryValue(event),
+                style: const TextStyle(fontWeight: FontWeight.w700)),
+          ],
+        ),
+      ));
+      previousByMetric[event.metric] = event;
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: EdgeInsets.zero,
+        title: Text('История личных рекордов (${events.length})',
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+        children: rows,
+      ),
+    );
+  }
+
   Widget _newRecordCelebration(Set<String> newKeys) {
     final titles = newKeys.map(_recordTitle).toList()..sort();
     return TweenAnimationBuilder<double>(
@@ -262,6 +352,7 @@ class _SleepAchievementsCardState extends State<SleepAchievementsCard> {
               style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4),
             ),
             _personalRecordsSection(state.records, state.newRecordKeys),
+            _recordHistorySection(state.recordHistory),
             if (state.displayEnabled && state.newRecordKeys.isNotEmpty)
               _newRecordCelebration(state.newRecordKeys),
             if (state.displayEnabled) ...[
