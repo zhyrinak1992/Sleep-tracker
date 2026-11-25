@@ -10,6 +10,65 @@ void main() {
       );
     });
 
+    test('matches multiple labels using AND and OR rules', () {
+      expect(
+        HealthDayTagLibrary.matches(
+          dayTags: ['Кофеин', 'Стресс'],
+          selectedTags: ['Кофеин', 'Стресс'],
+          requireAll: true,
+        ),
+        isTrue,
+      );
+      expect(
+        HealthDayTagLibrary.matches(
+          dayTags: ['Кофеин'],
+          selectedTags: ['Кофеин', 'Стресс'],
+          requireAll: true,
+        ),
+        isFalse,
+      );
+      expect(
+        HealthDayTagLibrary.matches(
+          dayTags: ['Кофеин'],
+          selectedTags: ['Кофеин', 'Стресс'],
+          requireAll: false,
+        ),
+        isTrue,
+      );
+      expect(
+        HealthDayTagLibrary.matches(
+          dayTags: ['Кофеин'],
+          selectedTags: [],
+          requireAll: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('calculates percentage only against recorded days', () {
+      expect(
+        HealthDayTagLibrary.percentageOfRecordedDays(
+          matchedDays: 8,
+          recordedDays: 20,
+        ),
+        40,
+      );
+      expect(
+        HealthDayTagLibrary.percentageOfRecordedDays(
+          matchedDays: 0,
+          recordedDays: 0,
+        ),
+        isNull,
+      );
+      expect(
+        () => HealthDayTagLibrary.percentageOfRecordedDays(
+          matchedDays: 3,
+          recordedDays: 2,
+        ),
+        throwsArgumentError,
+      );
+    });
+
     test('adds a custom label without duplicates', () {
       expect(
         HealthDayTagLibrary.add(['Стресс'], '  Перелёт  '),
