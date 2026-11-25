@@ -608,7 +608,7 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
         ],
       ),
     );
-    if (selectedDate != null) widget.onSelectDate(selectedDate);
+    if (selectedDate != null) widget.onSelectDay(selectedDate);
   }
 
   @override
