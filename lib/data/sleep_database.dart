@@ -135,7 +135,7 @@ class SleepDatabase {
             await db.insert('sleep_notes', {
               'id': _uuid.v4(),
               'session_id': row['id'],
-              'body': (row['note'] as String).trim(),
+              'body': row['note'] as String,
               'created_at': row['created_at'] ?? now,
               'updated_at': row['updated_at'] ?? now,
             });
