@@ -172,6 +172,7 @@ class BackupRestorePlanner {
         var count = 0;
         for (final item in imported) {
           if (item is! Map || item['id'] is! String ||
+              (item['id'] as String).isEmpty ||
               item['metric'] is! String ||
               !const {
                 'longestSleepMinutes',
