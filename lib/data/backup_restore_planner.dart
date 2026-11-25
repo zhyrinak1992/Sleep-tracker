@@ -161,35 +161,29 @@ class BackupRestorePlanner {
         return count;
       case 'sleep_personal_records_history_v1':
         if (imported is! List) return 0;
-        final identities = <String>{};
-        if (local is List) {
-          for (final item in local) {
-            if (item is Map && item['id'] is String) {
-              identities.add(item['id'] as String);
-            }
-          }
-        }
-        var count = 0;
-        for (final item in imported) {
-          if (item is! Map || item['id'] is! String ||
-              (item['id'] as String).isEmpty ||
-              item['metric'] is! String ||
+        bool isValidHistoryItem(Object? raw) {
+          if (raw is! Map) return false;
+          final id = raw['id'];
+          final metric = raw['metric'];
+          final rawValue = raw['value'];
+          final achievedAt = raw['achievedAt'];
+          final sessionId = raw['sessionId'];
+          if (id is! String || id.isEmpty ||
+              metric is! String ||
               !const {
                 'longestSleepMinutes',
                 'bestEfficiencyPercent',
                 'shortestLatencyMinutes',
                 'longestStreakDays',
-              }.contains(item['metric']) ||
-              item['value'] is! num ||
-              !(item['value'] as num).toDouble().isFinite ||
-              item['achievedAt'] is! String ||
-              DateTime.tryParse(item['achievedAt'] as String) == null ||
-              (item['sessionId'] != null && item['sessionId'] is! String)) {
-            continue;
+              }.contains(metric) ||
+              rawValue is! num || !rawValue.toDouble().isFinite ||
+              achievedAt is! String ||
+              DateTime.tryParse(achievedAt) == null ||
+              (sessionId != null && sessionId is! String)) {
+            return false;
           }
-          final value = (item['value'] as num).toDouble();
-          final metric = item['metric'] as String;
-          final validValue = switch (metric) {
+          final value = rawValue.toDouble();
+          return switch (metric) {
             'longestSleepMinutes' => value > 0 && value % 1 == 0,
             'bestEfficiencyPercent' => value >= 0 && value <= 100,
             'shortestLatencyMinutes' =>
@@ -197,7 +191,19 @@ class BackupRestorePlanner {
             'longestStreakDays' => value >= 1 && value % 1 == 0,
             _ => false,
           };
-          if (validValue && identities.add(item['id'] as String)) count++;
+        }
+        final identities = <String>{};
+        if (local is List) {
+          for (final item in local) {
+            if (isValidHistoryItem(item)) {
+              identities.add((item as Map)['id'] as String);
+            }
+          }
+        }
+        var count = 0;
+        for (final item in imported) {
+          if (!isValidHistoryItem(item)) continue;
+          if (identities.add((item as Map)['id'] as String)) count++;
         }
         return count;
       case 'sleep_records_history_v1':
