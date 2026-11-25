@@ -10,7 +10,7 @@ void main() {
         difference: 1.5,
       );
 
-      expect(text, contains('времени последнего кофеина'));
+      expect(text, contains('временем последнего кофеина'));
       expect(text, contains('не доказывает причину'));
     });
 
