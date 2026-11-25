@@ -20,6 +20,10 @@ on:
       - '.github/workflows/ios-unsigned-build.yml'
   workflow_dispatch:
 
+concurrency:
+  group: ios-unsigned-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
