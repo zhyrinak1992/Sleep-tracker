@@ -57,6 +57,18 @@ void main() {
            'achievedAt': '2026-11-20T00:00:00Z', 'sessionId': 'night-1'},
           {'id': 'record-2', 'metric': 'longestSleepMinutes', 'value': 510,
            'achievedAt': '2026-11-22T00:00:00Z', 'sessionId': 'night-2'},
+          {'id': '', 'metric': 'longestSleepMinutes', 'value': 600,
+           'achievedAt': '2026-11-23T00:00:00Z', 'sessionId': 'night-empty-id'},
+          {'id': 'bad-zero', 'metric': 'longestSleepMinutes', 'value': 0,
+           'achievedAt': '2026-11-23T00:00:00Z', 'sessionId': 'night-zero'},
+          {'id': 'bad-efficiency', 'metric': 'bestEfficiencyPercent', 'value': 101,
+           'achievedAt': '2026-11-23T00:00:00Z', 'sessionId': 'night-efficiency'},
+          {'id': 'bad-latency', 'metric': 'shortestLatencyMinutes', 'value': 1441,
+           'achievedAt': '2026-11-23T00:00:00Z', 'sessionId': 'night-latency'},
+          {'id': 'bad-streak', 'metric': 'longestStreakDays', 'value': 0,
+           'achievedAt': '2026-11-23T00:00:00Z'},
+          {'id': 'bad-session', 'metric': 'longestSleepMinutes', 'value': 600,
+           'achievedAt': '2026-11-23T00:00:00Z', 'sessionId': 42},
         ])},
       ];
 
