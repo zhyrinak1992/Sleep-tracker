@@ -69,7 +69,7 @@ class _HealthDayTagMonthlyReportsScreenState
             children: [
               ScreenHeader(
                 title: 'Отчёты по отметкам',
-                subtitle: 'Сохранённые месячные обзоры календаря здоровья',
+                subtitle: 'Новые закрытые месяцы формируются при открытии раздела; фоновый запуск зависит от iOS',
                 icon: Icons.event_note_rounded,
               ),
               Align(
