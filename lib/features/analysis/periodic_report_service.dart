@@ -8,7 +8,7 @@ import 'sleep_score.dart';
 import 'periodic_tag_pattern_analyzer.dart';
 import 'sleep_regularity_analysis.dart';
 
-enum PeriodicReportKind { week, month, year }
+enum PeriodicReportKind { week, month, quarter, halfYear, year }
 
 class PeriodicReportSnapshot {
   const PeriodicReportSnapshot(this.data);
@@ -43,6 +43,8 @@ class PeriodicReportSnapshot {
         ' — ' + last.day.toString() + ' ' + _monthGenitive[last.month - 1] + ' ' + last.year.toString();
     }
     if (kind == 'month') return _monthNames[start.month - 1] + ' ' + start.year.toString();
+    if (kind == 'quarter') return (((start.month - 1) ~/ 3) + 1).toString() + ' квартал ' + start.year.toString();
+    if (kind == 'halfYear') return (start.month <= 6 ? 'I' : 'II') + ' полугодие ' + start.year.toString();
     return 'Год ' + start.year.toString();
   }
 
@@ -629,23 +631,27 @@ class PeriodicReportService {
       data['weekdayTrend'] = weekdayTrend(sessions);
     }
 
-    if (kind == PeriodicReportKind.year) {
+    if (kind == PeriodicReportKind.quarter ||
+        kind == PeriodicReportKind.halfYear ||
+        kind == PeriodicReportKind.year) {
       final months = <Map<String, Object?>>[];
-      for (var month = 1; month <= 12; month++) {
-        final monthStart = DateTime(start.year, month);
-        final monthEnd = DateTime(start.year, month + 1);
-        final monthSessions = allSessions.where((s) => !s.startedAt.isBefore(monthStart) && s.startedAt.isBefore(monthEnd)).toList();
+      var monthStart = DateTime(start.year, start.month);
+      while (monthStart.isBefore(end)) {
+        final monthEnd = DateTime(monthStart.year, monthStart.month + 1);
+        final monthSessions = sessions.where((s) =>
+          !s.startedAt.isBefore(monthStart) && s.startedAt.isBefore(monthEnd)).toList();
         if (monthSessions.isNotEmpty) {
           final summary = summarize(monthSessions);
           months.add({
-            'month': month,
-            'label': PeriodicReportSnapshot.monthName(month),
+            'month': monthStart.month,
+            'label': PeriodicReportSnapshot.monthName(monthStart.month),
             ...summary,
             'sleepMinutes': summary['averageSleepMinutes'],
             'samples': summary['sleepDurationSamples'],
             'nights': nightlyDetails(monthSessions),
           });
         }
+        monthStart = monthEnd;
       }
       data['months'] = months;
       data['trendPoints'] = months;
@@ -672,16 +678,22 @@ class PeriodicReportService {
       return day.subtract(Duration(days: day.weekday - DateTime.monday));
     }
     if (kind == PeriodicReportKind.month) return DateTime(value.year, value.month);
+    if (kind == PeriodicReportKind.quarter) return DateTime(value.year, ((value.month - 1) ~/ 3) * 3 + 1);
+    if (kind == PeriodicReportKind.halfYear) return DateTime(value.year, value.month <= 6 ? 1 : 7);
     return DateTime(value.year);
   }
   static DateTime _nextPeriodStart(DateTime value, PeriodicReportKind kind) {
     if (kind == PeriodicReportKind.week) return value.add(const Duration(days: 7));
     if (kind == PeriodicReportKind.month) return DateTime(value.year, value.month + 1);
+    if (kind == PeriodicReportKind.quarter) return DateTime(value.year, value.month + 3);
+    if (kind == PeriodicReportKind.halfYear) return DateTime(value.year, value.month + 6);
     return DateTime(value.year + 1);
   }
   static DateTime _previousPeriodStart(DateTime value, PeriodicReportKind kind) {
     if (kind == PeriodicReportKind.week) return value.subtract(const Duration(days: 7));
     if (kind == PeriodicReportKind.month) return DateTime(value.year, value.month - 1);
+    if (kind == PeriodicReportKind.quarter) return DateTime(value.year, value.month - 3);
+    if (kind == PeriodicReportKind.halfYear) return DateTime(value.year, value.month - 6);
     return DateTime(value.year - 1);
   }
   static String _id(PeriodicReportKind kind, DateTime start) =>
