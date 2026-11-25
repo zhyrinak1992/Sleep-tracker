@@ -53,6 +53,27 @@ class NotificationService {
       ));
   }
 
+  Future<void> healthDayTagMonthlyReportReady(String monthKey) async {
+    await initialize();
+    final numericMonth = int.tryParse(monthKey.replaceAll('-', '')) ?? 0;
+    final notificationId = 6200000 + numericMonth;
+    await _plugin.show(
+      notificationId,
+      'Месячный отчёт по отметкам готов',
+      'Сохранён обзор дневных отметок за $monthKey. Откройте «Моё здоровье», чтобы посмотреть частоту и изменения.',
+      const NotificationDetails(
+        iOS: DarwinNotificationDetails(presentAlert: true, presentSound: true),
+        android: AndroidNotificationDetails(
+          'health_tag_reports',
+          'Отчёты по дневным отметкам',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+        ),
+      ),
+      payload: 'health_day_tag_month:$monthKey',
+    );
+  }
+
   // Three rolling days keep 42 night reminders below iOS's pending
   // local-notification limit while leaving room for other app notifications.
   static const int _nightReminderBaseId = 5000;
