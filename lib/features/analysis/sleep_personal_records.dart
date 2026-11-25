@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../../models/sleep_session.dart';
 import '../diary/sleep_session_metrics.dart';
+import 'sleep_score.dart';
 
 /// Personal bests derived only from completed, non-deleted sessions.
 /// Dates are compared as local calendar days (not 24-hour durations), so DST
@@ -11,9 +12,15 @@ class SleepPersonalRecords {
     this.longestSleepMinutes,
     this.longestSleepSessionId,
     this.longestSleepAt,
+    this.bestSleepScore,
+    this.bestSleepScoreSessionId,
+    this.bestSleepScoreAt,
     this.bestEfficiencyPercent,
     this.bestEfficiencySessionId,
     this.bestEfficiencyAt,
+    this.fewestAwakenings,
+    this.fewestAwakeningsSessionId,
+    this.fewestAwakeningsAt,
     this.shortestLatencyMinutes,
     this.shortestLatencySessionId,
     this.shortestLatencyAt,
@@ -24,9 +31,15 @@ class SleepPersonalRecords {
   final int? longestSleepMinutes;
   final String? longestSleepSessionId;
   final DateTime? longestSleepAt;
+  final int? bestSleepScore;
+  final String? bestSleepScoreSessionId;
+  final DateTime? bestSleepScoreAt;
   final double? bestEfficiencyPercent;
   final String? bestEfficiencySessionId;
   final DateTime? bestEfficiencyAt;
+  final int? fewestAwakenings;
+  final String? fewestAwakeningsSessionId;
+  final DateTime? fewestAwakeningsAt;
   final int? shortestLatencyMinutes;
   final String? shortestLatencySessionId;
   final DateTime? shortestLatencyAt;
@@ -36,6 +49,7 @@ class SleepPersonalRecords {
   static SleepPersonalRecords calculate({
     required Iterable<SleepSession> sessions,
     required Map<String, List<Map<String, Object?>>> stagesBySession,
+    required Map<String, Map<String, Object?>> morningReports,
   }) {
     final valid = sessions.where((session) {
       final duration = session.duration;
@@ -48,9 +62,15 @@ class SleepPersonalRecords {
     int? longestSleep;
     String? longestSleepId;
     DateTime? longestSleepAt;
+    int? bestSleepScore;
+    String? bestSleepScoreId;
+    DateTime? bestSleepScoreAt;
     double? bestEfficiency;
     String? bestEfficiencyId;
     DateTime? bestEfficiencyAt;
+    int? fewestAwakenings;
+    String? fewestAwakeningsId;
+    DateTime? fewestAwakeningsAt;
     int? shortestLatency;
     String? shortestLatencyId;
     DateTime? shortestLatencyAt;
@@ -66,6 +86,36 @@ class SleepPersonalRecords {
         longestSleep = sleepMinutes;
         longestSleepId = session.id;
         longestSleepAt = session.startedAt;
+      }
+
+      final score = SleepScoreCalculator.calculateForSession(
+        session: session,
+        historySessions: valid,
+        morningReports: morningReports,
+        stagesBySession: stagesBySession,
+      ).score;
+      if (score != null && score.isFinite && score >= 0 && score <= 100) {
+        final roundedScore = score.round();
+        if (bestSleepScore == null || roundedScore > bestSleepScore) {
+          bestSleepScore = roundedScore;
+          bestSleepScoreId = session.id;
+          bestSleepScoreAt = session.startedAt;
+        }
+      }
+
+      final hasAwakeSamples = (stagesBySession[session.id] ?? const [])
+          .any((row) {
+        final stage = (row['stage'] as String? ?? '').toLowerCase();
+        return stage.contains('бодрств') || stage.contains('awake');
+      });
+      final awakeningsAreReliable = hasAwakeSamples &&
+          metrics.stageCoveragePercent != null &&
+          metrics.stageCoveragePercent! >= 80;
+      if (awakeningsAreReliable &&
+          (fewestAwakenings == null || metrics.awakeningCount < fewestAwakenings)) {
+        fewestAwakenings = metrics.awakeningCount;
+        fewestAwakeningsId = session.id;
+        fewestAwakeningsAt = session.startedAt;
       }
 
       final efficiency = metrics.sleepEfficiencyPercent;
@@ -90,9 +140,15 @@ class SleepPersonalRecords {
       longestSleepMinutes: longestSleep,
       longestSleepSessionId: longestSleepId,
       longestSleepAt: longestSleepAt,
+      bestSleepScore: bestSleepScore,
+      bestSleepScoreSessionId: bestSleepScoreId,
+      bestSleepScoreAt: bestSleepScoreAt,
       bestEfficiencyPercent: bestEfficiency,
       bestEfficiencySessionId: bestEfficiencyId,
       bestEfficiencyAt: bestEfficiencyAt,
+      fewestAwakenings: fewestAwakenings,
+      fewestAwakeningsSessionId: fewestAwakeningsId,
+      fewestAwakeningsAt: fewestAwakeningsAt,
       shortestLatencyMinutes: shortestLatency,
       shortestLatencySessionId: shortestLatencyId,
       shortestLatencyAt: shortestLatencyAt,
@@ -150,9 +206,15 @@ class SleepPersonalRecords {
         'longestSleepMinutes': longestSleepMinutes,
         'longestSleepSessionId': longestSleepSessionId,
         'longestSleepAt': longestSleepAt?.toUtc().toIso8601String(),
+        'bestSleepScore': bestSleepScore,
+        'bestSleepScoreSessionId': bestSleepScoreSessionId,
+        'bestSleepScoreAt': bestSleepScoreAt?.toUtc().toIso8601String(),
         'bestEfficiencyPercent': bestEfficiencyPercent,
         'bestEfficiencySessionId': bestEfficiencySessionId,
         'bestEfficiencyAt': bestEfficiencyAt?.toUtc().toIso8601String(),
+        'fewestAwakenings': fewestAwakenings,
+        'fewestAwakeningsSessionId': fewestAwakeningsSessionId,
+        'fewestAwakeningsAt': fewestAwakeningsAt?.toUtc().toIso8601String(),
         'shortestLatencyMinutes': shortestLatencyMinutes,
         'shortestLatencySessionId': shortestLatencySessionId,
         'shortestLatencyAt': shortestLatencyAt?.toUtc().toIso8601String(),
@@ -184,9 +246,16 @@ class SleepPersonalRecords {
       longestSleepMinutes: integer('longestSleepMinutes'),
       longestSleepSessionId: string('longestSleepSessionId'),
       longestSleepAt: date('longestSleepAt'),
+      bestSleepScore: integer('bestSleepScore') == null || integer('bestSleepScore')! > 100
+          ? null : integer('bestSleepScore'),
+      bestSleepScoreSessionId: string('bestSleepScoreSessionId'),
+      bestSleepScoreAt: date('bestSleepScoreAt'),
       bestEfficiencyPercent: decimal('bestEfficiencyPercent'),
       bestEfficiencySessionId: string('bestEfficiencySessionId'),
       bestEfficiencyAt: date('bestEfficiencyAt'),
+      fewestAwakenings: integer('fewestAwakenings'),
+      fewestAwakeningsSessionId: string('fewestAwakeningsSessionId'),
+      fewestAwakeningsAt: date('fewestAwakeningsAt'),
       shortestLatencyMinutes: integer('shortestLatencyMinutes'),
       shortestLatencySessionId: string('shortestLatencySessionId'),
       shortestLatencyAt: date('shortestLatencyAt'),
@@ -231,6 +300,14 @@ class SleepPersonalRecords {
       currentSessionId: longestSleepSessionId,
       previousSessionId: previous.longestSleepSessionId,
     );
+    final keepScore = keepPrevious(
+      currentValue: bestSleepScore,
+      previousValue: previous.bestSleepScore,
+      currentAt: bestSleepScoreAt,
+      previousAt: previous.bestSleepScoreAt,
+      currentSessionId: bestSleepScoreSessionId,
+      previousSessionId: previous.bestSleepScoreSessionId,
+    );
     final keepEfficiency = keepPrevious(
       currentValue: bestEfficiencyPercent,
       previousValue: previous.bestEfficiencyPercent,
@@ -238,6 +315,15 @@ class SleepPersonalRecords {
       previousAt: previous.bestEfficiencyAt,
       currentSessionId: bestEfficiencySessionId,
       previousSessionId: previous.bestEfficiencySessionId,
+    );
+    final keepAwakenings = keepPrevious(
+      currentValue: fewestAwakenings,
+      previousValue: previous.fewestAwakenings,
+      currentAt: fewestAwakeningsAt,
+      previousAt: previous.fewestAwakeningsAt,
+      currentSessionId: fewestAwakeningsSessionId,
+      previousSessionId: previous.fewestAwakeningsSessionId,
+      lowerIsBetter: true,
     );
     final keepLatency = keepPrevious(
       currentValue: shortestLatencyMinutes,
@@ -255,9 +341,15 @@ class SleepPersonalRecords {
       longestSleepMinutes: keepSleep ? previous.longestSleepMinutes : longestSleepMinutes,
       longestSleepSessionId: keepSleep ? previous.longestSleepSessionId : longestSleepSessionId,
       longestSleepAt: keepSleep ? previous.longestSleepAt : longestSleepAt,
+      bestSleepScore: keepScore ? previous.bestSleepScore : bestSleepScore,
+      bestSleepScoreSessionId: keepScore ? previous.bestSleepScoreSessionId : bestSleepScoreSessionId,
+      bestSleepScoreAt: keepScore ? previous.bestSleepScoreAt : bestSleepScoreAt,
       bestEfficiencyPercent: keepEfficiency ? previous.bestEfficiencyPercent : bestEfficiencyPercent,
       bestEfficiencySessionId: keepEfficiency ? previous.bestEfficiencySessionId : bestEfficiencySessionId,
       bestEfficiencyAt: keepEfficiency ? previous.bestEfficiencyAt : bestEfficiencyAt,
+      fewestAwakenings: keepAwakenings ? previous.fewestAwakenings : fewestAwakenings,
+      fewestAwakeningsSessionId: keepAwakenings ? previous.fewestAwakeningsSessionId : fewestAwakeningsSessionId,
+      fewestAwakeningsAt: keepAwakenings ? previous.fewestAwakeningsAt : fewestAwakeningsAt,
       shortestLatencyMinutes: keepLatency ? previous.shortestLatencyMinutes : shortestLatencyMinutes,
       shortestLatencySessionId: keepLatency ? previous.shortestLatencySessionId : shortestLatencySessionId,
       shortestLatencyAt: keepLatency ? previous.shortestLatencyAt : shortestLatencyAt,
@@ -281,7 +373,9 @@ class SleepPersonalRecordEvent {
 
   static const metricKeys = <String>{
     'longestSleepMinutes',
+    'bestSleepScore',
     'bestEfficiencyPercent',
+    'fewestAwakenings',
     'shortestLatencyMinutes',
     'longestStreakDays',
   };
@@ -316,7 +410,9 @@ class SleepPersonalRecordEvent {
     final value = rawValue.toDouble();
     final validValue = switch (metric) {
       'longestSleepMinutes' => value > 0 && value % 1 == 0,
+      'bestSleepScore' => value >= 0 && value <= 100 && value % 1 == 0,
       'bestEfficiencyPercent' => value >= 0 && value <= 100,
+      'fewestAwakenings' => value >= 0 && value % 1 == 0,
       'shortestLatencyMinutes' => value >= 0 && value <= 1440 && value % 1 == 0,
       'longestStreakDays' => value >= 1 && value % 1 == 0,
       _ => false,
@@ -397,8 +493,12 @@ class SleepPersonalRecordHistory {
 
     add('longestSleepMinutes', records.longestSleepMinutes,
         records.longestSleepAt, records.longestSleepSessionId);
+    add('bestSleepScore', records.bestSleepScore,
+        records.bestSleepScoreAt, records.bestSleepScoreSessionId);
     add('bestEfficiencyPercent', records.bestEfficiencyPercent,
         records.bestEfficiencyAt, records.bestEfficiencySessionId);
+    add('fewestAwakenings', records.fewestAwakenings,
+        records.fewestAwakeningsAt, records.fewestAwakeningsSessionId);
     add('shortestLatencyMinutes', records.shortestLatencyMinutes,
         records.shortestLatencyAt, records.shortestLatencySessionId);
     add('longestStreakDays', records.longestStreakDays,
@@ -448,11 +548,26 @@ class SleepPersonalRecordHistory {
       sessionId: current.longestSleepSessionId,
     );
     addIfBetter(
+      metric: 'bestSleepScore',
+      currentValue: current.bestSleepScore,
+      previousValue: previous.bestSleepScore,
+      achievedAt: current.bestSleepScoreAt,
+      sessionId: current.bestSleepScoreSessionId,
+    );
+    addIfBetter(
       metric: 'bestEfficiencyPercent',
       currentValue: current.bestEfficiencyPercent,
       previousValue: previous.bestEfficiencyPercent,
       achievedAt: current.bestEfficiencyAt,
       sessionId: current.bestEfficiencySessionId,
+    );
+    addIfBetter(
+      metric: 'fewestAwakenings',
+      currentValue: current.fewestAwakenings,
+      previousValue: previous.fewestAwakenings,
+      achievedAt: current.fewestAwakeningsAt,
+      sessionId: current.fewestAwakeningsSessionId,
+      lowerIsBetter: true,
     );
     addIfBetter(
       metric: 'shortestLatencyMinutes',
@@ -482,7 +597,8 @@ class SleepPersonalRecordHistory {
         best[event.metric] = event;
         continue;
       }
-      final better = event.metric == 'shortestLatencyMinutes'
+      final better = event.metric == 'shortestLatencyMinutes' ||
+              event.metric == 'fewestAwakenings'
           ? event.value < previous.value
           : event.value > previous.value;
       if (better) best[event.metric] = event;
@@ -491,9 +607,15 @@ class SleepPersonalRecordHistory {
       longestSleepMinutes: best['longestSleepMinutes']?.value.round(),
       longestSleepSessionId: best['longestSleepMinutes']?.sessionId,
       longestSleepAt: best['longestSleepMinutes']?.achievedAt,
+      bestSleepScore: best['bestSleepScore']?.value.round(),
+      bestSleepScoreSessionId: best['bestSleepScore']?.sessionId,
+      bestSleepScoreAt: best['bestSleepScore']?.achievedAt,
       bestEfficiencyPercent: best['bestEfficiencyPercent']?.value,
       bestEfficiencySessionId: best['bestEfficiencyPercent']?.sessionId,
       bestEfficiencyAt: best['bestEfficiencyPercent']?.achievedAt,
+      fewestAwakenings: best['fewestAwakenings']?.value.round(),
+      fewestAwakeningsSessionId: best['fewestAwakenings']?.sessionId,
+      fewestAwakeningsAt: best['fewestAwakenings']?.achievedAt,
       shortestLatencyMinutes: best['shortestLatencyMinutes']?.value.round(),
       shortestLatencySessionId: best['shortestLatencyMinutes']?.sessionId,
       shortestLatencyAt: best['shortestLatencyMinutes']?.achievedAt,
