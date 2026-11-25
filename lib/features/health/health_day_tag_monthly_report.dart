@@ -84,6 +84,12 @@ class HealthDayTagMonthlyReportEntry {
   final double? previousShare;
   final double? differencePercentagePoints;
 
+  /// Returns null when the source share is unavailable; missing data is not 0%.
+  static double? progressFraction(double? percentage) {
+    if (percentage == null) return null;
+    return (percentage / 100).clamp(0.0, 1.0);
+  }
+
   Map<String, Object?> toJson() => {
     'tag': tag,
     'days': days,
