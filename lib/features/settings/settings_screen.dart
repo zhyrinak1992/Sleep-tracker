@@ -342,9 +342,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<String?> _requestBackupPassword({required bool confirm}) async {
+  Future<String?> _requestLegacyBackupPassword() async {
     final passwordController = TextEditingController();
-    final confirmController = TextEditingController();
     String? errorText;
     try {
       return await showDialog<String>(
@@ -365,16 +364,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   enableSuggestions: false,
                   decoration: const InputDecoration(labelText: 'Пароль', border: OutlineInputBorder()),
                 ),
-                if (confirm) ...[
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: confirmController,
-                    obscureText: true,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    decoration: const InputDecoration(labelText: 'Повторите пароль', border: OutlineInputBorder()),
-                  ),
-                ],
                 if (errorText != null) ...[
                   const SizedBox(height: 8),
                   Text(errorText!, style: const TextStyle(color: Colors.red)),
@@ -393,13 +382,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     setDialogState(() => errorText = 'Введите пароль старой копии.');
                     return;
                   }
-                  if (confirm && password != confirmController.text) {
-                    setDialogState(() => errorText = 'Пароли не совпадают.');
-                    return;
-                  }
                   Navigator.pop(dialogContext, password);
                 },
-                child: Text(confirm ? 'Создать копию' : 'Продолжить'),
+                child: const Text('Продолжить'),
               ),
             ],
           ),
@@ -407,7 +392,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     } finally {
       passwordController.dispose();
-      confirmController.dispose();
     }
   }
 
@@ -483,7 +467,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _busy = true);
     try {
       final draft = await BackupService.instance.prepareImportFromFiles(
-        requestPassword: () => _requestBackupPassword(confirm: false),
+        requestPassword: _requestLegacyBackupPassword,
       );
       if (draft == null || !mounted) return;
       final preview = draft.preview;
