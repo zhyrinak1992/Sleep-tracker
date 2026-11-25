@@ -336,7 +336,7 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
               _detailRow(
                 'Зарегистрированные пробуждения',
                 currentAwakenings == null
-                    ? 'Нет данных Apple Health'
+                    ? 'Нет подтверждённых интервалов бодрствования'
                     : metrics.awakeningCount.toString(),
                 icon: Icons.wb_sunny_outlined,
               ),
