@@ -20,8 +20,11 @@ on:
       - '.github/workflows/ios-unsigned-build.yml'
   workflow_dispatch:
 
+# Keep each pull-request build queued independently. A shared branch-level
+# group would cancel the previous pending macOS build whenever another commit
+# arrives, preventing the unsigned IPA from ever reaching a runner.
 concurrency:
-  group: ios-unsigned-${{ github.ref }}
+  group: ios-unsigned-${{ github.ref }}-${{ github.run_id }}
   cancel-in-progress: false
 
 permissions:
