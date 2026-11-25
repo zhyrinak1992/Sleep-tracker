@@ -87,7 +87,6 @@ class SleepAchievementService {
     final sessionList = sessions.toList(growable: false);
     final raw = await database.getAppMetadata(_historyKey);
     final history = <String, String>{};
-    var hasValidHistory = false;
     if (raw != null) {
       try {
         final decoded = jsonDecode(raw);
@@ -106,7 +105,6 @@ class SleepAchievementService {
     // A structurally valid but empty/fully-invalid map is not evidence that
     // achievements were previously initialized. Treat it as a baseline so
     // restoring or repairing partial metadata cannot replay old celebrations.
-    hasValidHistory = history.isNotEmpty;
 
     var changed = false;
     final earnedNow = SleepAchievementCatalog.evaluate(sessionList);
