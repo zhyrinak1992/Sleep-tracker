@@ -176,7 +176,10 @@ void main() {
     expect(q2.nights, 1);
     expect(q2.data['schemaVersion'], 9);
     expect((q2.data['months'] as List).length, 1);
-
+    final q2Month = (q2.data['months'] as List).single as Map;
+    expect(q2Month['nightCount'], 1);
+    expect(q2Month['nights'], isA<List>());
+    
     final h1 = halfYears.single;
     expect(h1.start, DateTime(2026, 1, 1));
     expect(h1.endExclusive, DateTime(2026, 7, 1));
