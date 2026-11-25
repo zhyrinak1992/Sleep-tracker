@@ -41,31 +41,21 @@ void main() {
 
   test('builds tagged nightly duration, efficiency, latency and rating points', () {
     final night = session('complete', rating: 4);
-    final base = {
-      'sessions': [night],
-      'tagsByDay': tags,
-      'stagesBySession': {'complete': completeStages},
-      'tag': 'Кофеин',
-      'start': DateTime(2026, 11, 24),
-      'endExclusive': DateTime(2026, 11, 26),
-    };
+    List<HealthDayTagNightMetricPoint> calculate(HealthDayTagNightMetric metric) =>
+        HealthDayTagNightHistory.calculate(
+          sessions: [night],
+          tagsByDay: tags,
+          stagesBySession: {'complete': completeStages},
+          tag: 'Кофеин',
+          start: DateTime(2026, 11, 24),
+          endExclusive: DateTime(2026, 11, 26),
+          metric: metric,
+        );
 
-    final duration = HealthDayTagNightHistory.calculate(
-      ...base,
-      metric: HealthDayTagNightMetric.sleepDuration,
-    );
-    final efficiency = HealthDayTagNightHistory.calculate(
-      ...base,
-      metric: HealthDayTagNightMetric.sleepEfficiency,
-    );
-    final latency = HealthDayTagNightHistory.calculate(
-      ...base,
-      metric: HealthDayTagNightMetric.sleepLatency,
-    );
-    final rating = HealthDayTagNightHistory.calculate(
-      ...base,
-      metric: HealthDayTagNightMetric.morningRating,
-    );
+    final duration = calculate(HealthDayTagNightMetric.sleepDuration);
+    final efficiency = calculate(HealthDayTagNightMetric.sleepEfficiency);
+    final latency = calculate(HealthDayTagNightMetric.sleepLatency);
+    final rating = calculate(HealthDayTagNightMetric.morningRating);
 
     expect(duration, hasLength(1));
     expect(duration.single.value, 7.5);
@@ -79,23 +69,19 @@ void main() {
     final partialStages = [
       stage('1', 'Основной', DateTime(2026, 11, 24, 22), DateTime(2026, 11, 25, 2)),
     ];
-    final base = {
-      'sessions': [night],
-      'tagsByDay': tags,
-      'stagesBySession': {'partial': partialStages},
-      'tag': 'Кофеин',
-      'start': DateTime(2026, 11, 24),
-      'endExclusive': DateTime(2026, 11, 26),
-    };
+    List<HealthDayTagNightMetricPoint> calculate(HealthDayTagNightMetric metric) =>
+        HealthDayTagNightHistory.calculate(
+          sessions: [night],
+          tagsByDay: tags,
+          stagesBySession: {'partial': partialStages},
+          tag: 'Кофеин',
+          start: DateTime(2026, 11, 24),
+          endExclusive: DateTime(2026, 11, 26),
+          metric: metric,
+        );
 
-    final efficiency = HealthDayTagNightHistory.calculate(
-      ...base,
-      metric: HealthDayTagNightMetric.sleepEfficiency,
-    );
-    final awakenings = HealthDayTagNightHistory.calculate(
-      ...base,
-      metric: HealthDayTagNightMetric.awakenings,
-    );
+    final efficiency = calculate(HealthDayTagNightMetric.sleepEfficiency);
+    final awakenings = calculate(HealthDayTagNightMetric.awakenings);
 
     expect(efficiency.single.value, isNull);
     expect(awakenings.single.value, isNull);
