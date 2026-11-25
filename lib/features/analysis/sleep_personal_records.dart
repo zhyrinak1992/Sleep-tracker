@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../../models/sleep_session.dart';
 import '../diary/sleep_session_metrics.dart';
 
@@ -223,4 +225,259 @@ class SleepPersonalRecords {
           : previous.longestStreakAt,
     );
   }
+}
+
+/// A confirmed improvement to one of the four approved personal records.
+/// Historical events are independent of the source night, so deleting a night
+/// never erases a record the user has already earned.
+class SleepPersonalRecordEvent {
+  const SleepPersonalRecordEvent({
+    required this.id,
+    required this.metric,
+    required this.value,
+    required this.achievedAt,
+    this.sessionId,
+  });
+
+  static const metricKeys = <String>{
+    'longestSleepMinutes',
+    'bestEfficiencyPercent',
+    'shortestLatencyMinutes',
+    'longestStreakDays',
+  };
+
+  final String id;
+  final String metric;
+  final double value;
+  final DateTime achievedAt;
+  final String? sessionId;
+
+  Map<String, Object?> toMap() => {
+    'id': id,
+    'metric': metric,
+    'value': value,
+    'achievedAt': achievedAt.toUtc().toIso8601String(),
+    'sessionId': sessionId,
+  };
+
+  factory SleepPersonalRecordEvent.fromMap(Map<String, dynamic> map) {
+    final id = map['id'];
+    final metric = map['metric'];
+    final rawValue = map['value'];
+    final date = DateTime.tryParse(map['achievedAt'] as String? ?? '');
+    final sessionId = map['sessionId'];
+    if (id is! String || id.isEmpty ||
+        metric is! String || !metricKeys.contains(metric) ||
+        rawValue is! num || !rawValue.toDouble().isFinite ||
+        date == null || (sessionId != null && sessionId is! String)) {
+      throw const FormatException('Запись истории личных рекордов повреждена.');
+    }
+    final value = rawValue.toDouble();
+    final validValue = switch (metric) {
+      'longestSleepMinutes' => value > 0 && value % 1 == 0,
+      'bestEfficiencyPercent' => value >= 0 && value <= 100,
+      'shortestLatencyMinutes' => value >= 0 && value <= 1440 && value % 1 == 0,
+      'longestStreakDays' => value >= 1 && value % 1 == 0,
+      _ => false,
+    };
+    if (!validValue) {
+      throw const FormatException('Значение личного рекорда недопустимо.');
+    }
+    return SleepPersonalRecordEvent(
+      id: id,
+      metric: metric,
+      value: value,
+      achievedAt: date.toLocal(),
+      sessionId: sessionId as String?,
+    );
+  }
+
+  static String createId({
+    required String metric,
+    required double value,
+    required DateTime achievedAt,
+    String? sessionId,
+  }) => '$metric|\${sessionId ?? ''}|$value|\${achievedAt.toUtc().toIso8601String()}';
+}
+
+class SleepPersonalRecordHistory {
+  SleepPersonalRecordHistory._();
+
+  static const metadataKey = 'sleep_personal_records_history_v1';
+
+  static List<SleepPersonalRecordEvent> decode(String? raw) {
+    if (raw == null || raw.isEmpty) return const [];
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) {
+      throw const FormatException('История личных рекордов повреждена.');
+    }
+    final events = <SleepPersonalRecordEvent>[];
+    for (final item in decoded) {
+      if (item is! Map) continue;
+      try {
+        events.add(SleepPersonalRecordEvent.fromMap(
+          Map<String, dynamic>.from(item),
+        ));
+      } on FormatException {
+        // A malformed event must not invalidate other saved records.
+      }
+    }
+    return _sorted(events);
+  }
+
+  static String encode(List<SleepPersonalRecordEvent> events) =>
+      jsonEncode(_sorted(events).map((event) => event.toMap()).toList());
+
+  static List<SleepPersonalRecordEvent> fromRecords(
+    SleepPersonalRecords records,
+  ) {
+    final events = <SleepPersonalRecordEvent>[];
+    void add(String metric, num? rawValue, DateTime? date, String? sessionId) {
+      if (rawValue == null || date == null) return;
+      final value = rawValue.toDouble();
+      final id = SleepPersonalRecordEvent.createId(
+        metric: metric,
+        value: value,
+        achievedAt: date,
+        sessionId: sessionId,
+      );
+      try {
+        events.add(SleepPersonalRecordEvent.fromMap({
+          'id': id,
+          'metric': metric,
+          'value': value,
+          'achievedAt': date.toUtc().toIso8601String(),
+          'sessionId': sessionId,
+        }));
+      } on FormatException {
+        // Do not invent a date or store an invalid best value.
+      }
+    }
+
+    add('longestSleepMinutes', records.longestSleepMinutes,
+        records.longestSleepAt, records.longestSleepSessionId);
+    add('bestEfficiencyPercent', records.bestEfficiencyPercent,
+        records.bestEfficiencyAt, records.bestEfficiencySessionId);
+    add('shortestLatencyMinutes', records.shortestLatencyMinutes,
+        records.shortestLatencyAt, records.shortestLatencySessionId);
+    add('longestStreakDays', records.longestStreakDays,
+        records.longestStreakAt, null);
+    return _sorted(events);
+  }
+
+  static List<SleepPersonalRecordEvent> improvements({
+    required SleepPersonalRecords current,
+    required SleepPersonalRecords previous,
+  }) {
+    final events = <SleepPersonalRecordEvent>[];
+    void addIfBetter({
+      required String metric,
+      required num? currentValue,
+      required num? previousValue,
+      required DateTime? achievedAt,
+      String? sessionId,
+      bool lowerIsBetter = false,
+    }) {
+      if (currentValue == null || achievedAt == null) return;
+      final better = previousValue == null ||
+          (lowerIsBetter
+              ? currentValue < previousValue
+              : currentValue > previousValue);
+      if (!better) return;
+      final value = currentValue.toDouble();
+      events.add(SleepPersonalRecordEvent(
+        id: SleepPersonalRecordEvent.createId(
+          metric: metric,
+          value: value,
+          achievedAt: achievedAt,
+          sessionId: sessionId,
+        ),
+        metric: metric,
+        value: value,
+        achievedAt: achievedAt,
+        sessionId: sessionId,
+      ));
+    }
+
+    addIfBetter(
+      metric: 'longestSleepMinutes',
+      currentValue: current.longestSleepMinutes,
+      previousValue: previous.longestSleepMinutes,
+      achievedAt: current.longestSleepAt,
+      sessionId: current.longestSleepSessionId,
+    );
+    addIfBetter(
+      metric: 'bestEfficiencyPercent',
+      currentValue: current.bestEfficiencyPercent,
+      previousValue: previous.bestEfficiencyPercent,
+      achievedAt: current.bestEfficiencyAt,
+      sessionId: current.bestEfficiencySessionId,
+    );
+    addIfBetter(
+      metric: 'shortestLatencyMinutes',
+      currentValue: current.shortestLatencyMinutes,
+      previousValue: previous.shortestLatencyMinutes,
+      achievedAt: current.shortestLatencyAt,
+      sessionId: current.shortestLatencySessionId,
+      lowerIsBetter: true,
+    );
+    addIfBetter(
+      metric: 'longestStreakDays',
+      currentValue: current.longestStreakDays,
+      previousValue: previous.longestStreakDays,
+      achievedAt: current.longestStreakAt,
+    );
+    return _sorted(events);
+  }
+
+  static SleepPersonalRecords? bestRecords(
+    List<SleepPersonalRecordEvent> events,
+  ) {
+    if (events.isEmpty) return null;
+    final best = <String, SleepPersonalRecordEvent>{};
+    for (final event in events) {
+      final previous = best[event.metric];
+      if (previous == null) {
+        best[event.metric] = event;
+        continue;
+      }
+      final better = event.metric == 'shortestLatencyMinutes'
+          ? event.value < previous.value
+          : event.value > previous.value;
+      if (better) best[event.metric] = event;
+    }
+    return SleepPersonalRecords(
+      longestSleepMinutes: best['longestSleepMinutes']?.value.round(),
+      longestSleepSessionId: best['longestSleepMinutes']?.sessionId,
+      longestSleepAt: best['longestSleepMinutes']?.achievedAt,
+      bestEfficiencyPercent: best['bestEfficiencyPercent']?.value,
+      bestEfficiencySessionId: best['bestEfficiencyPercent']?.sessionId,
+      bestEfficiencyAt: best['bestEfficiencyPercent']?.achievedAt,
+      shortestLatencyMinutes: best['shortestLatencyMinutes']?.value.round(),
+      shortestLatencySessionId: best['shortestLatencyMinutes']?.sessionId,
+      shortestLatencyAt: best['shortestLatencyMinutes']?.achievedAt,
+      longestStreakDays: best['longestStreakDays']?.value.round() ?? 0,
+      longestStreakAt: best['longestStreakDays']?.achievedAt,
+    );
+  }
+
+  static List<SleepPersonalRecordEvent> merge(
+    Iterable<SleepPersonalRecordEvent> local,
+    Iterable<SleepPersonalRecordEvent> imported,
+  ) {
+    final byId = <String, SleepPersonalRecordEvent>{};
+    for (final event in [...local, ...imported]) {
+      byId.putIfAbsent(event.id, () => event);
+    }
+    return _sorted(byId.values);
+  }
+
+  static List<SleepPersonalRecordEvent> _sorted(
+    Iterable<SleepPersonalRecordEvent> events,
+  ) => events.toList()
+    ..sort((a, b) {
+      final date = a.achievedAt.compareTo(b.achievedAt);
+      if (date != 0) return date;
+      return a.metric.compareTo(b.metric);
+    });
 }
