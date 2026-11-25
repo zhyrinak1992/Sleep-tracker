@@ -76,6 +76,31 @@ void main() {
       expect(merged['bestEfficiencyAt'], '2026-11-21T00:00:00Z');
     });
 
+    test('recovers missing source metadata from an equal imported best', () {
+      final merged = jsonDecode(mergeAchievementMetadata(
+        key: 'sleep_personal_records_v1',
+        localRaw: jsonEncode({
+          'bestSleepScore': 96,
+          'fewestAwakenings': 1,
+        }),
+        importedRaw: jsonEncode({
+          'bestSleepScore': 96,
+          'bestSleepScoreSessionId': 'archive-score',
+          'bestSleepScoreAt': '2026-11-22T00:00:00Z',
+          'fewestAwakenings': 1,
+          'fewestAwakeningsSessionId': 'archive-awakenings',
+          'fewestAwakeningsAt': '2026-11-23T00:00:00Z',
+        }),
+      )) as Map<String, dynamic>;
+
+      expect(merged['bestSleepScore'], 96);
+      expect(merged['bestSleepScoreSessionId'], 'archive-score');
+      expect(merged['bestSleepScoreAt'], '2026-11-22T00:00:00Z');
+      expect(merged['fewestAwakenings'], 1);
+      expect(merged['fewestAwakeningsSessionId'], 'archive-awakenings');
+      expect(merged['fewestAwakeningsAt'], '2026-11-23T00:00:00Z');
+    });
+
     test('ignores invalid imported best values rather than erasing valid local values', () {
       final merged = jsonDecode(mergeAchievementMetadata(
         key: 'sleep_personal_records_v1',
