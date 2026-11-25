@@ -83,6 +83,28 @@ void main() {
       expect(earned, isNot(contains('streak_three')));
     });
 
+    test('records the actual date each night and streak milestone was reached', () {
+      final sessions = List.generate(8, (index) => _session(id: index + 1));
+      final earned = SleepAchievementCatalog.evaluateDates(sessions);
+
+      expect(earned['first_night'], DateTime(2026, 1, 2, 22));
+      expect(earned['seven_nights'], DateTime(2026, 1, 8, 22));
+      expect(earned['streak_three'], DateTime(2026, 1, 4));
+      expect(earned['streak_seven'], DateTime(2026, 1, 8));
+      expect(earned.containsKey('streak_fourteen'), isFalse);
+    });
+
+    test('uses the date of the rated night for rating milestones', () {
+      final sessions = List.generate(
+        10,
+        (index) => _session(id: index + 1, rating: 4),
+      );
+      final earned = SleepAchievementCatalog.evaluateDates(sessions);
+
+      expect(earned['first_rating'], DateTime(2026, 1, 2, 22));
+      expect(earned['ten_ratings'], DateTime(2026, 1, 11, 22));
+    });
+
     test('does not unlock anything for an empty history', () {
       expect(SleepAchievementCatalog.evaluate(const []), isEmpty);
     });
