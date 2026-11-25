@@ -66,12 +66,14 @@ class SleepAchievementState {
     required this.displayEnabled,
     required this.records,
     required this.newRecordKeys,
+    required this.recordHistory,
   });
 
   final Map<String, DateTime> earnedAt;
   final bool displayEnabled;
   final SleepPersonalRecords records;
   final Set<String> newRecordKeys;
+  final List<SleepPersonalRecordEvent> recordHistory;
 }
 
 class SleepAchievementService {
@@ -81,6 +83,7 @@ class SleepAchievementService {
   static const _historyKey = 'sleep_achievements_history_v1';
   static const _displayKey = 'sleep_achievements_display_enabled';
   static const _recordsKey = 'sleep_personal_records_v1';
+  static const _recordHistoryKey = SleepPersonalRecordHistory.metadataKey;
 
   Future<SleepAchievementState> load(Iterable<SleepSession> sessions) async {
     final database = SleepDatabase.instance;
@@ -148,34 +151,77 @@ class SleepAchievementService {
         // Rebuild malformed derived metadata without touching sleep records.
       }
     }
+    final recordHistoryRaw = await database.getAppMetadata(_recordHistoryKey);
+    var recordHistory = <SleepPersonalRecordEvent>[];
+    if (recordHistoryRaw != null) {
+      try {
+        recordHistory = SleepPersonalRecordHistory.decode(recordHistoryRaw);
+      } on FormatException {
+        // Rebuild damaged history from the persisted bests/source records.
+      }
+    }
+    final historyBest = SleepPersonalRecordHistory.bestRecords(recordHistory);
+    final recordBaseline = previousRecords == null
+        ? historyBest
+        : historyBest == null
+            ? previousRecords
+            : historyBest.preserveBest(previousRecords);
+
     final newRecordKeys = <String>{};
-    if (previousRecords != null) {
+    if (recordBaseline != null) {
       if (calculatedRecords.longestSleepMinutes != null &&
-          (previousRecords.longestSleepMinutes == null ||
+          (recordBaseline.longestSleepMinutes == null ||
               calculatedRecords.longestSleepMinutes! >
-                  previousRecords.longestSleepMinutes!)) {
+                  recordBaseline.longestSleepMinutes!)) {
         newRecordKeys.add('longestSleep');
       }
       if (calculatedRecords.bestEfficiencyPercent != null &&
-          (previousRecords.bestEfficiencyPercent == null ||
+          (recordBaseline.bestEfficiencyPercent == null ||
               calculatedRecords.bestEfficiencyPercent! >
-                  previousRecords.bestEfficiencyPercent!)) {
+                  recordBaseline.bestEfficiencyPercent!)) {
         newRecordKeys.add('bestEfficiency');
       }
       if (calculatedRecords.shortestLatencyMinutes != null &&
-          (previousRecords.shortestLatencyMinutes == null ||
+          (recordBaseline.shortestLatencyMinutes == null ||
               calculatedRecords.shortestLatencyMinutes! <
-                  previousRecords.shortestLatencyMinutes!)) {
+                  recordBaseline.shortestLatencyMinutes!)) {
         newRecordKeys.add('shortestLatency');
       }
       if (calculatedRecords.longestStreakDays >
-          previousRecords.longestStreakDays) {
+          recordBaseline.longestStreakDays) {
         newRecordKeys.add('longestStreak');
       }
     }
-    final records = previousRecords == null
+
+    // Seed a baseline once, then append only genuine improvements. This keeps
+    // the four approved records' history without adding history for excluded
+    // SleepScore/awakening metrics.
+    if (recordBaseline == null) {
+      recordHistory = SleepPersonalRecordHistory.merge(
+        recordHistory,
+        SleepPersonalRecordHistory.fromRecords(calculatedRecords),
+      );
+    } else {
+      recordHistory = SleepPersonalRecordHistory.merge(
+        recordHistory,
+        SleepPersonalRecordHistory.fromRecords(recordBaseline),
+      );
+      recordHistory = SleepPersonalRecordHistory.merge(
+        recordHistory,
+        SleepPersonalRecordHistory.improvements(
+          current: calculatedRecords,
+          previous: recordBaseline,
+        ),
+      );
+    }
+    final encodedRecordHistory = SleepPersonalRecordHistory.encode(recordHistory);
+    if (recordHistoryRaw != encodedRecordHistory) {
+      await database.setAppMetadata(_recordHistoryKey, encodedRecordHistory);
+    }
+
+    final records = recordBaseline == null
         ? calculatedRecords
-        : calculatedRecords.preserveBest(previousRecords);
+        : calculatedRecords.preserveBest(recordBaseline);
     final encodedRecords = jsonEncode(records.toMap());
     if (recordsRaw != encodedRecords) {
       await database.setAppMetadata(_recordsKey, encodedRecords);
@@ -190,6 +236,7 @@ class SleepAchievementService {
       displayEnabled: enabled,
       records: records,
       newRecordKeys: newRecordKeys,
+      recordHistory: recordHistory,
     );
   }
 
