@@ -58,6 +58,24 @@ class HealthReportService {
   static const storagePrefix = 'sleep_tracker_health_report_v1_';
   final SleepDatabase database;
 
+  /// Calendar-date arithmetic stays at local midnight across DST transitions.
+  static DateTime calendarDayAfter(DateTime value) =>
+      DateTime(value.year, value.month, value.day + 1);
+
+  static DateTime shiftCalendarDays(DateTime value, int days) =>
+      DateTime(value.year, value.month, value.day + days);
+
+  static DateTime lastDaysStart(DateTime now, int days) {
+    if (days < 1) throw ArgumentError.value(days, 'days', 'Must be positive.');
+    return DateTime(now.year, now.month, now.day - (days - 1));
+  }
+
+  static int inclusiveCalendarDays(DateTime start, DateTime end) {
+    final first = DateTime.utc(start.year, start.month, start.day);
+    final last = DateTime.utc(end.year, end.month, end.day);
+    return last.difference(first).inDays + 1;
+  }
+
   Future<List<HealthReportSnapshot>> generateClosedReports({DateTime? now}) async {
     final currentTime = now ?? DateTime.now();
     final sessions = (await database.getSessions(limit: null))
