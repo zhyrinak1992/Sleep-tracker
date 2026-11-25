@@ -119,6 +119,37 @@ void main() {
     await addNight('jul-night', DateTime(2026, 7, 15, 22));
     await addNight('oct-night', DateTime(2026, 10, 15, 22));
 
+    // A valid awake interval contributes one event; a night with only asleep
+    // samples must not be interpreted as zero awakenings.
+    await SleepDatabase.instance.addSleepStage(
+      sessionId: 'jan-night',
+      stage: 'Основной',
+      startedAt: DateTime(2026, 1, 15, 22),
+      endedAt: DateTime(2026, 1, 16, 1),
+      source: 'test',
+    );
+    await SleepDatabase.instance.addSleepStage(
+      sessionId: 'jan-night',
+      stage: 'Бодрствование',
+      startedAt: DateTime(2026, 1, 16, 1),
+      endedAt: DateTime(2026, 1, 16, 1, 10),
+      source: 'test',
+    );
+    await SleepDatabase.instance.addSleepStage(
+      sessionId: 'jan-night',
+      stage: 'Глубокий',
+      startedAt: DateTime(2026, 1, 16, 1, 10),
+      endedAt: DateTime(2026, 1, 16, 6),
+      source: 'test',
+    );
+    await SleepDatabase.instance.addSleepStage(
+      sessionId: 'apr-night',
+      stage: 'Основной',
+      startedAt: DateTime(2026, 4, 15, 22),
+      endedAt: DateTime(2026, 4, 16, 6),
+      source: 'test',
+    );
+
     final service = PeriodicReportService(SleepDatabase.instance);
     final reports = await service.generateClosedReports(now: DateTime(2026, 11, 25));
     final quarters = reports.where((report) => report.kind == 'quarter').toList();
@@ -133,7 +164,13 @@ void main() {
     expect(reports.any((report) => report.id == 'quarter_2026-10-01'), isFalse);
     expect(reports.any((report) => report.id == 'halfYear_2026-07-01'), isFalse);
 
+    final q1 = quarters.singleWhere((report) => report.id == 'quarter_2026-01-01');
+    expect(q1.averageAwakenings, 1);
+    expect(q1.data['awakeningSamples'], 1);
+
     final q2 = quarters.singleWhere((report) => report.id == 'quarter_2026-04-01');
+    expect(q2.averageAwakenings, isNull);
+    expect(q2.data['awakeningSamples'], 0);
     expect(q2.start, DateTime(2026, 4, 1));
     expect(q2.endExclusive, DateTime(2026, 7, 1));
     expect(q2.nights, 1);
