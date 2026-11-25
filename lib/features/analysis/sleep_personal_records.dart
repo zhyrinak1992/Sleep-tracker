@@ -297,7 +297,7 @@ class SleepPersonalRecordEvent {
     required double value,
     required DateTime achievedAt,
     String? sessionId,
-  }) => '$metric|\${sessionId ?? ''}|$value|\${achievedAt.toUtc().toIso8601String()}';
+  }) => '$metric|${sessionId ?? ''}|$value|${achievedAt.toUtc().toIso8601String()}';
 }
 
 class SleepPersonalRecordHistory {
