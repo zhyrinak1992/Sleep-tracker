@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -281,8 +279,8 @@ class _PulseTimelinePainter extends CustomPainter {
     final values = events.map((event) => double.tryParse(
       event.detail.split(' ').first.replaceAll(',', '.'),
     ) ?? 0).toList();
-    final minValue = values.reduce(math.min);
-    final maxValue = values.reduce(math.max);
+    final minValue = values.reduce((a, b) => a < b ? a : b);
+    final maxValue = values.reduce((a, b) => a > b ? a : b);
     final range = maxValue - minValue;
     final path = Path();
     final points = <Offset>[];
