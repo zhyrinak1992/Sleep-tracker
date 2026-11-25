@@ -558,8 +558,9 @@ class PeriodicReportService {
           'efficiency': metric.sleepEfficiencyPercent,
           'quality': report?['sleep_quality'],
           'wellbeing': report?['wellbeing'],
-          'awakenings': (stages[session.id] ?? const []).isNotEmpty &&
-              metric.stageCoveragePercent != null ? metric.awakeningCount : null,
+          'awakenings': metric.hasAwakeSamples &&
+              metric.stageCoveragePercent != null &&
+              metric.stageCoveragePercent! >= 80 ? metric.awakeningCount : null,
         });
       }
       details.sort((a, b) => (a['startedAt'] as String).compareTo(b['startedAt'] as String));
