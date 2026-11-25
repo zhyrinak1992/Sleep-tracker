@@ -43,9 +43,6 @@ class BackupService {
   static List<int> encodeExportDocument(Map<String, Object?> document) =>
       utf8.encode(const JsonEncoder.withIndent('  ').convert(document));
 
-  static List<int> encodeExportDocument(Map<String, Object?> document) =>
-      utf8.encode(const JsonEncoder.withIndent('  ').convert(document));
-
   Future<void> exportToFiles() async {
     final snapshot = await SleepDatabase.instance.exportSnapshot();
     final audioRows = (snapshot['audio_events'] as List).cast<Map<String, Object?>>();
