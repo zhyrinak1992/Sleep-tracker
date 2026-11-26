@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -480,7 +481,7 @@ class _TagTrendPainter extends CustomPainter {
     void drawLabel(String text, Offset offset, {double width = 38}) {
       final painter = TextPainter(
         text: TextSpan(text: text, style: textStyle),
-        textDirection: TextDirection.ltr,
+        textDirection: ui.TextDirection.ltr,
         maxLines: 1,
       )..layout(maxWidth: width);
       painter.paint(canvas, offset);
@@ -531,11 +532,11 @@ class _TagTrendPainter extends CustomPainter {
           path = Path()..moveTo(x, y);
           hasPoint = true;
         } else if (hasPoint) {
-          path!.lineTo(x, y);
+          path.lineTo(x, y);
         }
         canvas.drawCircle(point, 4, Paint()..color = color);
       }
-      if (path != null) canvas.drawPath(path!, paint);
+      if (path != null) canvas.drawPath(path, paint);
     }
 
     for (var i = 0; i < months.length; i++) {
