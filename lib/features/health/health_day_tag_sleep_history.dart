@@ -42,6 +42,83 @@ class HealthDayTagNightMetricPoint {
 class HealthDayTagNightHistory {
   const HealthDayTagNightHistory._();
 
+
+  static HealthDayTagNightMetricPeriodComparison comparePeriods({
+    required Iterable<SleepSession> sessions,
+    required Map<DateTime, List<String>> tagsByDay,
+    required Map<String, List<Map<String, Object?>>> stagesBySession,
+    required String tag,
+    required DateTime firstStart,
+    required DateTime firstEndExclusive,
+    required DateTime secondStart,
+    required DateTime secondEndExclusive,
+    required HealthDayTagNightMetric metric,
+  }) {
+    HealthDayTagNightMetricPeriodSummary summarizePeriod(
+      DateTime start,
+      DateTime endExclusive,
+    ) {
+      final tagged = calculate(
+        sessions: sessions,
+        tagsByDay: tagsByDay,
+        stagesBySession: stagesBySession,
+        tag: tag,
+        start: start,
+        endExclusive: endExclusive,
+        metric: metric,
+        withTag: true,
+      );
+      final untagged = calculate(
+        sessions: sessions,
+        tagsByDay: tagsByDay,
+        stagesBySession: stagesBySession,
+        tag: tag,
+        start: start,
+        endExclusive: endExclusive,
+        metric: metric,
+        withTag: false,
+      );
+
+      HealthDayTagNightMetricGroupSummary summarize(
+        List<HealthDayTagNightMetricPoint> points,
+      ) {
+        final values = points
+            .map((point) => point.value)
+            .whereType<double>()
+            .where((value) => value.isFinite)
+            .toList();
+        return HealthDayTagNightMetricGroupSummary(
+          nights: points.length,
+          validSamples: values.length,
+          average: values.isEmpty
+              ? null
+              : values.reduce((a, b) => a + b) / values.length,
+        );
+      }
+
+      return HealthDayTagNightMetricPeriodSummary(
+        start: DateTime(start.year, start.month, start.day),
+        endExclusive: DateTime(
+          endExclusive.year,
+          endExclusive.month,
+          endExclusive.day,
+        ),
+        withTag: summarize(tagged),
+        withoutTag: summarize(untagged),
+      );
+    }
+
+    if (tag.trim().isEmpty ||
+        !firstEndExclusive.isAfter(firstStart) ||
+        !secondEndExclusive.isAfter(secondStart)) {
+      throw ArgumentError('Некорректные периоды сравнения отметки.');
+    }
+    return HealthDayTagNightMetricPeriodComparison(
+      first: summarizePeriod(firstStart, firstEndExclusive),
+      second: summarizePeriod(secondStart, secondEndExclusive),
+    );
+  }
+
   static List<HealthDayTagNightMetricPoint> calculate({
     required Iterable<SleepSession> sessions,
     required Map<DateTime, List<String>> tagsByDay,
@@ -64,7 +141,7 @@ class HealthDayTagNightHistory {
       final day = DateTime(endedAt.year, endedAt.month, endedAt.day);
       if (day.isBefore(first) || !day.isBefore(end)) continue;
       final tags = tagsByDay[day] ?? const <String>[];
-      if (!tags.contains(tag)) continue;
+      if (tags.contains(tag) != withTag) continue;
 
       final sessionStages = stagesBySession[session.id] ?? const [];
       final metrics = SleepSessionMetrics.calculate(
@@ -101,3 +178,57 @@ class HealthDayTagNightHistory {
     return List.unmodifiable(result);
   }
 }
+
+
+class HealthDayTagNightMetricGroupSummary {
+  const HealthDayTagNightMetricGroupSummary({
+    required this.nights,
+    required this.validSamples,
+    required this.average,
+  });
+
+  final int nights;
+  final int validSamples;
+  final double? average;
+}
+
+class HealthDayTagNightMetricPeriodSummary {
+  const HealthDayTagNightMetricPeriodSummary({
+    required this.start,
+    required this.endExclusive,
+    required this.withTag,
+    required this.withoutTag,
+  });
+
+  final DateTime start;
+  final DateTime endExclusive;
+  final HealthDayTagNightMetricGroupSummary withTag;
+  final HealthDayTagNightMetricGroupSummary withoutTag;
+
+  /// Mean for tagged nights minus mean for nights without the selected tag.
+  double? get difference {
+    final taggedAverage = withTag.average;
+    final untaggedAverage = withoutTag.average;
+    if (taggedAverage == null || untaggedAverage == null) return null;
+    return taggedAverage - untaggedAverage;
+  }
+}
+
+class HealthDayTagNightMetricPeriodComparison {
+  const HealthDayTagNightMetricPeriodComparison({
+    required this.first,
+    required this.second,
+  });
+
+  final HealthDayTagNightMetricPeriodSummary first;
+  final HealthDayTagNightMetricPeriodSummary second;
+
+  /// Change in the tagged-vs-untagged difference: period 2 minus period 1.
+  double? get differenceChange {
+    final firstDifference = first.difference;
+    final secondDifference = second.difference;
+    if (firstDifference == null || secondDifference == null) return null;
+    return secondDifference - firstDifference;
+  }
+}
+
