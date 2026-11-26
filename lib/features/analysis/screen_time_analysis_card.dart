@@ -530,7 +530,8 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
 class _ScreenTimeAnalysisData {
   const _ScreenTimeAnalysisData({
     required this.sessions, required this.entries, required this.damagedSessionIds,
-    required this.invalidLastUseSessionIds, required this.durationEntryCount,
+    required this.invalidLastUseSessionIds, required this.lastUseWithoutOnsetCount,
+    required this.durationEntryCount,
     required this.lastUseEntryCount, required this.legacyEntriesCount, required this.sleepOnsets,
     required this.durationComparison, required this.lastUseComparison,
   });
