@@ -749,8 +749,9 @@ class PeriodicReportService {
     if (kind == PeriodicReportKind.week) {
       final days = <Map<String, Object?>>[];
       for (var day = 0; day < 7; day++) {
-        final dayStart = start.add(Duration(days: day));
-        final dayEnd = dayStart.add(const Duration(days: 1));
+        // Use local calendar midnights: DST transition days can contain 23 or 25 hours.
+        final dayStart = DateTime(start.year, start.month, start.day + day);
+        final dayEnd = DateTime(dayStart.year, dayStart.month, dayStart.day + 1);
         final daySessions = sessions.where((s) =>
           !s.startedAt.isBefore(dayStart) && s.startedAt.isBefore(dayEnd)).toList();
         if (daySessions.isEmpty) continue;
@@ -769,9 +770,10 @@ class PeriodicReportService {
     if (kind == PeriodicReportKind.month) {
       final trend = <Map<String, Object?>>[];
       for (var bucket = 0; bucket < 5; bucket++) {
-        final bucketStart = start.add(Duration(days: bucket * 7));
+        // Use seven calendar dates, not 7 x 24 hours, to preserve local midnight across DST.
+        final bucketStart = DateTime(start.year, start.month, start.day + bucket * 7);
         if (!bucketStart.isBefore(end)) break;
-        final candidateEnd = bucketStart.add(const Duration(days: 7));
+        final candidateEnd = DateTime(bucketStart.year, bucketStart.month, bucketStart.day + 7);
         final bucketEnd = candidateEnd.isBefore(end) ? candidateEnd : end;
         final bucketSessions = sessions.where((s) =>
           !s.startedAt.isBefore(bucketStart) && s.startedAt.isBefore(bucketEnd)).toList();
@@ -839,7 +841,7 @@ class PeriodicReportService {
   static DateTime _periodStart(DateTime value, PeriodicReportKind kind) {
     if (kind == PeriodicReportKind.week) {
       final day = DateTime(value.year, value.month, value.day);
-      return day.subtract(Duration(days: day.weekday - DateTime.monday));
+      return DateTime(day.year, day.month, day.day - (day.weekday - DateTime.monday));
     }
     if (kind == PeriodicReportKind.month) return DateTime(value.year, value.month);
     if (kind == PeriodicReportKind.quarter) return DateTime(value.year, ((value.month - 1) ~/ 3) * 3 + 1);
@@ -847,14 +849,18 @@ class PeriodicReportService {
     return DateTime(value.year);
   }
   static DateTime _nextPeriodStart(DateTime value, PeriodicReportKind kind) {
-    if (kind == PeriodicReportKind.week) return value.add(const Duration(days: 7));
+    if (kind == PeriodicReportKind.week) {
+      return DateTime(value.year, value.month, value.day + 7);
+    }
     if (kind == PeriodicReportKind.month) return DateTime(value.year, value.month + 1);
     if (kind == PeriodicReportKind.quarter) return DateTime(value.year, value.month + 3);
     if (kind == PeriodicReportKind.halfYear) return DateTime(value.year, value.month + 6);
     return DateTime(value.year + 1);
   }
   static DateTime _previousPeriodStart(DateTime value, PeriodicReportKind kind) {
-    if (kind == PeriodicReportKind.week) return value.subtract(const Duration(days: 7));
+    if (kind == PeriodicReportKind.week) {
+      return DateTime(value.year, value.month, value.day - 7);
+    }
     if (kind == PeriodicReportKind.month) return DateTime(value.year, value.month - 1);
     if (kind == PeriodicReportKind.quarter) return DateTime(value.year, value.month - 3);
     if (kind == PeriodicReportKind.halfYear) return DateTime(value.year, value.month - 6);
