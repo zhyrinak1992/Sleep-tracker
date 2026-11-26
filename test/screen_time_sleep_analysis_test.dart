@@ -2,6 +2,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sleep_tracker/features/analysis/screen_time_sleep_analysis.dart';
 
 void main() {
+  test('averages sleep onset around midnight without wrapping to midday', () {
+    final beforeMidnight = ScreenTimeSleepAnalysis.sleepStartAxis(DateTime(2026, 11, 25, 23, 30))!;
+    final afterMidnight = ScreenTimeSleepAnalysis.sleepStartAxis(DateTime(2026, 11, 26, 0, 30))!;
+    expect(beforeMidnight, 690);
+    expect(afterMidnight, 750);
+    expect(ScreenTimeSleepAnalysis.formatSleepStartAxis((beforeMidnight + afterMidnight) / 2), '00:00');
+  });
   test('splits screen-time observations by their data median', () {
     final samples = List.generate(8, (index) => ScreenTimeSleepSample(
       exposureMinutes: index * 10,

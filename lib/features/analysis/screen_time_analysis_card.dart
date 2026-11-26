@@ -128,6 +128,7 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
       sessions: sessions, entries: Map.unmodifiable(entries),
       damagedSessionIds: Set.unmodifiable(damaged),
       invalidLastUseSessionIds: Set.unmodifiable(invalidLastUse),
+      lastUseWithoutOnsetCount: entries.values.where((entry) => entry.lastUseAt != null && sleepOnsets[entry.sessionId] == null).length,
       durationEntryCount: entries.values.where((entry) => entry.screenMinutes != null).length,
       lastUseEntryCount: entries.values.where((entry) => entry.lastUseAt != null).length,
       legacyEntriesCount: legacyCount, sleepOnsets: Map.unmodifiable(sleepOnsets),
@@ -304,6 +305,7 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
   }
 
   String _metricLabel(ScreenTimeSleepMetric metric) => switch (metric) {
+    ScreenTimeSleepMetric.sleepStartTime => 'Фактическое время засыпания',
     ScreenTimeSleepMetric.sleepDuration => 'Продолжительность сна',
     ScreenTimeSleepMetric.sleepEfficiency => 'Эффективность сна',
     ScreenTimeSleepMetric.awakenings => 'Подтверждённые пробуждения',
@@ -323,7 +325,9 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
   String _formatDifference(ScreenTimeSleepMetric metric, double value) {
     final sign = value > 0 ? '+' : '';
     return switch (metric) {
-      ScreenTimeSleepMetric.sleepStartTime => '$sign${value.abs().round()} мин ${value > 0 ? 'позже' : 'раньше'}',
+      ScreenTimeSleepMetric.sleepStartTime => value.abs() < 0.5
+          ? 'без сдвига'
+          : '${value.abs().round()} мин ${value > 0 ? 'позже' : 'раньше'}',
       ScreenTimeSleepMetric.sleepDuration => '$sign${value.round()} мин',
       ScreenTimeSleepMetric.sleepEfficiency => '$sign${value.toStringAsFixed(1)} п.п.',
       ScreenTimeSleepMetric.awakenings => '$sign${value.toStringAsFixed(1)}',
@@ -459,6 +463,12 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
                 child: Text('Найдено старых отметок: ${data.legacyEntriesCount}. Они сохранены, но не включены в расчёт, так как для них не указано окно 30/60/120 минут.',
                   style: const TextStyle(color: AppTheme.muted, fontSize: 10, height: 1.35)),
               ),
+            if (data.lastUseWithoutOnsetCount > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text('Время последнего использования сохранено для ${data.lastUseWithoutOnsetCount} ночей, но пока не включено в сравнение: фактическое время засыпания не определено.',
+                  style: const TextStyle(color: AppTheme.muted, fontSize: 10)),
+              ),
             if (data.invalidLastUseSessionIds.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
@@ -527,7 +537,7 @@ class _ScreenTimeAnalysisData {
 
   factory _ScreenTimeAnalysisData.empty() => const _ScreenTimeAnalysisData(
     sessions: [], entries: {}, damagedSessionIds: {}, invalidLastUseSessionIds: {},
-    durationEntryCount: 0, lastUseEntryCount: 0, legacyEntriesCount: 0,
+    lastUseWithoutOnsetCount: 0, durationEntryCount: 0, lastUseEntryCount: 0, legacyEntriesCount: 0,
     sleepOnsets: {}, durationComparison: null, lastUseComparison: null,
   );
 
@@ -535,6 +545,7 @@ class _ScreenTimeAnalysisData {
   final Map<String, ScreenTimeEntry> entries;
   final Set<String> damagedSessionIds;
   final Set<String> invalidLastUseSessionIds;
+  final int lastUseWithoutOnsetCount;
   final int durationEntryCount;
   final int lastUseEntryCount;
   final int legacyEntriesCount;
