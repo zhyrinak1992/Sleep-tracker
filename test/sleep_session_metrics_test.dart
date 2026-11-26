@@ -35,6 +35,23 @@ void main() {
     expect(result.sleepEfficiencyPercent, closeTo(440 / 510 * 100, 0.01));
   });
 
+  test('does not report the stop-button time as an actual final wake', () {
+    final session = SleepSession(
+      id: 'manual-end-only',
+      startedAt: DateTime(2026, 11, 24, 22),
+      endedAt: DateTime(2026, 11, 25, 7),
+    );
+
+    final result = SleepSessionMetrics.calculate(
+      session: session,
+      stages: const [],
+    );
+
+    expect(result.timeInBedMinutes, 540);
+    expect(result.finalWakeAt, isNull);
+    expect(result.sleepEndAt, isNull);
+  });
+
   test('does not invent efficiency without awake stage coverage', () {
     final start = DateTime(2026, 11, 21, 23);
     final session = SleepSession(
