@@ -91,7 +91,7 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
       })();
       if (!lastUseIsValid) invalidLastUse.add(session.id);
       final morning = morningReportsBySession[session.id] ?? const <String, Object?>{};
-      final sleepStartAxis = ScreenTimeSleepAnalysis.sleepStartAxis(metrics.sleepOnsetAt);
+      final sleepStartMinutes = ScreenTimeSleepAnalysis.sleepStartMinutesOfDay(metrics.sleepOnsetAt);
       final sleepDuration = metrics.sleepDurationMinutes?.toDouble();
       final efficiency = metrics.sleepEfficiencyPercent;
       final awakenings = metrics.hasAwakeSamples &&
@@ -103,7 +103,7 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
       if (entry.screenMinutes != null) {
         durationSamples.add(ScreenTimeSleepSample(
           exposureMinutes: entry.screenMinutes!.toDouble(),
-          sleepStartMinutesOfDay: sleepStartAxis,
+          sleepStartMinutesOfDay: sleepStartMinutes,
           sleepDurationMinutes: sleepDuration,
           sleepEfficiencyPercent: efficiency,
           awakeningCount: awakenings,
@@ -115,7 +115,7 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
         if (gap >= 0 && gap <= 1440) {
           lastUseSamples.add(ScreenTimeSleepSample(
             exposureMinutes: gap.toDouble(),
-            sleepStartMinutesOfDay: sleepStartAxis,
+            sleepStartMinutesOfDay: sleepStartMinutes,
             sleepDurationMinutes: sleepDuration,
             sleepEfficiencyPercent: efficiency,
             awakeningCount: awakenings,
