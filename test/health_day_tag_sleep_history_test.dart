@@ -140,6 +140,55 @@ void main() {
   });
 
 
+  test('does not classify nights without a saved diary entry as untagged', () {
+    final tagged = session(
+      'tagged',
+      startedAt: DateTime(2026, 10, 1, 21),
+      endedAt: DateTime(2026, 10, 2, 6),
+      rating: 4,
+    );
+    final recordedWithoutTag = session(
+      'recorded-without-tag',
+      startedAt: DateTime(2026, 10, 2, 21),
+      endedAt: DateTime(2026, 10, 3, 6),
+      rating: 2,
+    );
+    final noDiaryEntry = session(
+      'no-diary-entry',
+      startedAt: DateTime(2026, 10, 3, 21),
+      endedAt: DateTime(2026, 10, 4, 6),
+      rating: 1,
+    );
+    final tagsByDay = {
+      DateTime(2026, 10, 2): ['Кофеин'],
+      DateTime(2026, 10, 3): <String>[],
+    };
+
+    final withTag = HealthDayTagNightHistory.calculate(
+      sessions: [tagged, recordedWithoutTag, noDiaryEntry],
+      tagsByDay: tagsByDay,
+      stagesBySession: const {},
+      tag: 'Кофеин',
+      start: DateTime(2026, 10, 2),
+      endExclusive: DateTime(2026, 10, 5),
+      metric: HealthDayTagNightMetric.morningRating,
+      withTag: true,
+    );
+    final withoutTag = HealthDayTagNightHistory.calculate(
+      sessions: [tagged, recordedWithoutTag, noDiaryEntry],
+      tagsByDay: tagsByDay,
+      stagesBySession: const {},
+      tag: 'Кофеин',
+      start: DateTime(2026, 10, 2),
+      endExclusive: DateTime(2026, 10, 5),
+      metric: HealthDayTagNightMetric.morningRating,
+      withTag: false,
+    );
+
+    expect(withTag.map((point) => point.sessionId), ['tagged']);
+    expect(withoutTag.map((point) => point.sessionId), ['recorded-without-tag']);
+  });
+
   test('compares tagged and untagged metric differences across two arbitrary periods', () {
     final taggedFirst = session(
       'tagged-first',
