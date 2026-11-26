@@ -725,7 +725,10 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
           final day = dayOnly(date);
           return !day.isBefore(bucket.start) && day.isBefore(bucket.endExclusive);
         }).length).toList();
-      final taggedDays = selectedPeriodDates.map(dayOnly).toSet();
+      final recordedTagsByDay = <DateTime, List<String>>{
+        for (final entry in entries.entries)
+          dayOnly(entry.key): entry.value.tags,
+      };
       final completedSessions = widget.sessions.where((session) =>
         session.endedAt != null && session.duration != null &&
         session.duration!.inMinutes > 0).toList();
@@ -734,9 +737,19 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
         return !day.isBefore(historyRange.start) && day.isBefore(historyRange.endExclusive);
       }).toList();
       final taggedSessions = sessionsInPeriod.where((session) =>
-        taggedDays.contains(dayOnly(session.endedAt!))).toList();
+        HealthDayTagNightHistory.matchesTagGroup(
+          session: session,
+          tagsByDay: recordedTagsByDay,
+          tag: selected,
+          withTag: true,
+        )).toList();
       final otherSessions = sessionsInPeriod.where((session) =>
-        !taggedDays.contains(dayOnly(session.endedAt!))).toList();
+        HealthDayTagNightHistory.matchesTagGroup(
+          session: session,
+          tagsByDay: recordedTagsByDay,
+          tag: selected,
+          withTag: false,
+        )).toList();
       double? averageDuration(List<SleepSession> values) => values.isEmpty ? null : values.fold<int>(0, (sum, item) => sum + item.duration!.inMinutes) / values.length / 60;
       double? averageRating(List<SleepSession> values) {
         final rated = values.where((session) => session.morningRating != null).toList();
