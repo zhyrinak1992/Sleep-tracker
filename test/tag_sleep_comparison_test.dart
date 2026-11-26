@@ -19,6 +19,13 @@ SleepSession _session({
 
 void main() {
   group('TagSleepComparison', () {
+    test('labels trend difference axes with the selected metric units', () {
+      expect(
+        TagSleepMetric.values.map((metric) => metric.differenceAxisLabel),
+        ['Разница, мин', 'Разница, %', 'Разница, мин', 'Разница, из 5', 'Разница, эпизодов'],
+      );
+    });
+
     final start = DateTime(2026, 11, 1);
     final end = DateTime(2026, 12, 1);
 

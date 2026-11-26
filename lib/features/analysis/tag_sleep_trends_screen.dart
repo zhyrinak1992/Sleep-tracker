@@ -425,7 +425,7 @@ class _TagSleepTrendsScreenState extends State<TagSleepTrendsScreen>
                 const Text('Разница средних по месяцам', style: TextStyle(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 4),
                 Text(
-                  '${_metric.label}: с отметкой минус без отметки · минимум ${TagSleepComparison.minimumNightsPerGroup} ночи в каждой группе',
+                  '${_metric.label}: с отметкой минус без отметки · ось Y: ${_metric.differenceAxisLabel.toLowerCase()} · ось X: календарный месяц · минимум ${TagSleepComparison.minimumNightsPerGroup} ночи в каждой группе',
                   style: const TextStyle(color: AppTheme.muted, fontSize: 11),
                 ),
                 const SizedBox(height: 12),

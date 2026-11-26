@@ -13,6 +13,8 @@ extension TagSleepMetricLabel on TagSleepMetric {
     TagSleepMetric.awakeningCount => 'Зарегистрированные эпизоды бодрствования',
   };
 
+  String get differenceAxisLabel => 'Разница, $unit';
+
   String get unit => switch (this) {
     TagSleepMetric.sleepDuration => 'мин',
     TagSleepMetric.sleepEfficiency => '%',
