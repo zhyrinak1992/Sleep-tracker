@@ -12,6 +12,7 @@ import 'sleep_change_history.dart';
 import 'comparison_suggestion_history_merge.dart';
 import 'backup_restore_planner.dart';
 import 'achievement_metadata_merge.dart';
+import 'tag_insight_history_merge.dart';
 
 class SleepDatabase {
   SleepDatabase._();
@@ -374,6 +375,17 @@ class SleepDatabase {
             );
             mergedHistory = result.records.toList();
           }
+          await txn.insert('app_metadata', {
+            'key': key,
+            'value': jsonEncode(mergedHistory),
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        } else if (key == TagInsightHistoryMerge.metadataKey) {
+          final localRaw = exists.isEmpty ? null : exists.first['value'] as String?;
+          final importedRaw = row['value'] as String? ?? '[]';
+          final mergedHistory = TagInsightHistoryMerge.merge(
+            local: TagInsightHistoryMerge.decode(localRaw, 'Локальная'),
+            imported: TagInsightHistoryMerge.decode(importedRaw, 'Резервная копия'),
+          );
           await txn.insert('app_metadata', {
             'key': key,
             'value': jsonEncode(mergedHistory),

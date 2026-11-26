@@ -15,6 +15,7 @@ import 'periodic_report_service.dart';
 import 'sleep_recommendation_text.dart';
 import 'periodic_report_export.dart';
 import 'tag_insight_preferences.dart';
+import 'tag_insight_history.dart';
 
 class PeriodicReportsScreen extends StatefulWidget {
   const PeriodicReportsScreen({super.key, required this.database});
@@ -25,6 +26,7 @@ class PeriodicReportsScreen extends StatefulWidget {
 
 class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
   late Future<List<PeriodicReportSnapshot>> _future;
+  late Future<Map<String, Object?>?> _currentInsightFuture;
   TagInsightPreferences _insightPreferences = const TagInsightPreferences();
   bool _preferencesLoading = true;
   String? _preferencesError;
@@ -38,6 +40,7 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
   void initState() {
     super.initState();
     _future = _load();
+    _currentInsightFuture = _loadCurrentInsights();
     _loadInsightPreferences();
   }
 
@@ -65,7 +68,16 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
     return service.loadArchive();
   }
 
-  void _refresh() => setState(() => _future = _load());
+  Future<Map<String, Object?>?> _loadCurrentInsights() =>
+      TagInsightHistoryStore(
+        widget.database.getAppMetadata,
+        widget.database.setAppMetadata,
+      ).loadCurrent();
+
+  void _refresh() => setState(() {
+    _future = _load();
+    _currentInsightFuture = _loadCurrentInsights();
+  });
 
   Future<void> _hideInsight(
     String tagKey, String metricKey, String tagLabel, String metricLabel,
@@ -153,6 +165,296 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
       ),
     );
   }
+  String _monthLabel(DateTime? date) {
+    if (date == null) return 'Период неизвестен';
+    const months = [
+      'январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
+      'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь',
+    ];
+    return '${months[date.month - 1]} ${date.year}';
+  }
+
+  String _dateTimeLabel(Object? raw) {
+    final date = DateTime.tryParse(raw?.toString() ?? '');
+    if (date == null) return 'Дата неизвестна';
+    return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _insightValue(String metricKey, Object? raw) {
+    if (raw is! num) return 'нет данных';
+    if (metricKey == 'duration' || metricKey == 'sleepLatency') {
+      return _duration(raw.toDouble());
+    }
+    if (metricKey == 'bedtime' || metricKey == 'wakeTime') {
+      final minute = raw.round().remainder(1440);
+      return '${(minute ~/ 60).toString().padLeft(2, '0')}:${(minute % 60).toString().padLeft(2, '0')}';
+    }
+    const suffixes = {
+      'score': ' / 100',
+      'awakenings': ' эпиз.',
+      'efficiency': '%',
+      'subjectiveQuality': ' / 5',
+      'wellbeing': ' / 5',
+      'heartRate': ' уд/мин',
+      'respiratoryRate': ' вдох/мин',
+      'bloodOxygen': '%',
+      'hrv': ' мс',
+      'roomTemperature': ' °C',
+      'roomHumidity': '%',
+    };
+    return raw.toStringAsFixed(1) + (suffixes[metricKey] ?? '');
+  }
+
+  String _insightDifference(String metricKey, Object? raw) {
+    if (raw is! num) return 'Разница пока не рассчитана';
+    if (metricKey == 'bedtime' || metricKey == 'wakeTime') {
+      final minutes = raw.round().abs();
+      if (raw == 0) return 'Разницы нет';
+      return (raw > 0 ? 'позже на ' : 'раньше на ') + '$minutes мин';
+    }
+    if (raw == 0) return 'Разницы нет';
+    return (raw > 0 ? 'выше на ' : 'ниже на ') +
+        _insightValue(metricKey, raw.abs());
+  }
+
+  Future<void> _showInsightHistory() async {
+    final history = await TagInsightHistoryStore(
+      widget.database.getAppMetadata,
+      widget.database.setAppMetadata,
+    ).loadHistory();
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('История закономерностей'),
+        content: SizedBox(
+          width: 520,
+          height: 460,
+          child: history.isEmpty
+              ? const Center(child: Text('История появится после первого пересчёта анализа.'))
+              : ListView.separated(
+                  itemCount: history.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final snapshot = history[history.length - index - 1];
+                    final start = DateTime.tryParse(
+                      snapshot['periodStart'] as String? ?? '',
+                    );
+                    final insights = (snapshot['insights'] as List? ?? const [])
+                        .whereType<Map>()
+                        .map((item) => Map<String, Object?>.from(item))
+                        .toList();
+                    return ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      title: Text(_monthLabel(start)),
+                      subtitle: Text(
+                        'Пересчёт ${_dateTimeLabel(snapshot['generatedAt'])} · ${insights.length} закономерностей',
+                      ),
+                      children: insights.map((insight) {
+                        final current = insight['current'] is Map
+                            ? Map<String, Object?>.from(insight['current'] as Map)
+                            : <String, Object?>{};
+                        final last = insight['lastComparable'] is Map
+                            ? Map<String, Object?>.from(insight['lastComparable'] as Map)
+                            : <String, Object?>{};
+                        final metricKey = insight['metricKey'] as String? ?? '';
+                        final values = current.isNotEmpty ? current : last;
+                        final events = (insight['statusEvents'] as List? ?? const [])
+                            .whereType<Map>().toList();
+                        return ExpansionTile(
+                          tilePadding: const EdgeInsets.only(left: 8),
+                          title: Text('${insight['tagLabel']} · ${insight['metricLabel']}'),
+                          subtitle: Text(TagInsightHistoryStore.statusLabel(
+                            insight['status'] as String?,
+                          )),
+                          children: [
+                            ListTile(
+                              dense: true,
+                              title: Text(
+                                'С отметкой: ${_insightValue(metricKey, values['withTagAverage'])} · ${values['withTagSamples'] ?? 0} ночей',
+                              ),
+                              subtitle: Text(
+                                'Без отметки: ${_insightValue(metricKey, values['withoutTagAverage'])} · ${values['withoutTagSamples'] ?? 0} ночей',
+                              ),
+                            ),
+                            ...events.map((event) => ListTile(
+                              dense: true,
+                              leading: const Icon(Icons.history_rounded, size: 17),
+                              title: Text(TagInsightHistoryStore.statusLabel(
+                                event['status'] as String?,
+                              )),
+                              subtitle: Text(_dateTimeLabel(event['at'])),
+                            )),
+                          ],
+                        );
+                      }).toList(),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Закрыть'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCurrentInsightsSection() => FutureBuilder<Map<String, Object?>?>(
+    future: _currentInsightFuture,
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const SizedBox.shrink();
+      }
+      if (snapshot.hasError) {
+        return SectionCard(child: Text(
+          'Не удалось загрузить текущие закономерности: ${snapshot.error}',
+          style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+        ));
+      }
+      final current = snapshot.data;
+      if (current == null) {
+        return const SectionCard(child: Text(
+          'Текущие закономерности появятся после утреннего отчёта и накопления достаточных данных.',
+          style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4),
+        ));
+      }
+      final all = (current['insights'] as List? ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, Object?>.from(item))
+          .toList();
+      final visible = all.where((insight) {
+        final tagKey = insight['tagKey'] as String? ?? '';
+        final metricKey = insight['metricKey'] as String? ?? '';
+        return tagKey.isNotEmpty && metricKey.isNotEmpty &&
+            !_insightPreferences.isHidden(
+              TagInsightPreferenceStore.identity(tagKey, metricKey),
+            );
+      }).toList()
+        ..sort((a, b) {
+          int pinOrder(Map<String, Object?> insight) =>
+              _insightPreferences.pinned.indexOf(
+                TagInsightPreferenceStore.identity(
+                  insight['tagKey'] as String,
+                  insight['metricKey'] as String,
+                ),
+              );
+          final aPin = pinOrder(a);
+          final bPin = pinOrder(b);
+          if (aPin >= 0 && bPin >= 0) return aPin.compareTo(bPin);
+          if (aPin >= 0) return -1;
+          if (bPin >= 0) return 1;
+          return (a['tagLabel'] as String).compareTo(b['tagLabel'] as String);
+        });
+      final start = DateTime.tryParse(current['periodStart'] as String? ?? '');
+      return SectionCard(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Что может влиять на твой сон',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Текущий месяц: ${_monthLabel(start)} · сравнение ночей с отметкой и без неё. Это статистические наблюдения, не доказательство причин.',
+            style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
+          ),
+          const SizedBox(height: 8),
+          if (visible.isEmpty)
+            Text(
+              all.isEmpty
+                  ? 'Надёжных закономерностей пока не выявлено.'
+                  : 'Все выявленные закономерности скрыты. Их можно вернуть из списка скрытых.',
+              style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+            ),
+          ...visible.map((insight) {
+            final tagKey = insight['tagKey'] as String;
+            final tagLabel = insight['tagLabel'] as String;
+            final metricKey = insight['metricKey'] as String;
+            final metricLabel = insight['metricLabel'] as String;
+            final identity = TagInsightPreferenceStore.identity(tagKey, metricKey);
+            final pinned = _insightPreferences.pinned.contains(identity);
+            final currentValues = insight['current'] is Map
+                ? Map<String, Object?>.from(insight['current'] as Map)
+                : <String, Object?>{};
+            final lastValues = insight['lastComparable'] is Map
+                ? Map<String, Object?>.from(insight['lastComparable'] as Map)
+                : <String, Object?>{};
+            final values = currentValues.isNotEmpty ? currentValues : lastValues;
+            final difference = currentValues['difference'];
+            final status = insight['status'] as String?;
+            final samplesWith = values['withTagSamples'] ?? 0;
+            final samplesWithout = values['withoutTagSamples'] ?? 0;
+            final differenceText = status == 'insufficientData'
+                ? 'Последнее сопоставимое различие: ${_insightDifference(metricKey, lastValues['difference'])}'
+                : status == 'noLongerObserved'
+                    ? 'Прежнее направление различия больше не наблюдается'
+                    : _insightDifference(metricKey, difference);
+            return Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(left: 10, right: 4, bottom: 6),
+                title: Text(
+                  '$tagLabel · $metricLabel',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  '${TagInsightHistoryStore.statusLabel(status)} · с отметкой $samplesWith / без отметки $samplesWithout ночей',
+                  style: const TextStyle(fontSize: 11),
+                ),
+                trailing: PopupMenuButton<String>(
+                  enabled: !_preferencesLoading && _preferencesError == null,
+                  tooltip: 'Действия с закономерностью',
+                  onSelected: (action) {
+                    if (action == 'hide') {
+                      _hideInsight(tagKey, metricKey, tagLabel, metricLabel);
+                    } else if (action == 'pin' || action == 'unpin') {
+                      _togglePinInsight(
+                        tagKey, metricKey, tagLabel, metricLabel, action == 'unpin',
+                      );
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: pinned ? 'unpin' : 'pin',
+                      child: Text(pinned ? 'Снять закрепление' : 'Закрепить'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'hide',
+                      child: Text('Скрыть'),
+                    ),
+                  ],
+                ),
+                children: [
+                  _ReportLine(
+                    label: 'Среднее с отметкой',
+                    value: _insightValue(metricKey, values['withTagAverage']),
+                  ),
+                  _ReportLine(
+                    label: 'Среднее без отметки',
+                    value: _insightValue(metricKey, values['withoutTagAverage']),
+                  ),
+                  _ReportLine(label: 'Наблюдаемое различие', value: differenceText),
+                  if (status == 'insufficientData')
+                    const Padding(
+                      padding: EdgeInsets.only(top: 5),
+                      child: Text(
+                        'Недостаточно сопоставимых наблюдений. Это не считается опровержением прежней закономерности.',
+                        style: TextStyle(color: AppTheme.muted, fontSize: 11),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ));
+    },
+  );
+
   Future<void> _export(PeriodicReportSnapshot report) async {
     await PdfReportService.exportPeriodicSnapshot(report.data, report.title);
   }
@@ -188,21 +490,28 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
           child: Text('Не удалось сформировать архив отчётов: ' + snapshot.error.toString()),
         ));
         final reports = snapshot.data ?? const <PeriodicReportSnapshot>[];
-        if (reports.isEmpty) return const Center(child: Padding(
-          padding: EdgeInsets.all(28),
-          child: Text('Здесь будут сохраняться недельные, месячные, квартальные, полугодовые и годовые отчёты после завершения соответствующих периодов.'),
-        ));
         return ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
           children: [
             const ScreenHeader(title: 'История отчётов', subtitle: 'Сохранённые сводки по завершённым периодам', icon: Icons.auto_graph_rounded),
             const SizedBox(height: 4),
+            _buildCurrentInsightsSection(),
             Align(
               alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: _preferencesLoading || _preferencesError != null ? null : _showHiddenInsights,
-                icon: const Icon(Icons.visibility_off_outlined, size: 17),
-                label: Text('Скрытые закономерности (${_insightPreferences.hidden.length})'),
+              child: Wrap(
+                spacing: 8,
+                children: [
+                  TextButton.icon(
+                    onPressed: _showInsightHistory,
+                    icon: const Icon(Icons.history_rounded, size: 17),
+                    label: const Text('История статусов'),
+                  ),
+                  TextButton.icon(
+                    onPressed: _preferencesLoading || _preferencesError != null ? null : _showHiddenInsights,
+                    icon: const Icon(Icons.visibility_off_outlined, size: 17),
+                    label: Text('Скрытые закономерности (${_insightPreferences.hidden.length})'),
+                  ),
+                ],
               ),
             ),
             if (_preferencesError != null)
@@ -212,6 +521,11 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
                   style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
               ),
             const SizedBox(height: 4),
+            if (reports.isEmpty)
+              const SectionCard(child: Text(
+                'Здесь будут сохраняться недельные, месячные, квартальные, полугодовые и годовые отчёты после завершения соответствующих периодов.',
+                style: TextStyle(color: AppTheme.muted, fontSize: 12),
+              )),
             ...reports.map((report) => _ReportCard(
               report: report,
               duration: _duration(report.averageSleepMinutes),

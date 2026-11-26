@@ -11,6 +11,7 @@ import 'sleep_database.dart';
 import 'backup_crypto.dart';
 import 'backup_manifest.dart';
 import 'backup_restore_planner.dart';
+import 'tag_insight_history_merge.dart';
 
 /// Ручной перенос локальной базы Sleep Tracker в переносимый JSON-файл.
 /// Восстановление полностью заменяет текущие данные и выполняется транзакционно.
@@ -122,6 +123,7 @@ class BackupService {
     _validateAudioArchive(data, decoded['formatVersion'] as int);
     _validateSleepChangeHistory(data);
     _validateComparisonSuggestionHistory(data);
+    TagInsightHistoryMerge.validateBackupMetadata(data);
     final availableBytes = await _availableStorageBytes();
     final impact = await SleepDatabase.instance.previewRestoreImpact(
       data,
