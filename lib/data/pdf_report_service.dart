@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
@@ -741,6 +742,26 @@ class PdfReportService {
     required SleepDatabase database,
     required SleepSession session,
   }) async {
+    final bytes = await buildSingleNightPdfBytes(
+      database: database,
+      session: session,
+    );
+    final directory = await getTemporaryDirectory();
+    final fileDate = DateFormat('yyyyMMdd').format(session.startedAt);
+    final file = File(p.join(directory.path, 'SleepTracker-night-$fileDate.pdf'));
+    await file.writeAsBytes(bytes, flush: true);
+    await Share.shareXFiles(
+      [XFile(file.path, mimeType: 'application/pdf', name: p.basename(file.path))],
+      subject: 'Sleep Tracker — отчёт о ночи',
+      text: 'Подробный отчёт по одной сохранённой ночи.',
+    );
+  }
+
+  static Future<Uint8List> buildSingleNightPdfBytes({
+    required SleepDatabase database,
+    required SleepSession session,
+    DateTime? generatedAt,
+  }) async {
     final current = await database.getSessionById(session.id);
     final night = current ?? session;
     if (night.endedAt == null || !night.endedAt!.isAfter(night.startedAt)) {
@@ -787,13 +808,12 @@ class PdfReportService {
     }
     final source = night.source == 'manual' || night.source == 'manual_entry'
         ? 'Вручную' : night.source;
-    final fileDate = DateFormat('yyyyMMdd').format(night.startedAt);
     doc.addPage(pw.MultiPage(
       theme: pw.ThemeData.withFont(base: regular, bold: bold),
       build: (_) => [
         pw.Header(level: 0, child: pw.Text('Sleep Tracker — подробный отчёт о ночи')),
         pw.Text(DateFormat('d MMMM yyyy', 'ru').format(night.startedAt)),
-        pw.Text('Сформирован: ${DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now())}'),
+        pw.Text('Сформирован: ${DateFormat('dd.MM.yyyy HH:mm').format(generatedAt ?? DateTime.now())}'),
         pw.SizedBox(height: 12),
         pw.Header(level: 1, child: pw.Text('Основные сведения')),
         pw.TableHelper.fromTextArray(
@@ -920,14 +940,7 @@ class PdfReportService {
         ),
       ],
     ));
-    final directory = await getTemporaryDirectory();
-    final file = File(p.join(directory.path, 'SleepTracker-night-$fileDate.pdf'));
-    await file.writeAsBytes(await doc.save(), flush: true);
-    await Share.shareXFiles(
-      [XFile(file.path, mimeType: 'application/pdf', name: p.basename(file.path))],
-      subject: 'Sleep Tracker — отчёт о ночи',
-      text: 'Подробный отчёт по одной сохранённой ночи.',
-    );
+    return doc.save();
   }
 
   static Future<void> exportHistory({int days = 30, DateTime? from, DateTime? to, bool includeNotes = false}) async {
