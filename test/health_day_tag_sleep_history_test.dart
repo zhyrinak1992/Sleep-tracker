@@ -68,6 +68,32 @@ void main() {
     expect(latency.single.value, 30);
     expect(awakenings.single.value, 2);
     expect(rating.single.value, 4);
+    final quality = HealthDayTagNightHistory.calculate(
+      sessions: [night],
+      tagsByDay: tags,
+      stagesBySession: {'complete': completeStages},
+      morningReportsBySession: {
+        'complete': {'sleep_quality': 5, 'wellbeing': 3},
+      },
+      tag: 'Кофеин',
+      start: DateTime(2026, 11, 24),
+      endExclusive: DateTime(2026, 11, 26),
+      metric: HealthDayTagNightMetric.sleepQuality,
+    );
+    final wellbeing = HealthDayTagNightHistory.calculate(
+      sessions: [night],
+      tagsByDay: tags,
+      stagesBySession: {'complete': completeStages},
+      morningReportsBySession: {
+        'complete': {'sleep_quality': 5, 'wellbeing': 3},
+      },
+      tag: 'Кофеин',
+      start: DateTime(2026, 11, 24),
+      endExclusive: DateTime(2026, 11, 26),
+      metric: HealthDayTagNightMetric.wellbeing,
+    );
+    expect(quality.single.value, 5);
+    expect(wellbeing.single.value, 3);
   });
 
   test('does not publish efficiency or awakening count below 80 percent coverage', () {
