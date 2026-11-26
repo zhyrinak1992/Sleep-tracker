@@ -21,6 +21,7 @@ import 'tag_sleep_comparison_card.dart';
 import 'sleep_regularity_analysis.dart';
 import 'sleep_achievements_screen.dart';
 import 'audio_event_analysis_card.dart';
+import 'screen_time_analysis_card.dart';
 import 'periodic_report_service.dart';
 import 'periodic_reports_screen.dart';
 import '../health/health_day_tag_monthly_report.dart';
@@ -346,6 +347,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               start: start,
               endExclusive: SleepAnalytics.nextPeriodStart(start, _period),
             ),
+            const SizedBox(height: 14),
+            ScreenTimeAnalysisCard(database: widget.database, sessions: current.sessions, periodLabel: _periodTitle(start)),
             const SizedBox(height: 14),
             IndividualSleepNeedCard(database: widget.database),
             const SizedBox(height: 14),
