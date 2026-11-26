@@ -106,6 +106,52 @@ void main() {
       expect(point.comparison.difference, 60);
     });
 
+    test('clips a multi-month custom range and keeps every calendar bucket', () {
+      final sessions = <SleepSession>[
+        _night('outside-before', DateTime(2026, 1, 19), minutes: 600),
+        for (var i = 0; i < 4; i++)
+          _night('jan-tag-$i', DateTime(2026, 1, 20 + i), minutes: 450),
+        for (var i = 0; i < 4; i++)
+          _night('jan-plain-$i', DateTime(2026, 1, 24 + i), minutes: 390),
+        for (var i = 0; i < 4; i++)
+          _night('feb-tag-$i', DateTime(2026, 2, 1 + i), minutes: 450),
+        for (var i = 0; i < 4; i++)
+          _night('feb-plain-$i', DateTime(2026, 2, 5 + i), minutes: 390),
+        for (var i = 0; i < 4; i++)
+          _night('mar-tag-$i', DateTime(2026, 3, 1 + i), minutes: 450),
+        for (var i = 0; i < 4; i++)
+          _night('mar-plain-$i', DateTime(2026, 3, 5 + i), minutes: 390),
+        _night('outside-after', DateTime(2026, 3, 11), minutes: 600),
+      ];
+      final result = TagSleepTrendAnalysis.calculate(
+        sessions: sessions,
+        tagsBySession: {
+          'outside-before': {'caffeine'},
+          for (var i = 0; i < 4; i++) 'jan-tag-$i': {'caffeine'},
+          for (var i = 0; i < 4; i++) 'feb-tag-$i': {'caffeine'},
+          for (var i = 0; i < 4; i++) 'mar-tag-$i': {'caffeine'},
+          'outside-after': {'caffeine'},
+        },
+        tagKeys: const ['caffeine'],
+        startMonth: DateTime(2026, 1),
+        endMonthExclusive: DateTime(2026, 4),
+        periodStart: DateTime(2026, 1, 20),
+        periodEndExclusive: DateTime(2026, 3, 11),
+        metric: TagSleepMetric.sleepDuration,
+      );
+
+      final points = result.single.points;
+      expect(points, hasLength(3));
+      expect(points.map((point) => point.isPartialPeriod), [true, false, true]);
+      for (final point in points) {
+        expect(point.comparison.withTag.nights, 4);
+        expect(point.comparison.withoutTag.nights, 4);
+        expect(point.comparison.difference, 60);
+      }
+      expect(points.first.periodStart, DateTime(2026, 1, 20));
+      expect(points.last.periodEndExclusive, DateTime(2026, 3, 11));
+    });
+
     test('keeps a full calendar month marked as complete', () {
       final result = TagSleepTrendAnalysis.calculate(
         sessions: const [],
