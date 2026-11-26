@@ -39,8 +39,8 @@ class _HealthDayTagNightMetricPeriodComparisonCardState
   @override
   void initState() {
     super.initState();
-    _firstRange = _inclusiveRange(widget.initialRange);
-    _secondRange = _previousEqualRange(_firstRange);
+    _secondRange = _inclusiveRange(widget.initialRange);
+    _firstRange = _previousEqualRange(_secondRange);
     _stagesFuture = _loadStages();
   }
 
@@ -53,8 +53,8 @@ class _HealthDayTagNightMetricPeriodComparisonCardState
         oldWidget.initialRange.start != widget.initialRange.start ||
         oldWidget.initialRange.endExclusive != widget.initialRange.endExclusive;
     if (rangeChanged) {
-      _firstRange = _inclusiveRange(widget.initialRange);
-      _secondRange = _previousEqualRange(_firstRange);
+      _secondRange = _inclusiveRange(widget.initialRange);
+      _firstRange = _previousEqualRange(_secondRange);
       _stagesFuture = _loadStages();
     } else if (!identical(oldWidget.sessions, widget.sessions)) {
       _stagesFuture = _loadStages();
