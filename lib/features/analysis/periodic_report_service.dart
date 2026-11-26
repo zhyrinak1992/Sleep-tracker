@@ -125,7 +125,13 @@ class PeriodicReportService {
     }
     final scoreCache = <String, SleepScoreResult>{};
 
-    for (final kind in PeriodicReportKind.values) {
+    for (final kind in const [
+      PeriodicReportKind.week,
+      PeriodicReportKind.month,
+      PeriodicReportKind.quarter,
+      PeriodicReportKind.halfYear,
+      PeriodicReportKind.year,
+    ]) {
       final first = _periodStart(completed.first.startedAt, kind);
       final lastClosed = _previousPeriodStart(_periodStart(current, kind), kind);
       var cursor = first;
