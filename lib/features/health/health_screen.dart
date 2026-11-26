@@ -751,10 +751,20 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
           withTag: false,
         )).toList();
       double? averageDuration(List<SleepSession> values) => values.isEmpty ? null : values.fold<int>(0, (sum, item) => sum + item.duration!.inMinutes) / values.length / 60;
+      List<SleepSession> ratedSessions(List<SleepSession> values) =>
+          values.where((session) => session.morningRating != null).toList();
       double? averageRating(List<SleepSession> values) {
-        final rated = values.where((session) => session.morningRating != null).toList();
+        final rated = ratedSessions(values);
         return rated.isEmpty ? null : rated.fold<int>(0, (sum, item) => sum + item.morningRating!) / rated.length;
       }
+      final hasEnoughDurationSamples =
+          taggedSessions.length >= HealthDayTagNightHistory.minimumValidSamplesPerGroup &&
+          otherSessions.length >= HealthDayTagNightHistory.minimumValidSamplesPerGroup;
+      final taggedRatingCount = ratedSessions(taggedSessions).length;
+      final otherRatingCount = ratedSessions(otherSessions).length;
+      final hasEnoughRatingSamples =
+          taggedRatingCount >= HealthDayTagNightHistory.minimumValidSamplesPerGroup &&
+          otherRatingCount >= HealthDayTagNightHistory.minimumValidSamplesPerGroup;
       final monthStart = DateTime(now.year, now.month);
       final previousMonthStart = DateTime(now.year, now.month - 1);
       final nextMonthStart = DateTime(now.year, now.month + 1);
@@ -976,8 +986,10 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
           if (taggedSessions.isEmpty)
             const Text('Пока нет завершённых ночей, дата окончания которых совпадает с днями этой отметки.', style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.35))
           else ...[
-            Text('С отметкой: ${taggedSessions.length} ночей · длительность записи ${averageDuration(taggedSessions) == null ? '—' : _number(averageDuration(taggedSessions)!)} ч · оценка ${averageRating(taggedSessions) == null ? '—' : _number(averageRating(taggedSessions)!)} / 5', style: const TextStyle(fontSize: 11, height: 1.4)),
-            Text('Без отметки: ${otherSessions.length} ночей · длительность записи ${averageDuration(otherSessions) == null ? '—' : _number(averageDuration(otherSessions)!)} ч · оценка ${averageRating(otherSessions) == null ? '—' : _number(averageRating(otherSessions)!)} / 5', style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4)),
+            Text('С отметкой: ${taggedSessions.length} ночей · длительность записи ${averageDuration(taggedSessions) == null ? '—' : _number(averageDuration(taggedSessions)!)} ч · оценка ${averageRating(taggedSessions) == null ? '—' : _number(averageRating(taggedSessions)!)} / 5 (n=$taggedRatingCount)', style: const TextStyle(fontSize: 11, height: 1.4)),
+            Text('Без отметки: ${otherSessions.length} ночей · длительность записи ${averageDuration(otherSessions) == null ? '—' : _number(averageDuration(otherSessions)!)} ч · оценка ${averageRating(otherSessions) == null ? '—' : _number(averageRating(otherSessions)!)} / 5 (n=$otherRatingCount)', style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4)),
+            if (!hasEnoughDurationSamples || !hasEnoughRatingSamples)
+              const Text('Недостаточно данных для устойчивого сопоставления: нужно минимум 4 ночи для длительности и 4 валидные оценки в каждой группе. Средние выше приведены только описательно.', style: TextStyle(color: AppTheme.muted, fontSize: 10, height: 1.35)),
             const Text('Сопоставление описательное, не доказывает влияние отметки на сон. День сопоставляется с ночью по дате её окончания.', style: TextStyle(color: AppTheme.muted, fontSize: 10, height: 1.35)),
           ],
           const Divider(height: 20),

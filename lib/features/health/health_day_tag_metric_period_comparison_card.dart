@@ -194,7 +194,7 @@ class _HealthDayTagNightMetricPeriodComparisonCardState
                   color: AppTheme.muted, fontSize: 10, height: 1.4),
             ),
             Text(
-              'Разница (с отметкой − без отметки): ${_signed(summary.difference)}',
+              'Разница (с отметкой − без отметки): ${summary.hasSufficientSamples ? _signed(summary.difference) : 'недостаточно данных — нужно минимум ${HealthDayTagNightHistory.minimumValidSamplesPerGroup} валидных измерения в каждой группе'}',
               style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
             ),
           ],
@@ -212,7 +212,7 @@ class _HealthDayTagNightMetricPeriodComparisonCardState
             ),
             const SizedBox(height: 4),
             Text(
-              'Показатель: ${widget.metric.label}. Ночь сопоставляется с дневной отметкой по дате её окончания. В каждом периоде отдельно сравниваются ночи с выбранной отметкой и без неё; показываются фактические средние и размеры выборок.',
+              'Показатель: ${widget.metric.label}. Ночь сопоставляется с дневной отметкой по дате её окончания. В каждом периоде отдельно сравниваются ночи с выбранной отметкой и без неё; показываются фактические средние и размеры выборок. Разница рассчитывается только при наличии минимум ${HealthDayTagNightHistory.minimumValidSamplesPerGroup} валидных измерений в каждой группе.',
               style: const TextStyle(
                   color: AppTheme.muted, fontSize: 10, height: 1.4),
             ),
@@ -260,7 +260,7 @@ class _HealthDayTagNightMetricPeriodComparisonCardState
                     _periodSummary('Период 2', _secondRange, comparison.second),
                     const SizedBox(height: 8),
                     Text(
-                      'Изменение разницы (период 2 − период 1): ${_signed(comparison.differenceChange)}',
+                      'Изменение разницы (период 2 − период 1): ${comparison.first.hasSufficientSamples && comparison.second.hasSufficientSamples ? _signed(comparison.differenceChange) : 'недостаточно данных — в обоих периодах нужно минимум ${HealthDayTagNightHistory.minimumValidSamplesPerGroup} валидных измерения в каждой группе'}',
                       style: const TextStyle(
                           fontSize: 11, fontWeight: FontWeight.w700),
                     ),

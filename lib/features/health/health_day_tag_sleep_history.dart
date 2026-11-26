@@ -46,6 +46,8 @@ class HealthDayTagNightMetricPoint {
 }
 
 class HealthDayTagNightHistory {
+  static const minimumValidSamplesPerGroup = 4;
+
   const HealthDayTagNightHistory._();
 
 
@@ -250,8 +252,15 @@ class HealthDayTagNightMetricPeriodSummary {
   final HealthDayTagNightMetricGroupSummary withTag;
   final HealthDayTagNightMetricGroupSummary withoutTag;
 
+  /// A relationship is reported only when both groups have enough valid values.
+  bool get hasSufficientSamples =>
+      withTag.validSamples >= HealthDayTagNightHistory.minimumValidSamplesPerGroup &&
+      withoutTag.validSamples >= HealthDayTagNightHistory.minimumValidSamplesPerGroup;
+
   /// Mean for tagged nights minus mean for nights without the selected tag.
+  /// Returns null for small samples so callers cannot present an unsupported conclusion.
   double? get difference {
+    if (!hasSufficientSamples) return null;
     final taggedAverage = withTag.average;
     final untaggedAverage = withoutTag.average;
     if (taggedAverage == null || untaggedAverage == null) return null;

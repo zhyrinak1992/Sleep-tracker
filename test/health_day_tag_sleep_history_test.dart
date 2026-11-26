@@ -189,7 +189,7 @@ void main() {
     expect(withoutTag.map((point) => point.sessionId), ['recorded-without-tag']);
   });
 
-  test('compares tagged and untagged metric differences across two arbitrary periods', () {
+  test('does not report a tagged-vs-untagged difference below the minimum sample size', () {
     final taggedFirst = session(
       'tagged-first',
       startedAt: DateTime(2026, 10, 1, 21),
@@ -241,13 +241,42 @@ void main() {
     expect(result.first.withTag.validSamples, 1);
     expect(result.first.withTag.average, 4);
     expect(result.first.withoutTag.average, 2);
+    expect(result.first.hasSufficientSamples, isFalse);
+    expect(result.first.difference, isNull);
+    expect(result.second.hasSufficientSamples, isFalse);
+    expect(result.second.difference, isNull);
+    expect(result.differenceChange, isNull);
+  });
+
+  test('reports a difference only after four valid values in each group', () {
+    final sessions = <SleepSession>[];
+    final tagsByDay = <DateTime, List<String>>{};
+    void addNight({required int endDay, required bool tagged, required int rating, required String id}) {
+      final endedAt = DateTime(2026, 10, endDay, 6);
+      sessions.add(session(id, startedAt: endedAt.subtract(const Duration(hours: 9)), endedAt: endedAt, rating: rating));
+      if (tagged) tagsByDay[DateTime(2026, 10, endDay)] = ['Кофеин'];
+      else tagsByDay[DateTime(2026, 10, endDay)] = <String>[];
+    }
+    for (var i = 0; i < 4; i++) {
+      addNight(endDay: 2 + i * 2, tagged: true, rating: 4, id: 'first-tagged-$i');
+      addNight(endDay: 3 + i * 2, tagged: false, rating: 2, id: 'first-untagged-$i');
+      addNight(endDay: 10 + i * 2, tagged: true, rating: 3, id: 'second-tagged-$i');
+      addNight(endDay: 11 + i * 2, tagged: false, rating: 2, id: 'second-untagged-$i');
+    }
+    final result = HealthDayTagNightHistory.comparePeriods(
+      sessions: sessions, tagsByDay: tagsByDay, stagesBySession: const {},
+      tag: 'Кофеин',
+      firstStart: DateTime(2026, 10, 2), firstEndExclusive: DateTime(2026, 10, 10),
+      secondStart: DateTime(2026, 10, 10), secondEndExclusive: DateTime(2026, 10, 18),
+      metric: HealthDayTagNightMetric.morningRating,
+    );
+    expect(result.first.hasSufficientSamples, isTrue);
+    expect(result.first.withTag.validSamples, 4);
+    expect(result.first.withoutTag.validSamples, 4);
     expect(result.first.difference, 2);
-    expect(result.second.withTag.average, 3);
-    expect(result.second.withoutTag.average, 2);
     expect(result.second.difference, 1);
     expect(result.differenceChange, -1);
   });
-
   test('keeps missing metric values out of averages and reports their sample count', () {
     final tagged = session(
       'tagged-missing',
