@@ -259,6 +259,12 @@ class PdfReportService {
     final weeklyTrend = snapshot['weeklyTrend'] is List
         ? (snapshot['weeklyTrend'] as List).whereType<Map>().toList()
         : const <Map>[];
+    final trendPoints = snapshot['trendPoints'] is List
+        ? (snapshot['trendPoints'] as List).whereType<Map>().toList()
+        : const <Map>[];
+    final weekdayTrend = snapshot['weekdayTrend'] is List
+        ? (snapshot['weekdayTrend'] as List).whereType<Map>().toList()
+        : const <Map>[];
     final weekdayPatterns = snapshot['weekdayPatterns'] is List
         ? (snapshot['weekdayPatterns'] as List).whereType<Map>().toList()
         : const <Map>[];
@@ -468,6 +474,62 @@ class PdfReportService {
         ]).toList(),
       ));
       content.add(pw.Text('Показываются только группы минимум с тремя измерениями; статистика описательная и не устанавливает причины изменений.'));
+    }
+    if (snapshot['kind'] == 'week' && trendPoints.isNotEmpty) {
+      content.add(pw.SizedBox(height: 14));
+      content.add(pw.Header(level: 1, child: pw.Text('Динамика по дням недели')));
+      content.add(pw.TableHelper.fromTextArray(
+        headers: ['Дата', 'Ночей с измерением', 'Средний сон'],
+        cellStyle: const pw.TextStyle(fontSize: 8),
+        headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+        data: trendPoints.map((point) => [
+          point['label']?.toString() ?? '—',
+          point['samples']?.toString() ?? '0',
+          duration(point['sleepMinutes']),
+        ]).toList(),
+      ));
+    }
+    if (snapshot['kind'] == 'week' && weekdayTrend.isNotEmpty) {
+      content.add(pw.SizedBox(height: 10));
+      content.add(pw.Header(level: 1, child: pw.Text('Средняя длительность по дням недели')));
+      content.add(pw.TableHelper.fromTextArray(
+        headers: ['День', 'Ночей с измерением', 'Средний сон'],
+        cellStyle: const pw.TextStyle(fontSize: 8),
+        headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+        data: weekdayTrend.map((point) => [
+          point['label']?.toString() ?? '—',
+          point['samples']?.toString() ?? '0',
+          duration(point['sleepMinutes']),
+        ]).toList(),
+      ));
+    }
+    final nightlyBuckets = snapshot['kind'] == 'week' ? trendPoints
+        : snapshot['kind'] == 'month' ? weeklyTrend : months;
+    final nightlyRows = <List<String>>[];
+    for (final bucket in nightlyBuckets) {
+      final nights = (bucket['nights'] as List? ?? const []).whereType<Map>();
+      for (final night in nights) {
+        final date = DateTime.tryParse(night['startedAt']?.toString() ?? '');
+        nightlyRows.add([
+          date == null ? '—' : DateFormat('dd.MM.yyyy').format(date),
+          duration(night['sleepMinutes']),
+          night['score'] is num ? (night['score'] as num).toStringAsFixed(0) : 'Нет данных',
+          average(night['efficiency'], suffix: '%'),
+          night['awakenings'] is num ? (night['awakenings'] as num).toStringAsFixed(1) : 'Нет данных',
+          average(night['quality'], suffix: ' / 5'),
+          average(night['wellbeing'], suffix: ' / 5'),
+        ]);
+      }
+    }
+    if (nightlyRows.isNotEmpty) {
+      content.add(pw.SizedBox(height: 14));
+      content.add(pw.Header(level: 1, child: pw.Text('Фактические данные отдельных ночей')));
+      content.add(pw.TableHelper.fromTextArray(
+        headers: ['Дата', 'Сон', 'Оценка', 'Эффективность', 'Пробуждения', 'Качество', 'Самочувствие'],
+        cellStyle: const pw.TextStyle(fontSize: 7),
+        headerStyle: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold),
+        data: nightlyRows,
+      ));
     }
     if (notes.isNotEmpty) {
       content.add(pw.SizedBox(height: 14));
