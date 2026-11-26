@@ -40,5 +40,9 @@ jobs:
         env:
           TZ: Europe/Berlin
         run: flutter test test/health_report_service_test.dart --reporter expanded
+      - name: Verify periodic report calendar boundaries across DST
+        env:
+          TZ: Europe/Berlin
+        run: flutter test test/periodic_report_service_test.dart --reporter expanded
       - name: Run tests
         run: flutter test --reporter expanded
