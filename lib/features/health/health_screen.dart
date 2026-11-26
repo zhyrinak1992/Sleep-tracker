@@ -1413,26 +1413,32 @@ class _HealthTagMetricHistoryChart extends StatefulWidget {
 class _HealthTagMetricHistoryChartState
     extends State<_HealthTagMetricHistoryChart> {
   HealthDayTagNightMetric _metric = HealthDayTagNightMetric.sleepDuration;
-  late Future<Map<String, List<Map<String, Object?>>>> _stagesFuture;
+  late Future<_HealthTagHistoryData> _historyDataFuture;
 
   @override
   void initState() {
     super.initState();
-    _stagesFuture = _loadStages();
+    _historyDataFuture = _loadHistoryData();
   }
 
   @override
   void didUpdateWidget(covariant _HealthTagMetricHistoryChart oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.sessions != widget.sessions) {
-      _stagesFuture = _loadStages();
+      _historyDataFuture = _loadHistoryData();
     }
   }
 
-  Future<Map<String, List<Map<String, Object?>>>> _loadStages() =>
-      widget.database.getStagesForSessions(
-        widget.sessions.map((session) => session.id).toList(),
-      );
+  Future<_HealthTagHistoryData> _loadHistoryData() async {
+    final ids = widget.sessions.map((session) => session.id).toList();
+    final stages = await widget.database.getStagesForSessions(ids);
+    final morningReports =
+        await widget.database.getMorningReportsForSessions(ids);
+    return (
+      stagesBySession: stages,
+      morningReportsBySession: morningReports,
+    );
+  }
 
   Widget _periodComparisonCard(Map<DateTime, List<String>> tagsByDay) =>
       HealthDayTagNightMetricPeriodComparisonCard(
@@ -1469,8 +1475,8 @@ class _HealthTagMetricHistoryChartState
           },
         ),
         const SizedBox(height: 8),
-        FutureBuilder<Map<String, List<Map<String, Object?>>>>(
-          future: _stagesFuture,
+        FutureBuilder<_HealthTagHistoryData>(
+          future: _historyDataFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const LinearProgressIndicator();
@@ -1487,7 +1493,9 @@ class _HealthTagMetricHistoryChartState
             final points = HealthDayTagNightHistory.calculate(
               sessions: widget.sessions,
               tagsByDay: tagsByDay,
-              stagesBySession: snapshot.data ?? const {},
+              stagesBySession: snapshot.data?.stagesBySession ?? const {},
+              morningReportsBySession:
+                  snapshot.data?.morningReportsBySession ?? const {},
               tag: widget.tag,
               start: widget.range.start,
               endExclusive: widget.range.endExclusive,
