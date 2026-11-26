@@ -106,7 +106,7 @@ void main() {
     await database.insert('sleep_notes', {
       'id': 'unrelated-large-note',
       'session_id': 'unrelated-night',
-      'body': 'ДРУГАЯ НОЧЬ ' * 3000,
+      'body': List.filled(3000, 'ДРУГАЯ НОЧЬ ').join(),
       'created_at': DateTime.utc(2026, 11, 22).toIso8601String(),
       'updated_at': DateTime.utc(2026, 11, 22).toIso8601String(),
     });
