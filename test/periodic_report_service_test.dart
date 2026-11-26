@@ -239,5 +239,17 @@ void main() {
     expect(finalBucket['dayTo'], 31);
     expect(finalBucket['nights'], hasLength(2),
         reason: 'The final monthly bucket starts at local midnight on 29 March');
+
+    final yearReports = await PeriodicReportService(SleepDatabase.instance)
+        .generateClosedReports(now: DateTime(2027, 1, 2));
+    final year = yearReports.singleWhere((report) =>
+        report.id == 'year_2026-01-01');
+    expect(year.nights, 2);
+    expect(year.start, DateTime(2026, 1, 1));
+    expect(year.endExclusive, DateTime(2027, 1, 1));
+    final yearMonths = (year.data['months'] as List).whereType<Map>().toList();
+    expect(yearMonths, hasLength(1));
+    expect(yearMonths.single['month'], 3);
+    expect(yearMonths.single['nightCount'], 2);
   });
 }
