@@ -105,7 +105,8 @@ class SleepSessionMetrics {
     final firstAwakening = awakeningCandidates.isEmpty
         ? null
         : awakeningCandidates.first;
-    final finalWake = actualEnd ?? bedEnd;
+    // A button press ends the recording interval; it is not proof of actual waking.
+    final finalWake = actualEnd;
     final coverage = inBed == null || inBed <= 0
         ? null
         : (coverageMinutes / inBed * 100).clamp(0, 100).toDouble();
