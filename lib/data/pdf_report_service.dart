@@ -241,6 +241,33 @@ class PdfReportService {
       final parsed = number(value);
       return parsed == null ? 'Нет данных' : parsed.toStringAsFixed(1) + suffix;
     }
+    String signedDurationDelta(Object? currentValue, Object? previousValue) {
+      final current = number(currentValue);
+      final previousValueNumber = number(previousValue);
+      if (current == null || previousValueNumber == null) return 'Недостаточно сопоставимых данных';
+      final delta = current - previousValueNumber;
+      final rounded = delta.abs().round();
+      final arrow = delta > 0 ? '↑ +' : delta < 0 ? '↓ −' : '→ ';
+      return '$arrow${rounded ~/ 60} ч ${rounded % 60} мин';
+    }
+    String signedPercentDelta(Object? currentValue, Object? previousValue) {
+      final current = number(currentValue);
+      final previousValueNumber = number(previousValue);
+      if (current == null || previousValueNumber == null || previousValueNumber == 0) {
+        return 'Процент недоступен (нет данных или предыдущий период равен нулю)';
+      }
+      final delta = (current - previousValueNumber) / previousValueNumber * 100;
+      final arrow = delta > 0 ? '↑ +' : delta < 0 ? '↓ −' : '→ ';
+      return '$arrow${delta.abs().toStringAsFixed(1)}%';
+    }
+    String signedScaleDelta(Object? currentValue, Object? previousValue) {
+      final current = number(currentValue);
+      final previousValueNumber = number(previousValue);
+      if (current == null || previousValueNumber == null) return 'Недостаточно сопоставимых данных';
+      final delta = current - previousValueNumber;
+      final arrow = delta > 0 ? '↑ +' : delta < 0 ? '↓ −' : '→ ';
+      return '$arrow${delta.abs().toStringAsFixed(1)} балла';
+    }
 
     final score = snapshot['score'] is Map ? Map<String, Object?>.from(snapshot['score'] as Map) : <String, Object?>{};
     final scoreComponents = score['components'] is Map ? Map<String, Object?>.from(score['components'] as Map) : <String, Object?>{};
@@ -314,11 +341,13 @@ class PdfReportService {
       final previousScore = previous['score'] is Map ? Map<String, Object?>.from(previous['score'] as Map) : <String, Object?>{};
       content.add(pw.Text('Средняя оценка сна: ${previousScore['average'] is num ? (previousScore['average'] as num).toStringAsFixed(0) + ' / 100' : 'Недостаточно данных'} · ночей с оценкой ${previousScore['samples'] ?? 0}'));
       content.add(pw.Text('Средняя продолжительность сна: ${duration(previous['averageSleepMinutes'])}'));
+      content.add(pw.Text('Изменение средней длительности: ${signedDurationDelta(snapshot['averageSleepMinutes'], previous['averageSleepMinutes'])} · ${signedPercentDelta(snapshot['averageSleepMinutes'], previous['averageSleepMinutes'])}'));
       content.add(pw.Text('Среднее время в постели: ${duration(previous['averageTimeInBedMinutes'])}'));
       content.add(pw.Text('Эффективность: ${average(previous['averageEfficiency'], suffix: '%')}'));
       content.add(pw.Text('Пробуждения: ${average(previous['averageAwakenings'])}'));
       content.add(pw.Text('Субъективное качество: ${average(previous['averageQuality'], suffix: ' / 5')}'));
       content.add(pw.Text('Самочувствие: ${average(previous['averageWellbeing'], suffix: ' / 5')}'));
+      content.add(pw.Text('Изменение средней оценки самочувствия: ${signedScaleDelta(snapshot['averageWellbeing'], previous['averageWellbeing'])}'));
     }
     final rankedInsights = snapshot['rankedInsights'] is List
         ? (snapshot['rankedInsights'] as List).whereType<Map>().toList()
