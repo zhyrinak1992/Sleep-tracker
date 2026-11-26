@@ -6,6 +6,8 @@ enum HealthDayTagNightMetric {
   sleepEfficiency,
   sleepLatency,
   awakenings,
+  sleepQuality,
+  wellbeing,
   morningRating,
 }
 
@@ -15,6 +17,8 @@ extension HealthDayTagNightMetricLabel on HealthDayTagNightMetric {
     HealthDayTagNightMetric.sleepEfficiency => 'Эффективность сна',
     HealthDayTagNightMetric.sleepLatency => 'Задержка засыпания',
     HealthDayTagNightMetric.awakenings => 'Эпизоды бодрствования',
+    HealthDayTagNightMetric.sleepQuality => 'Качество сна',
+    HealthDayTagNightMetric.wellbeing => 'Самочувствие утром',
     HealthDayTagNightMetric.morningRating => 'Утренняя оценка',
   };
 
@@ -23,6 +27,8 @@ extension HealthDayTagNightMetricLabel on HealthDayTagNightMetric {
     HealthDayTagNightMetric.sleepEfficiency => '%',
     HealthDayTagNightMetric.sleepLatency => 'мин',
     HealthDayTagNightMetric.awakenings => 'эп.',
+    HealthDayTagNightMetric.sleepQuality => '/ 5',
+    HealthDayTagNightMetric.wellbeing => '/ 5',
     HealthDayTagNightMetric.morningRating => '/ 5',
   };
 }
@@ -53,6 +59,7 @@ class HealthDayTagNightHistory {
     required DateTime secondStart,
     required DateTime secondEndExclusive,
     required HealthDayTagNightMetric metric,
+    Map<String, Map<String, Object?>> morningReportsBySession = const {},
   }) {
     HealthDayTagNightMetricPeriodSummary summarizePeriod(
       DateTime start,
@@ -66,6 +73,7 @@ class HealthDayTagNightHistory {
         start: start,
         endExclusive: endExclusive,
         metric: metric,
+        morningReportsBySession: morningReportsBySession,
         withTag: true,
       );
       final untagged = calculate(
@@ -76,6 +84,7 @@ class HealthDayTagNightHistory {
         start: start,
         endExclusive: endExclusive,
         metric: metric,
+        morningReportsBySession: morningReportsBySession,
         withTag: false,
       );
 
@@ -127,6 +136,7 @@ class HealthDayTagNightHistory {
     required DateTime start,
     required DateTime endExclusive,
     required HealthDayTagNightMetric metric,
+    Map<String, Map<String, Object?>> morningReportsBySession = const {},
     bool withTag = true,
   }) {
     if (tag.trim().isEmpty || !endExclusive.isAfter(start)) {
@@ -163,6 +173,12 @@ class HealthDayTagNightHistory {
           coverage != null && coverage >= 80 && metrics.hasAwakeSamples
               ? metrics.awakeningCount.toDouble()
               : null,
+        HealthDayTagNightMetric.sleepQuality =>
+          (morningReportsBySession[session.id]?['sleep_quality'] as num?)
+              ?.toDouble(),
+        HealthDayTagNightMetric.wellbeing =>
+          (morningReportsBySession[session.id]?['wellbeing'] as num?)
+              ?.toDouble(),
         HealthDayTagNightMetric.morningRating =>
           session.morningRating?.toDouble(),
       };
