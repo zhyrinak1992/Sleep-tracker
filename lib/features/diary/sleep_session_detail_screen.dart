@@ -280,6 +280,43 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
         ? metrics.awakeningCount.toDouble()
         : null;
 
+    final climateEnd = session.endedAt ?? DateTime.now();
+    final climateRows = climateEnd.isAfter(session.startedAt)
+        ? await widget.database.getClimateSamples(
+            sessionId: session.id,
+            from: session.startedAt,
+            to: climateEnd,
+          )
+        : <Map<String, Object?>>[];
+    final temperatureSamples = climateRows
+        .where((row) => row['metric_type'] == 'temperature').toList();
+    final humiditySamples = climateRows
+        .where((row) => row['metric_type'] == 'humidity').toList();
+    final temperatureSummary = ClimateMetricSummary.fromSamples(
+      temperatureSamples,
+      metricType: 'temperature',
+      expectedInterval: const Duration(minutes: 15),
+    );
+    final humiditySummary = ClimateMetricSummary.fromSamples(
+      humiditySamples,
+      metricType: 'humidity',
+      expectedInterval: const Duration(minutes: 15),
+    );
+
+    String climateSummaryText(ClimateMetricSummary? summary) {
+      if (summary == null) return 'За эту ночь фактические измерения не поступали.';
+      final unit = summary.unit.isEmpty ? '' : ' ${summary.unit}';
+      final coverage = summary.coveragePercent == null
+          ? ''
+          : '; расчётное покрытие ${summary.coveragePercent!.toStringAsFixed(0)}%';
+      return 'Мин. ${summary.minimum.toStringAsFixed(1)}$unit; '
+          'макс. ${summary.maximum.toStringAsFixed(1)}$unit; '
+          'среднее ${summary.average.toStringAsFixed(1)}$unit; '
+          'последнее ${summary.lastValue.toStringAsFixed(1)}$unit '
+          'в ${DateFormat('HH:mm').format(summary.lastMeasuredAt)}. '
+          '${summary.count} измерений$coverage.';
+    }
+
     String durationLabel(int? minutes) => minutes == null
         ? 'Нет достоверных данных'
         : _duration(Duration(minutes: minutes));
@@ -361,6 +398,38 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                 events.length.toString(),
                 icon: Icons.graphic_eq_rounded,
               ),
+              const Divider(height: 22),
+              const Text('Микроклимат спальни', style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              Text('Температура: ${climateSummaryText(temperatureSummary)}',
+                style: const TextStyle(fontSize: 12, height: 1.4)),
+              if (temperatureSummary != null && temperatureSamples.length > 1)
+                SizedBox(
+                  height: 34,
+                  width: double.infinity,
+                  child: CustomPaint(
+                    painter: _ClimateSparklinePainter(
+                      values: temperatureSamples
+                          .map((row) => (row['value'] as num).toDouble()).toList(),
+                      color: AppTheme.teal,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              Text('Влажность: ${climateSummaryText(humiditySummary)}',
+                style: const TextStyle(fontSize: 12, height: 1.4)),
+              if (humiditySummary != null && humiditySamples.length > 1)
+                SizedBox(
+                  height: 34,
+                  width: double.infinity,
+                  child: CustomPaint(
+                    painter: _ClimateSparklinePainter(
+                      values: humiditySamples
+                          .map((row) => (row['value'] as num).toDouble()).toList(),
+                      color: AppTheme.accentPink,
+                    ),
+                  ),
+                ),
               if (orderedCategories.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 const Text('Категории звуков', style: TextStyle(fontWeight: FontWeight.w600)),
