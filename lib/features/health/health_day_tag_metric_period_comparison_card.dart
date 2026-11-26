@@ -7,6 +7,11 @@ import '../../widgets/section_card.dart';
 import 'health_day_tag_history_period.dart';
 import 'health_day_tag_sleep_history.dart';
 
+typedef _TagComparisonData = ({
+  Map<String, List<Map<String, Object?>>> stagesBySession,
+  Map<String, Map<String, Object?>> morningReportsBySession,
+});
+
 class HealthDayTagNightMetricPeriodComparisonCard extends StatefulWidget {
   const HealthDayTagNightMetricPeriodComparisonCard({
     super.key,
@@ -34,14 +39,14 @@ class _HealthDayTagNightMetricPeriodComparisonCardState
     extends State<HealthDayTagNightMetricPeriodComparisonCard> {
   late DateTimeRange _firstRange;
   late DateTimeRange _secondRange;
-  late Future<Map<String, List<Map<String, Object?>>>> _stagesFuture;
+  late Future<_TagComparisonData> _dataFuture;
 
   @override
   void initState() {
     super.initState();
     _secondRange = _inclusiveRange(widget.initialRange);
     _firstRange = _previousEqualRange(_secondRange);
-    _stagesFuture = _loadStages();
+    _dataFuture = _loadData();
   }
 
   @override
@@ -55,9 +60,9 @@ class _HealthDayTagNightMetricPeriodComparisonCardState
     if (rangeChanged) {
       _secondRange = _inclusiveRange(widget.initialRange);
       _firstRange = _previousEqualRange(_secondRange);
-      _stagesFuture = _loadStages();
+      _dataFuture = _loadData();
     } else if (!identical(oldWidget.sessions, widget.sessions)) {
-      _stagesFuture = _loadStages();
+      _dataFuture = _loadData();
     }
   }
 
@@ -107,7 +112,7 @@ class _HealthDayTagNightMetricPeriodComparisonCardState
     return !day.isBefore(start) && day.isBefore(endExclusive);
   }
 
-  Future<Map<String, List<Map<String, Object?>>>> _loadStages() {
+  Future<_TagComparisonData> _loadData() async {
     final firstStart = _day(_firstRange.start);
     final firstEnd = _endExclusive(_firstRange);
     final secondStart = _day(_secondRange.start);
@@ -115,8 +120,13 @@ class _HealthDayTagNightMetricPeriodComparisonCardState
     final relevant = widget.sessions.where((session) =>
         _containsNight(session, firstStart, firstEnd) ||
         _containsNight(session, secondStart, secondEnd));
-    return widget.database.getStagesForSessions(
-      relevant.map((session) => session.id).toList(),
+    final ids = relevant.map((session) => session.id).toList();
+    final stages = await widget.database.getStagesForSessions(ids);
+    final morningReports =
+        await widget.database.getMorningReportsForSessions(ids);
+    return (
+      stagesBySession: stages,
+      morningReportsBySession: morningReports,
     );
   }
 
@@ -140,7 +150,7 @@ class _HealthDayTagNightMetricPeriodComparisonCardState
       } else {
         _secondRange = normalized;
       }
-      _stagesFuture = _loadStages();
+      _dataFuture = _loadData();
     });
   }
 
@@ -218,8 +228,8 @@ class _HealthDayTagNightMetricPeriodComparisonCardState
               label: Text('Период 2: ${_rangeLabel(_secondRange)}'),
             ),
             const SizedBox(height: 5),
-            FutureBuilder<Map<String, List<Map<String, Object?>>>>(
-              future: _stagesFuture,
+            FutureBuilder<_TagComparisonData>(
+              future: _dataFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const LinearProgressIndicator();
@@ -233,7 +243,9 @@ class _HealthDayTagNightMetricPeriodComparisonCardState
                 final comparison = HealthDayTagNightHistory.comparePeriods(
                   sessions: widget.sessions,
                   tagsByDay: widget.tagsByDay,
-                  stagesBySession: snapshot.data ?? const {},
+                  stagesBySession: snapshot.data?.stagesBySession ?? const {},
+                  morningReportsBySession:
+                      snapshot.data?.morningReportsBySession ?? const {},
                   tag: widget.tag,
                   firstStart: _firstRange.start,
                   firstEndExclusive: _endExclusive(_firstRange),
