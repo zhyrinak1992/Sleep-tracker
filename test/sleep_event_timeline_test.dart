@@ -55,6 +55,7 @@ void main() {
       expect(pulse.where((event) => event.isElevated).map((event) => event.detail).toList(), ['110 уд/мин']);
       expect(audio, hasLength(1));
       expect(audio.single.title, contains('Храп'));
+      expect(pulse.last.source, contains('Храп — за 25 мин до измерения'));
       expect(events.map((event) => event.at), orderedEquals(
         events.map((event) => event.at).toList()..sort(),
       ));
@@ -115,6 +116,39 @@ void main() {
         'Звуковое событие · Всхлипывания',
         'Звуковое событие · Храп',
       ]);
+    });
+
+    test('reports exact temporal overlap between an elevated pulse and awakening', () {
+      final events = SleepEventTimeline.build(
+        stages: [
+          {
+            'stage': 'Бодрствование',
+            'started_at': '2026-11-24T23:35:00.000Z',
+            'ended_at': '2026-11-24T23:45:00.000Z',
+          },
+        ],
+        metrics: [
+          for (var i = 0; i < 5; i++)
+            {
+              'metric_type': 'Пульс',
+              'value': [60, 61, 62, 63, 110][i],
+              'unit': 'уд/мин',
+              'measured_at': DateTime.utc(2026, 11, 24, 23)
+                  .add(Duration(minutes: [0, 10, 20, 30, 40][i]))
+                  .toIso8601String(),
+            },
+        ],
+        audioEvents: const [],
+      );
+      final elevated = events.singleWhere(
+        (event) =>
+            event.kind == SleepTimelineEventKind.pulse && event.isElevated,
+      );
+
+      expect(
+        elevated.source,
+        contains('измерение совпало с периодом бодрствования'),
+      );
     });
 
     test('does not invent events or flag pulse outliers with too few samples', () {
