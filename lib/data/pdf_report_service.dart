@@ -657,7 +657,7 @@ class PdfReportService {
     if (!rangeEndExclusive.isAfter(rangeStart)) {
       throw ArgumentError('Дата окончания отчёта должна быть не раньше даты начала.');
     }
-    final sessions = await SleepDatabase.instance.getSessions(limit: 10000);
+    final sessions = await SleepDatabase.instance.getSessions(limit: null);
     final selected = sessions.where((s) =>
       !s.startedAt.isBefore(rangeStart) && s.startedAt.isBefore(rangeEndExclusive) && s.endedAt != null
     ).toList()..sort((a, b) => a.startedAt.compareTo(b.startedAt));
