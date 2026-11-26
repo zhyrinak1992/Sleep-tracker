@@ -818,6 +818,15 @@ class PeriodicReportService {
       return patterns;
     }
 
+    if (kind == PeriodicReportKind.customRange) {
+      data['trendPoints'] = nightlyDetails(sessions).map((night) => <String, Object?>{
+        'label': night['startedAt'],
+        'sleepMinutes': night['sleepMinutes'],
+        'samples': night['sleepMinutes'] == null ? 0 : 1,
+        'nights': [night],
+      }).toList();
+    }
+
     if (kind == PeriodicReportKind.week) {
       final days = <Map<String, Object?>>[];
       for (var day = 0; day < 7; day++) {
@@ -930,15 +939,6 @@ class PeriodicReportService {
     return DateTime(value.year + 1);
   }
   static DateTime _previousPeriodStart(DateTime value, PeriodicReportKind kind) {
-    if (kind == PeriodicReportKind.customRange) {
-      data['trendPoints'] = nightlyDetails(sessions).map((night) => <String, Object?>{
-        'label': night['startedAt'],
-        'sleepMinutes': night['sleepMinutes'],
-        'samples': night['sleepMinutes'] == null ? 0 : 1,
-        'nights': [night],
-      }).toList();
-    }
-
     if (kind == PeriodicReportKind.week) {
       return DateTime(value.year, value.month, value.day - 7);
     }
