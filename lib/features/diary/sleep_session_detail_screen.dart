@@ -5,7 +5,6 @@ import '../../data/sleep_database.dart';
 import '../../data/notification_service.dart';
 import '../analysis/climate_analytics.dart';
 import '../analysis/sleep_score.dart';
-import 'screen_time_card.dart';
 import 'weather_night_detail_card.dart';
 import 'sleep_session_metrics_card.dart';
 import 'sleep_session_metrics.dart';
@@ -780,8 +779,6 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                           style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4)),
                       ],
                     )),
-                    const SizedBox(height: 12),
-                    ScreenTimeCard(database: widget.database, session: session),
                     const SizedBox(height: 12),
                     SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       const Text('Фазы сна', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
