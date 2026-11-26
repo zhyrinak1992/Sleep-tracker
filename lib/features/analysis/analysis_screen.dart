@@ -20,7 +20,6 @@ import 'sleep_period_comparison_screen.dart';
 import 'tag_sleep_comparison_card.dart';
 import 'tag_sleep_trends_screen.dart';
 import 'sleep_regularity_analysis.dart';
-import 'sleep_achievements_screen.dart';
 import 'audio_event_analysis_card.dart';
 import 'screen_time_analysis_card.dart';
 import 'periodic_report_service.dart';
@@ -331,17 +330,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             // иначе порог в 7 ночей недостижим для большинства недельных срезов.
             _RegularityCard(sessions: all, database: widget.database),
             const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => SleepAchievementsScreen(sessions: all),
-                )),
-                icon: const Icon(Icons.emoji_events_outlined),
-                label: const Text('Все достижения и рекорды'),
-              ),
-            ),
-            const SizedBox(height: 4),
             TagSleepComparisonCard(
               database: widget.database,
               sessions: all,
