@@ -113,6 +113,102 @@ void main() {
     expect(result.single.value, isNull);
   });
 
+
+  test('compares tagged and untagged metric differences across two arbitrary periods', () {
+    final taggedFirst = session(
+      'tagged-first',
+      startedAt: DateTime(2026, 10, 1, 21),
+      endedAt: DateTime(2026, 10, 2, 6),
+      rating: 4,
+    );
+    final untaggedFirst = session(
+      'untagged-first',
+      startedAt: DateTime(2026, 10, 2, 21),
+      endedAt: DateTime(2026, 10, 3, 6),
+      rating: 2,
+    );
+    final taggedSecond = session(
+      'tagged-second',
+      startedAt: DateTime(2026, 10, 3, 21),
+      endedAt: DateTime(2026, 10, 4, 6),
+      rating: 3,
+    );
+    final untaggedSecond = session(
+      'untagged-second',
+      startedAt: DateTime(2026, 10, 4, 21),
+      endedAt: DateTime(2026, 10, 5, 6),
+      rating: 2,
+    );
+
+    final result = HealthDayTagNightHistory.comparePeriods(
+      sessions: [
+        taggedFirst,
+        untaggedFirst,
+        taggedSecond,
+        untaggedSecond,
+      ],
+      tagsByDay: {
+        DateTime(2026, 10, 2): ['Кофеин'],
+        DateTime(2026, 10, 3): ['Поздний ужин'],
+        DateTime(2026, 10, 4): ['Кофеин'],
+        DateTime(2026, 10, 5): ['Стресс'],
+      },
+      stagesBySession: const {},
+      tag: 'Кофеин',
+      firstStart: DateTime(2026, 10, 2),
+      firstEndExclusive: DateTime(2026, 10, 4),
+      secondStart: DateTime(2026, 10, 4),
+      secondEndExclusive: DateTime(2026, 10, 6),
+      metric: HealthDayTagNightMetric.morningRating,
+    );
+
+    expect(result.first.withTag.nights, 1);
+    expect(result.first.withTag.validSamples, 1);
+    expect(result.first.withTag.average, 4);
+    expect(result.first.withoutTag.average, 2);
+    expect(result.first.difference, 2);
+    expect(result.second.withTag.average, 3);
+    expect(result.second.withoutTag.average, 2);
+    expect(result.second.difference, 1);
+    expect(result.differenceChange, -1);
+  });
+
+  test('keeps missing metric values out of averages and reports their sample count', () {
+    final tagged = session(
+      'tagged-missing',
+      startedAt: DateTime(2026, 10, 1, 21),
+      endedAt: DateTime(2026, 10, 2, 6),
+    );
+    final untagged = session(
+      'untagged-rated',
+      startedAt: DateTime(2026, 10, 2, 21),
+      endedAt: DateTime(2026, 10, 3, 6),
+      rating: 3,
+    );
+
+    final result = HealthDayTagNightHistory.comparePeriods(
+      sessions: [tagged, untagged],
+      tagsByDay: {
+        DateTime(2026, 10, 2): ['Кофеин'],
+        DateTime(2026, 10, 3): ['Стресс'],
+      },
+      stagesBySession: const {},
+      tag: 'Кофеин',
+      firstStart: DateTime(2026, 10, 2),
+      firstEndExclusive: DateTime(2026, 10, 4),
+      secondStart: DateTime(2026, 10, 2),
+      secondEndExclusive: DateTime(2026, 10, 4),
+      metric: HealthDayTagNightMetric.morningRating,
+    );
+
+    expect(result.first.withTag.nights, 1);
+    expect(result.first.withTag.validSamples, 0);
+    expect(result.first.withTag.average, isNull);
+    expect(result.first.withoutTag.validSamples, 1);
+    expect(result.first.difference, isNull);
+    expect(result.differenceChange, isNull);
+  });
+
   test('filters untagged, out-of-period and deleted nights and sorts chronologically', () {
     final older = session(
       'older',
