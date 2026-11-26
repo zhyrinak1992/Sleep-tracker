@@ -50,7 +50,7 @@ class TagInsightPreferenceStore {
       hidden[entry.key] = TagInsightLabel.fromMap(entry.value as Map<String, dynamic>);
     }
     final rawPinned = decoded['pinned'] as List;
-    if (rawPinned.any((item) => item is! String || item.isEmpty) ||
+    if (rawPinned.any((item) => item is! String || item.isEmpty || !_isValidIdentity(item)) ||
         rawPinned.toSet().length != rawPinned.length) {
       throw const FormatException('Список закреплённых закономерностей повреждён.');
     }

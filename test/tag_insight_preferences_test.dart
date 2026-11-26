@@ -58,4 +58,12 @@ void main() {
     await expectLater(store.load(), throwsFormatException);
     expect(metadata[TagInsightPreferenceStore.metadataKey], '{broken');
   });
+
+  test('rejects malformed pinned identities without rewriting metadata', () async {
+    metadata[TagInsightPreferenceStore.metadataKey] =
+        '{"schemaVersion":1,"hidden":{},"pinned":["not-json"]}';
+    await expectLater(store.load(), throwsFormatException);
+    expect(metadata[TagInsightPreferenceStore.metadataKey],
+        '{"schemaVersion":1,"hidden":{},"pinned":["not-json"]}');
+  });
 }

@@ -276,6 +276,21 @@ class _ReportCard extends StatelessWidget {
       : <String, Object?>{};
     final currentTagPatterns = tagPatterns['current'] is List
       ? (tagPatterns['current'] as List).whereType<Map>().toList() : const <Map>[];
+    final visibleCurrentTagPatterns = currentTagPatterns.map((rawPattern) {
+      final pattern = Map<String, Object?>.from(rawPattern);
+      final tagKey = (pattern['tagKey'] ?? '').toString();
+      final metrics = pattern['metrics'] is Map
+          ? Map<String, Object?>.from(pattern['metrics'] as Map)
+          : <String, Object?>{};
+      if (tagKey.isNotEmpty) {
+        metrics.removeWhere((metricKey, _) => insightPreferences.isHidden(
+          TagInsightPreferenceStore.identity(tagKey, metricKey),
+        ));
+      }
+      return <String, Object?>{...pattern, 'metrics': metrics};
+    }).where((pattern) =>
+      pattern['metrics'] is Map && (pattern['metrics'] as Map).isNotEmpty
+    ).toList();
     final previousTagPatterns = tagPatterns['previous'] is List
       ? (tagPatterns['previous'] as List).whereType<Map>().toList() : const <Map>[];
     final rankedInsights = report.data['rankedInsights'] is List
@@ -478,13 +493,13 @@ class _ReportCard extends StatelessWidget {
               ],
             ),
           ],
-          if (currentTagPatterns.isNotEmpty) ...[
+          if (visibleCurrentTagPatterns.isNotEmpty) ...[
             const Divider(height: 22),
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
               title: const Text('Персональные закономерности по отметкам', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
               subtitle: const Text('Наблюдаемое сравнение ночей с отметкой и без неё', style: TextStyle(fontSize: 11)),
-              children: currentTagPatterns.map((rawPattern) {
+              children: visibleCurrentTagPatterns.map((rawPattern) {
                 final pattern = Map<String, Object?>.from(rawPattern);
                 final key = pattern['tagKey'];
                 final previousPattern = previousTagPatterns.where((item) => item['tagKey'] == key).toList();
