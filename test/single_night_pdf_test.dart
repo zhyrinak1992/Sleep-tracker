@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:sqflite/sqflite.dart' show Database, databaseFactory;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart'
     show databaseFactoryFfi, sqfliteFfiInit;
@@ -15,7 +16,8 @@ void main() {
   late Directory directory;
   late Database database;
 
-  setUpAll(() {
+  setUpAll(() async {
+    await initializeDateFormatting('ru');
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   });
