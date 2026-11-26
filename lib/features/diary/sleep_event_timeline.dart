@@ -15,6 +15,7 @@ class SleepTimelineEvent {
     this.until,
     this.source,
     this.isElevated = false,
+    this.numericValue,
   });
 
   final SleepTimelineEventKind kind;
@@ -24,6 +25,7 @@ class SleepTimelineEvent {
   final String detail;
   final String? source;
   final bool isElevated;
+  final double? numericValue;
 }
 
 class SleepEventTimeline {
@@ -89,6 +91,7 @@ class SleepEventTimeline {
         detail: '${_number(sample.value)} ${sample.unit}',
         source: sample.source,
         isElevated: elevated,
+        numericValue: sample.value,
       ));
     }
 
@@ -208,7 +211,7 @@ class SleepEventTimelineCard extends StatelessWidget {
           const Text('Единая временная шкала', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
           const SizedBox(height: 5),
           const Text(
-            'Звуковые события, интервалы бодрствования и измерения пульса расположены по времени. Пропущенные события не восстанавливаются.',
+            'Звуковые события, интервалы бодрствования и измерения пульса расположены по времени. Измерения пульса показаны отдельными точками по фактическим временным отметкам; промежутки не интерполируются.',
             style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4),
           ),
           if (pulse.length >= 2) ...[
@@ -277,38 +280,65 @@ class _TimelineEventRow extends StatelessWidget {
   }
 }
 
+class SleepPulseTimelineGeometry {
+  const SleepPulseTimelineGeometry._();
+
+  static List<Offset> pointsFor(List<SleepTimelineEvent> events, Size size) {
+    final samples = events
+        .where((event) =>
+            event.kind == SleepTimelineEventKind.pulse &&
+            event.numericValue != null &&
+            event.numericValue!.isFinite)
+        .toList()
+      ..sort((a, b) => a.at.compareTo(b.at));
+    if (samples.isEmpty) return const [];
+
+    final values = samples.map((event) => event.numericValue!).toList();
+    final minValue = values.reduce((a, b) => a < b ? a : b);
+    final maxValue = values.reduce((a, b) => a > b ? a : b);
+    final minTime = samples.first.at.millisecondsSinceEpoch;
+    final maxTime = samples.last.at.millisecondsSinceEpoch;
+    final valueRange = maxValue - minValue;
+    final timeRange = maxTime - minTime;
+
+    return List.unmodifiable([
+      for (var i = 0; i < samples.length; i++)
+        Offset(
+          timeRange == 0
+              ? size.width / 2
+              : (samples[i].at.millisecondsSinceEpoch - minTime) /
+                  timeRange * size.width,
+          valueRange == 0
+              ? size.height / 2
+              : size.height - 10 -
+                  (values[i] - minValue) / valueRange * (size.height - 20),
+        ),
+    ]);
+  }
+}
+
 class _PulseTimelinePainter extends CustomPainter {
   const _PulseTimelinePainter(this.events);
   final List<SleepTimelineEvent> events;
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (events.length < 2) return;
-    final values = events.map((event) => double.tryParse(
-      event.detail.split(' ').first.replaceAll(',', '.'),
-    ) ?? 0).toList();
-    final minValue = values.reduce((a, b) => a < b ? a : b);
-    final maxValue = values.reduce((a, b) => a > b ? a : b);
-    final range = maxValue - minValue;
-    final path = Path();
-    final points = <Offset>[];
-    for (var i = 0; i < values.length; i++) {
-      final x = i * size.width / (values.length - 1);
-      final normalized = range == 0 ? .5 : (values[i] - minValue) / range;
-      final y = size.height - 10 - normalized * (size.height - 20);
-      final point = Offset(x, y);
-      points.add(point);
-      if (i == 0) { path.moveTo(x, y); } else { path.lineTo(x, y); }
-    }
-    canvas.drawPath(path, Paint()
-      ..color = AppTheme.teal
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round);
+    final points = SleepPulseTimelineGeometry.pointsFor(events, size);
+    final pulseEvents = events
+        .where((event) => event.kind == SleepTimelineEventKind.pulse)
+        .toList()
+      ..sort((a, b) => a.at.compareTo(b.at));
+    // HealthKit samples are discrete measurements. Never connect them with
+    // a line that could imply continuous monitoring or interpolated values.
     for (var i = 0; i < points.length; i++) {
-      canvas.drawCircle(points[i], events[i].isElevated ? 4.5 : 3,
-        Paint()..color = events[i].isElevated ? AppTheme.accentPink : AppTheme.teal);
+      canvas.drawCircle(
+        points[i],
+        pulseEvents[i].isElevated ? 4.5 : 3,
+        Paint()
+          ..color = pulseEvents[i].isElevated
+              ? AppTheme.accentPink
+              : AppTheme.teal,
+      );
     }
   }
 
