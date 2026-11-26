@@ -140,6 +140,7 @@ class _TagSleepTrendsScreenState extends State<TagSleepTrendsScreen> {
     TagSleepTrendSeries series,
     TagSleepTrendPoint point,
     Map<String, SleepSession> sessionsById,
+    String tagLabel,
   ) async {
     final result = point.comparison;
     Widget group(String title, TagSleepGroupSummary summary) {
@@ -172,7 +173,7 @@ class _TagSleepTrendsScreenState extends State<TagSleepTrendsScreen> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('${DateFormat('LLLL yyyy', 'ru').format(point.month)} · ${series.tagKey}'),
+        title: Text('${DateFormat('LLLL yyyy', 'ru').format(point.month)} · $tagLabel'),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -231,7 +232,7 @@ class _TagSleepTrendsScreenState extends State<TagSleepTrendsScreen> {
         final data = snapshot.data!;
         final availableTags = [...SleepTag.catalog, ...data.customTags];
         final tags = data.sessions.where((session) =>
-          session.endedAt != null && session.deletedAt == null).toList();
+          session.endedAt != null && session.endedAt!.isAfter(session.startedAt) && session.deletedAt == null).toList();
         if (tags.isEmpty) {
           return const Center(child: Text('Пока нет завершённых ночей для анализа.'));
         }
@@ -326,16 +327,17 @@ class _TagSleepTrendsScreenState extends State<TagSleepTrendsScreen> {
                       series: series,
                       months: months,
                       colors: _lineColors,
-                      onTapMonth: (index) {
-                        if (index < 0 || index >= months.length) return;
-                        final monthSeries = series.where((item) => item.points[index].comparison.isSufficient).toList();
-                        if (monthSeries.isEmpty) {
+                      onTapPoint: (monthIndex, seriesIndex) {
+                        if (monthIndex < 0 || monthIndex >= months.length) return;
+                        if (seriesIndex < 0 || seriesIndex >= series.length) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('В этом месяце пока недостаточно данных для сравнения.')),
                           );
                           return;
                         }
-                        _showPointDetails(monthSeries.first, monthSeries.first.points[index], sessionsById);
+                        final selectedSeries = series[seriesIndex];
+                        final tagLabel = availableTags.firstWhere((tag) => tag.key == selectedSeries.tagKey).label;
+                        _showPointDetails(selectedSeries, selectedSeries.points[monthIndex], sessionsById, tagLabel);
                       },
                     ),
                   ),
@@ -386,7 +388,7 @@ class _TagSleepTrendsScreenState extends State<TagSleepTrendsScreen> {
                               ? 'Разница: ${_formatDifference(point.comparison.difference)}'
                               : 'Недостаточно данных · ${point.comparison.withTag.nights}/${point.comparison.withoutTag.nights} ночей',
                         ),
-                        onTap: () => _showPointDetails(item, point, sessionsById),
+                        onTap: () => _showPointDetails(item, point, sessionsById, label),
                       );
                     }).toList(),
                   );
@@ -405,13 +407,13 @@ class _TagTrendChart extends StatelessWidget {
     required this.series,
     required this.months,
     required this.colors,
-    required this.onTapMonth,
+    required this.onTapPoint,
   });
 
   final List<TagSleepTrendSeries> series;
   final List<DateTime> months;
   final List<Color> colors;
-  final ValueChanged<int> onTapMonth;
+  final void Function(int monthIndex, int seriesIndex) onTapPoint;
 
   @override
   Widget build(BuildContext context) => GestureDetector(
@@ -421,8 +423,27 @@ class _TagTrendChart extends StatelessWidget {
       final totalWidth = math.max(340.0, months.length * 62.0).toDouble();
       final plotWidth = math.max(1.0, totalWidth - left - 12).toDouble();
       final dx = (details.localPosition.dx - left).clamp(0.0, plotWidth);
-      final index = months.length <= 1 ? 0 : (dx / plotWidth * (months.length - 1)).round();
-      onTapMonth(index);
+      final monthIndex = months.length <= 1 ? 0 : (dx / plotWidth * (months.length - 1)).round();
+      final values = series.expand((line) => line.points)
+          .where((point) => point.comparison.difference != null)
+          .map((point) => point.comparison.difference!.abs()).toList();
+      final maxValue = values.isEmpty ? 1.0 : math.max(1.0, values.reduce((a, b) => math.max(a, b).toDouble())).toDouble();
+      const top = 14.0;
+      const plotHeight = 244.0 - 14.0 - 38.0;
+      var nearestSeries = -1;
+      var nearestDistance = double.infinity;
+      for (var seriesIndex = 0; seriesIndex < series.length; seriesIndex++) {
+        final comparison = series[seriesIndex].points[monthIndex].comparison;
+        final value = comparison.isSufficient ? comparison.difference : null;
+        if (value == null) continue;
+        final y = top + plotHeight * (maxValue - value) / (2 * maxValue);
+        final distance = (details.localPosition.dy - y).abs();
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearestSeries = seriesIndex;
+        }
+      }
+      onTapPoint(monthIndex, nearestSeries);
     },
     child: CustomPaint(
       painter: _TagTrendPainter(series: series, months: months, colors: colors),
