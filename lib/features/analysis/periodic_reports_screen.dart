@@ -365,7 +365,7 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
           if (visible.isEmpty)
             Text(
               all.isEmpty
-                  ? 'Надёжных закономерностей пока не выявлено.'
+                  ? 'Пока нет подтверждённых закономерностей для персональных рекомендаций. Они появятся только при достаточном количестве сопоставимых ночей и повторяющихся различиях.'
                   : 'Все выявленные закономерности скрыты. Их можно вернуть из списка скрытых.',
               style: const TextStyle(color: AppTheme.muted, fontSize: 12),
             ),
@@ -385,6 +385,13 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
             final values = currentValues.isNotEmpty ? currentValues : lastValues;
             final difference = currentValues['difference'];
             final status = insight['status'] as String?;
+            final recommendation = status == 'insufficientData' || difference is! num
+                ? null
+                : SleepRecommendationText.forObservedPattern(
+                    tagLabel: tagLabel,
+                    metricKey: metricKey,
+                    difference: difference.toDouble(),
+                  );
             final samplesWith = values['withTagSamples'] ?? 0;
             final samplesWithout = values['withoutTagSamples'] ?? 0;
             final differenceText = status == 'insufficientData'
@@ -438,6 +445,20 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
                     value: _insightValue(metricKey, values['withoutTagAverage']),
                   ),
                   _ReportLine(label: 'Наблюдаемое различие', value: differenceText),
+                  if (recommendation != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Что можно проверить',
+                            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11)),
+                          const SizedBox(height: 3),
+                          Text(recommendation,
+                            style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4)),
+                        ],
+                      ),
+                    ),
                   if (status == 'insufficientData')
                     const Padding(
                       padding: EdgeInsets.only(top: 5),
