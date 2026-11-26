@@ -489,6 +489,44 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
       text: 'Табличные данные сохранённого отчёта Sleep Tracker.',
     );
   }
+
+  Future<void> _createCustomRangeReport() async {
+    final today = DateTime.now();
+    final start = await showDatePicker(
+      context: context,
+      initialDate: today,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(today.year, today.month, today.day),
+      helpText: 'Начало отчётного периода',
+      cancelText: 'Отмена',
+      confirmText: 'Далее',
+    );
+    if (start == null || !mounted) return;
+    final end = await showDatePicker(
+      context: context,
+      initialDate: start.isAfter(today) ? today : today,
+      firstDate: start,
+      lastDate: DateTime(today.year, today.month, today.day),
+      helpText: 'Окончание отчётного периода',
+      cancelText: 'Отмена',
+      confirmText: 'Сформировать',
+    );
+    if (end == null || !mounted) return;
+    try {
+      final report = await PeriodicReportService(widget.database)
+          .generateCustomRangeReport(startDate: start, endDateInclusive: end);
+      if (!mounted) return;
+      _refresh();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Отчёт «${report.title}» сохранён в архив.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось сформировать отчёт: $error')),
+      );
+    }
+  }
   String _duration(double? minutes) {
     if (minutes == null) return 'Нет данных';
     final value = minutes.round();
@@ -516,6 +554,29 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
           children: [
             const ScreenHeader(title: 'История отчётов', subtitle: 'Сохранённые сводки по завершённым периодам', icon: Icons.auto_graph_rounded),
             const SizedBox(height: 4),
+            SectionCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Отчёт за выбранный период',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 5),
+                  const Text(
+                    'Выберите даты начала и окончания. В отчёт попадут завершённые ночные записи, начавшиеся в этом календарном диапазоне.',
+                    style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _createCustomRangeReport,
+                      icon: const Icon(Icons.date_range_rounded),
+                      label: const Text('Выбрать даты и сформировать'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             _buildCurrentInsightsSection(),
             Align(
               alignment: Alignment.centerRight,
