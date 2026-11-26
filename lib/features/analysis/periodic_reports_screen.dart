@@ -950,7 +950,7 @@ class _ReportCard extends StatelessWidget {
             _ReportDeltaLine(
               label: 'Изменение длительности',
               value: signedDurationDelta(sleepDurationDelta) + ' · ' + signedPercentDelta(sleepDurationPercent),
-              direction: sleepDurationDelta == null ? null : sleepDurationDelta!.compareTo(0),
+              direction: sleepDurationDelta == null ? null : sleepDurationDelta.compareTo(0),
             ),
             _ReportLine(label: 'Время в постели', value: _formatDuration(report.averageTimeInBedMinutes) + ' · ранее ' + _formatDuration(previous['averageTimeInBedMinutes']) + ' (' + (previous['timeInBedSamples'] ?? 0).toString() + ' ночей)'),
             _ReportLine(label: 'Эффективность', value: _formatPercent(report.averageEfficiency) + ' · ранее ' + _formatPercent(_number(previous['averageEfficiency'])) + ' (' + (previous['efficiencySamples'] ?? 0).toString() + ' ночей)'),
@@ -960,7 +960,7 @@ class _ReportCard extends StatelessWidget {
             _ReportDeltaLine(
               label: 'Изменение самочувствия',
               value: signedValueDelta(wellbeingDelta, ' балла'),
-              direction: wellbeingDelta == null ? null : wellbeingDelta!.compareTo(0),
+              direction: wellbeingDelta == null ? null : wellbeingDelta.compareTo(0),
             ),
             const Padding(
               padding: EdgeInsets.only(top: 4),
