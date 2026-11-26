@@ -14,6 +14,7 @@ import '../../widgets/section_card.dart';
 import 'periodic_report_service.dart';
 import 'sleep_recommendation_text.dart';
 import 'periodic_report_export.dart';
+import 'tag_insight_preferences.dart';
 
 class PeriodicReportsScreen extends StatefulWidget {
   const PeriodicReportsScreen({super.key, required this.database});
@@ -24,14 +25,134 @@ class PeriodicReportsScreen extends StatefulWidget {
 
 class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
   late Future<List<PeriodicReportSnapshot>> _future;
+  TagInsightPreferences _insightPreferences = const TagInsightPreferences();
+  bool _preferencesLoading = true;
+  String? _preferencesError;
+
+  TagInsightPreferenceStore get _preferenceStore => TagInsightPreferenceStore(
+    widget.database.getAppMetadata,
+    widget.database.setAppMetadata,
+  );
+
   @override
-  void initState() { super.initState(); _future = _load(); }
+  void initState() {
+    super.initState();
+    _future = _load();
+    _loadInsightPreferences();
+  }
+
+  Future<void> _loadInsightPreferences() async {
+    try {
+      final preferences = await _preferenceStore.load();
+      if (!mounted) return;
+      setState(() {
+        _insightPreferences = preferences;
+        _preferencesLoading = false;
+        _preferencesError = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _preferencesLoading = false;
+        _preferencesError = error.toString();
+      });
+    }
+  }
+
   Future<List<PeriodicReportSnapshot>> _load() async {
     final service = PeriodicReportService(widget.database);
     await service.generateClosedReports();
     return service.loadArchive();
   }
+
   void _refresh() => setState(() => _future = _load());
+
+  Future<void> _hideInsight(
+    String tagKey, String metricKey, String tagLabel, String metricLabel,
+  ) async {
+    try {
+      final preferences = await _preferenceStore.hide(
+        tagKey: tagKey, metricKey: metricKey,
+        tagLabel: tagLabel, metricLabel: metricLabel,
+      );
+      if (mounted) setState(() => _insightPreferences = preferences);
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось скрыть закономерность: $error')),
+      );
+    }
+  }
+
+  Future<void> _togglePinInsight(
+    String tagKey, String metricKey, String tagLabel, String metricLabel, bool currentlyPinned,
+  ) async {
+    try {
+      final preferences = currentlyPinned
+          ? await _preferenceStore.unpin(tagKey: tagKey, metricKey: metricKey)
+          : await _preferenceStore.pin(
+              tagKey: tagKey, metricKey: metricKey,
+              tagLabel: tagLabel, metricLabel: metricLabel,
+            );
+      if (mounted) setState(() => _insightPreferences = preferences);
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось изменить закрепление: $error')),
+      );
+    }
+  }
+
+  Future<void> _restoreInsight(String id) async {
+    final preferences = await _preferenceStore.restore(id);
+    if (mounted) setState(() => _insightPreferences = preferences);
+  }
+
+  Future<void> _showHiddenInsights() async {
+    if (_preferencesLoading || _preferencesError != null) return;
+    final entries = _insightPreferences.hidden.entries.toList();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Скрытые закономерности'),
+        content: entries.isEmpty
+            ? const Text('Скрытых закономерностей пока нет.')
+            : ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 360),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: entries.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final entry = entries[index];
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(entry.value.tagLabel),
+                      subtitle: Text(entry.value.metricLabel),
+                      trailing: TextButton(
+                        onPressed: () async {
+                          try {
+                            await _restoreInsight(entry.key);
+                            if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                          } catch (error) {
+                            if (dialogContext.mounted) ScaffoldMessenger.of(dialogContext).showSnackBar(
+                              SnackBar(content: Text('Не удалось восстановить закономерность: $error')),
+                            );
+                          }
+                        },
+                        child: const Text('Вернуть'),
+                      ),
+                    );
+                  },
+                ),
+              ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Закрыть'),
+          ),
+        ],
+      ),
+    );
+  }
   Future<void> _export(PeriodicReportSnapshot report) async {
     await PdfReportService.exportPeriodicSnapshot(report.data, report.title);
   }
@@ -75,13 +196,32 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
           children: [
             const ScreenHeader(title: 'История отчётов', subtitle: 'Сохранённые сводки по завершённым периодам', icon: Icons.auto_graph_rounded),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: _preferencesLoading || _preferencesError != null ? null : _showHiddenInsights,
+                icon: const Icon(Icons.visibility_off_outlined, size: 17),
+                label: Text('Скрытые закономерности (${_insightPreferences.hidden.length})'),
+              ),
+            ),
+            if (_preferencesError != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text('Настройки закономерностей недоступны: $_preferencesError',
+                  style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+              ),
+            const SizedBox(height: 4),
             ...reports.map((report) => _ReportCard(
               report: report,
               duration: _duration(report.averageSleepMinutes),
               average: _average,
               onExport: () => _export(report),
               onExportCsv: () => _exportCsv(report),
+              insightPreferences: _insightPreferences,
+              canManageInsights: !_preferencesLoading && _preferencesError == null,
+              onHideInsight: _hideInsight,
+              onTogglePinInsight: _togglePinInsight,
             )),
             const SizedBox(height: 10),
             const Text(
@@ -96,12 +236,21 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
 }
 
 class _ReportCard extends StatelessWidget {
-  const _ReportCard({required this.report, required this.duration, required this.average, required this.onExport, required this.onExportCsv});
+  const _ReportCard({
+    required this.report, required this.duration, required this.average,
+    required this.onExport, required this.onExportCsv,
+    required this.insightPreferences, required this.canManageInsights,
+    required this.onHideInsight, required this.onTogglePinInsight,
+  });
   final PeriodicReportSnapshot report;
   final String duration;
   final String Function(double?, String) average;
   final VoidCallback onExport;
   final VoidCallback onExportCsv;
+  final TagInsightPreferences insightPreferences;
+  final bool canManageInsights;
+  final Future<void> Function(String, String, String, String) onHideInsight;
+  final Future<void> Function(String, String, String, String, bool) onTogglePinInsight;
 
   @override
   Widget build(BuildContext context) {
@@ -130,7 +279,27 @@ class _ReportCard extends StatelessWidget {
     final previousTagPatterns = tagPatterns['previous'] is List
       ? (tagPatterns['previous'] as List).whereType<Map>().toList() : const <Map>[];
     final rankedInsights = report.data['rankedInsights'] is List
-      ? (report.data['rankedInsights'] as List).whereType<Map>().toList() : const <Map>[];
+      ? (report.data['rankedInsights'] as List).whereType<Map>().map((item) => Map<String, Object?>.from(item)).toList()
+      : <Map<String, Object?>>[];
+    final visibleRankedInsights = rankedInsights.where((insight) {
+      final tagKey = insight['tagKey'] as String?;
+      final metricKey = insight['metricKey'] as String?;
+      if (tagKey == null || metricKey == null) return true;
+      return !insightPreferences.isHidden(TagInsightPreferenceStore.identity(tagKey, metricKey));
+    }).toList()..sort((a, b) {
+      int pinOrder(Map<String, Object?> insight) {
+        final tagKey = insight['tagKey'] as String?;
+        final metricKey = insight['metricKey'] as String?;
+        if (tagKey == null || metricKey == null) return -1;
+        return insightPreferences.pinned.indexOf(TagInsightPreferenceStore.identity(tagKey, metricKey));
+      }
+      final aPin = pinOrder(a);
+      final bPin = pinOrder(b);
+      if (aPin >= 0 && bPin >= 0) return aPin.compareTo(bPin);
+      if (aPin >= 0) return -1;
+      if (bPin >= 0) return 1;
+      return ((a['rank'] as num?) ?? 0).compareTo((b['rank'] as num?) ?? 0);
+    });
     final scoreComponents = score['components'] is Map ? Map<String, Object?>.from(score['components'] as Map) : <String, Object?>{};
     final previousScore = previous['score'] is Map ? Map<String, Object?>.from(previous['score'] as Map) : <String, Object?>{};
     final shortest = report.data['shortestAverageMonth'];
@@ -163,12 +332,12 @@ class _ReportCard extends StatelessWidget {
               );
             }).toList(),
           ),
-          if (rankedInsights.isNotEmpty) ...[
+          if (visibleRankedInsights.isNotEmpty) ...[
             const Divider(height: 22),
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
               initiallyExpanded: true,
-              title: const Text('Что чаще связано с изменениями сна', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+              title: const Text('Что может влиять на твой сон', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
               subtitle: const Text('Ранжирование по повторяемости, объёму выборки и размеру различия', style: TextStyle(fontSize: 11)),
               children: [
                 const Padding(
@@ -178,8 +347,7 @@ class _ReportCard extends StatelessWidget {
                     style: TextStyle(fontSize: 11, height: 1.4, color: AppTheme.muted),
                   ),
                 ),
-                ...rankedInsights.map((rawInsight) {
-                  final insight = Map<String, Object?>.from(rawInsight);
+                ...visibleRankedInsights.map((insight) {
                   final metricKey = insight['metricKey'] as String? ?? '';
                   final difference = insight['difference'] as num? ?? 0;
                   final withAverage = insight['withTagAverage'];
@@ -240,13 +408,43 @@ class _ReportCard extends StatelessWidget {
                     child: ExpansionTile(
                       tilePadding: EdgeInsets.zero,
                       childrenPadding: const EdgeInsets.only(left: 10, right: 4, bottom: 8),
-                      title: Text(
-                        '${insight['rank']}. ${insight['tagLabel']} · ${insight['metricLabel']}',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                      ),
+                      title: Row(children: [
+                        Expanded(child: Text(
+                          '${insight['rank']}. ${insight['tagLabel']} · ${insight['metricLabel']}',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        )),
+                        PopupMenuButton<String>(
+                          enabled: canManageInsights,
+                          tooltip: 'Действия с закономерностью',
+                          onSelected: (action) {
+                            final tagKey = (insight['tagKey'] ?? '').toString();
+                            final tagLabel = (insight['tagLabel'] ?? '').toString();
+                            final metricLabel = (insight['metricLabel'] ?? metricKey).toString();
+                            if (tagKey.isEmpty || metricKey.isEmpty) return;
+                            if (action == 'hide') {
+                              onHideInsight(tagKey, metricKey, tagLabel, metricLabel);
+                            } else if (action == 'pin' || action == 'unpin') {
+                              onTogglePinInsight(tagKey, metricKey, tagLabel, metricLabel, action == 'unpin');
+                            }
+                          },
+                          itemBuilder: (context) {
+                            final pinned = insightPreferences.isPinned(TagInsightPreferenceStore.identity(
+                              (insight['tagKey'] ?? '').toString(), metricKey,
+                            ));
+                            return [
+                              PopupMenuItem(value: pinned ? 'unpin' : 'pin',
+                                child: Text(pinned ? 'Снять закрепление' : 'Закрепить')),
+                              const PopupMenuItem(value: 'hide', child: Text('Скрыть')),
+                            ];
+                          },
+                        ),
+                      ]),
                       subtitle: Text(
                         '${deltaText()} · выборки $samplesWith / $samplesWithout ночей' +
-                        (repeated ? ' · повторяется' : ' · только текущий период'),
+                        (repeated ? ' · повторяется' : ' · только текущий период') +
+                        (insightPreferences.isPinned(TagInsightPreferenceStore.identity(
+                          (insight['tagKey'] ?? '').toString(), metricKey,
+                        )) ? ' · закреплено' : ''),
                         style: const TextStyle(fontSize: 11),
                       ),
                       children: [
