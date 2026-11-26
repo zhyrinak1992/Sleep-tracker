@@ -49,7 +49,7 @@ class PeriodicReportSnapshot {
     if (kind == 'quarter') return (((start.month - 1) ~/ 3) + 1).toString() + ' квартал ' + start.year.toString();
     if (kind == 'halfYear') return (start.month <= 6 ? 'I' : 'II') + ' полугодие ' + start.year.toString();
     if (kind == 'customRange') {
-      final last = endExclusive.subtract(const Duration(days: 1));
+      final last = DateTime(endExclusive.year, endExclusive.month, endExclusive.day - 1);
       String date(DateTime value) => '${value.day.toString().padLeft(2, '0')}.${value.month.toString().padLeft(2, '0')}.${value.year}';
       return 'Отчёт за ${date(start)} — ${date(last)}';
     }
