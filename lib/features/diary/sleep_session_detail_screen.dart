@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../data/sleep_database.dart';
 import '../analysis/periodic_report_service.dart';
 import '../../data/notification_service.dart';
+import '../../data/pdf_report_service.dart';
 import '../analysis/climate_analytics.dart';
 import '../analysis/sleep_score.dart';
 import 'weather_night_detail_card.dart';
@@ -45,6 +46,20 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
     _climateFuture = _loadClimate(widget.session);
     _timelineFuture = _loadTimeline();
     _reportFuture = widget.database.getMorningReport(widget.session.id);
+  }
+
+  Future<void> _exportNightPdf(SleepSession session) async {
+    try {
+      await PdfReportService.exportSingleNight(
+        database: widget.database,
+        session: session,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось сформировать PDF: $error')),
+      );
+    }
   }
 
   Future<void> _reload() async {
@@ -698,6 +713,11 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
         appBar: AppBar(
           title: const Text('Карточка ночи'),
           actions: [
+            if (!session.isOpen) IconButton(
+              tooltip: 'Экспортировать отчёт о ночи в PDF',
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              onPressed: () => _exportNightPdf(session),
+            ),
             if (!session.isOpen) IconButton(
               tooltip: 'Переместить в корзину',
               icon: const Icon(Icons.delete_outline),
