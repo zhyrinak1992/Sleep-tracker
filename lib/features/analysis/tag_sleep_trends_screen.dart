@@ -43,7 +43,8 @@ class _TagSleepTrendsData {
   final Map<String, int> latency;
 }
 
-class _TagSleepTrendsScreenState extends State<TagSleepTrendsScreen> {
+class _TagSleepTrendsScreenState extends State<TagSleepTrendsScreen>
+    with WidgetsBindingObserver {
   late Future<_TagSleepTrendsData> _future;
   TagSleepMetric _metric = TagSleepMetric.sleepDuration;
   Set<String> _selected = {'caffeine', 'stress', 'activity'};
@@ -59,7 +60,23 @@ class _TagSleepTrendsScreenState extends State<TagSleepTrendsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _future = _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      // Refresh comparisons after a night may have been recorded while the app
+      // was inactive. Recompute from the database; never mutate old observations.
+      setState(() => _future = _load());
+    }
   }
 
   Future<_TagSleepTrendsData> _load() async {
@@ -297,7 +314,7 @@ class _TagSleepTrendsScreenState extends State<TagSleepTrendsScreen> {
                     selected: selected.contains(tag.key),
                     onSelected: (value) {
                       setState(() {
-                        if (value && _selected.length < 5) {
+                        if (value && selected.length < 5) {
                           _selected.add(tag.key);
                         } else if (!value) {
                           _selected.remove(tag.key);
@@ -375,7 +392,7 @@ class _TagSleepTrendsScreenState extends State<TagSleepTrendsScreen> {
                     title: Text(DateFormat('LLLL yyyy', 'ru').format(month)),
                     subtitle: Text(series.map((item) {
                       final point = item.points[index];
-                      return '${availableTags.firstWhere((tag) => tag.key == item.tagKey).label}: ${point.comparison.withTag.nights}/${point.comparison.withoutTag.nights}';
+                      return '${availableTags.firstWhere((tag) => tag.key == item.tagKey).label}: с отметкой ${point.comparison.withTag.nights}, без отметки ${point.comparison.withoutTag.nights}';
                     }).join(' · ')),
                     children: series.map((item) {
                       final point = item.points[index];
@@ -444,7 +461,9 @@ class _TagTrendChart extends StatelessWidget {
           nearestSeries = seriesIndex;
         }
       }
-      onTapPoint(monthIndex, nearestSeries);
+      // Avoid opening an arbitrary line when the user tapped far from every
+      // plotted point. The month list below remains an accessible alternative.
+      onTapPoint(monthIndex, nearestDistance <= 28 ? nearestSeries : -1);
     },
     child: CustomPaint(
       painter: _TagTrendPainter(series: series, months: months, colors: colors),
