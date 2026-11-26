@@ -11,7 +11,7 @@ import 'periodic_tag_pattern_analyzer.dart';
 import 'tag_insight_history.dart';
 import 'sleep_regularity_analysis.dart';
 
-enum PeriodicReportKind { week, month, quarter, halfYear, year }
+enum PeriodicReportKind { week, month, quarter, halfYear, year, customRange }
 
 class PeriodicReportSnapshot {
   const PeriodicReportSnapshot(this.data);
@@ -48,6 +48,11 @@ class PeriodicReportSnapshot {
     if (kind == 'month') return _monthNames[start.month - 1] + ' ' + start.year.toString();
     if (kind == 'quarter') return (((start.month - 1) ~/ 3) + 1).toString() + ' квартал ' + start.year.toString();
     if (kind == 'halfYear') return (start.month <= 6 ? 'I' : 'II') + ' полугодие ' + start.year.toString();
+    if (kind == 'customRange') {
+      final last = endExclusive.subtract(const Duration(days: 1));
+      String date(DateTime value) => '${value.day.toString().padLeft(2, '0')}.${value.month.toString().padLeft(2, '0')}.${value.year}';
+      return 'Отчёт за ${date(start)} — ${date(last)}';
+    }
     return 'Год ' + start.year.toString();
   }
 
@@ -150,6 +155,73 @@ class PeriodicReportService {
     return loadArchive();
   }
 
+
+  /// Builds and archives a report for one user-selected inclusive local date range.
+  /// The saved snapshot is immutable and exports never recalculate historical data.
+  Future<PeriodicReportSnapshot> generateCustomRangeReport({
+    required DateTime startDate,
+    required DateTime endDateInclusive,
+  }) async {
+    final start = DateTime(startDate.year, startDate.month, startDate.day);
+    final last = DateTime(endDateInclusive.year, endDateInclusive.month, endDateInclusive.day);
+    if (last.isBefore(start)) {
+      throw ArgumentError('Дата окончания не может быть раньше даты начала.');
+    }
+    final end = DateTime(last.year, last.month, last.day + 1);
+    final sessions = (await database.getSessions(limit: null))
+        .where((session) => session.endedAt != null &&
+            session.duration != null && session.duration!.inMinutes > 0)
+        .toList()
+      ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
+    final selected = sessions.where((session) =>
+        !session.startedAt.isBefore(start) && session.startedAt.isBefore(end)).toList();
+    if (selected.isEmpty) {
+      throw StateError('За выбранный период нет завершённых ночных записей.');
+    }
+    final ids = sessions.map((session) => session.id).toList();
+    final stages = await database.getStagesForSessions(ids);
+    final morning = await database.getMorningReportsForSessions(ids);
+    final audio = await database.getAudioEvents();
+    final notes = await database.getNotes();
+    final tagsBySession = await database.getTagsForSessions(ids);
+    final allSleepMetrics = await database.getAllMetrics();
+    final allClimateSamples = await database.getClimateSamples();
+    final tagLabels = <String, String>{
+      for (final tag in SleepTag.catalog) tag.key: tag.label,
+    };
+    try {
+      final customTags = await CustomSleepTagStore(
+        database.getAppMetadata,
+        database.setAppMetadata,
+      ).load();
+      for (final tag in customTags) {
+        tagLabels[tag.key] = tag.label;
+      }
+    } catch (_) {
+      // Optional custom-tag metadata must not prevent report generation.
+    }
+    final snapshot = _buildSnapshot(
+      kind: PeriodicReportKind.customRange,
+      start: start,
+      end: end,
+      sessions: selected,
+      previousSessions: const <SleepSession>[],
+      stages: stages,
+      morning: morning,
+      audio: audio,
+      notes: notes,
+      allSessions: sessions,
+      allSleepMetrics: allSleepMetrics,
+      allClimateSamples: allClimateSamples,
+      scoreCache: <String, SleepScoreResult>{},
+      tagsBySession: tagsBySession,
+      tagLabels: tagLabels,
+    );
+    final id = 'range_${start.year.toString().padLeft(4, '0')}${start.month.toString().padLeft(2, '0')}${start.day.toString().padLeft(2, '0')}_${last.year.toString().padLeft(4, '0')}${last.month.toString().padLeft(2, '0')}${last.day.toString().padLeft(2, '0')}';
+    final saved = <String, Object?>{...snapshot, 'id': id, 'kind': 'customRange'};
+    await database.setAppMetadata(metadataPrefix + id, jsonEncode(saved));
+    return PeriodicReportSnapshot(saved);
+  }
 
   static Future<Map<String, Object?>?>? _insightRefreshInFlight;
 
@@ -858,6 +930,15 @@ class PeriodicReportService {
     return DateTime(value.year + 1);
   }
   static DateTime _previousPeriodStart(DateTime value, PeriodicReportKind kind) {
+    if (kind == PeriodicReportKind.customRange) {
+      data['trendPoints'] = nightlyDetails(sessions).map((night) => <String, Object?>{
+        'label': night['startedAt'],
+        'sleepMinutes': night['sleepMinutes'],
+        'samples': night['sleepMinutes'] == null ? 0 : 1,
+        'nights': [night],
+      }).toList();
+    }
+
     if (kind == PeriodicReportKind.week) {
       return DateTime(value.year, value.month, value.day - 7);
     }
