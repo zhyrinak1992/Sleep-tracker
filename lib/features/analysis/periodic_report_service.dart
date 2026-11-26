@@ -1,4 +1,6 @@
 import 'dart:convert';
+
+import 'package:cryptography/cryptography.dart';
 import '../../data/sleep_database.dart';
 import '../../models/sleep_session.dart';
 import '../../models/sleep_note.dart';
@@ -6,6 +8,7 @@ import '../../models/sleep_tag.dart';
 import '../diary/sleep_session_metrics.dart';
 import 'sleep_score.dart';
 import 'periodic_tag_pattern_analyzer.dart';
+import 'tag_insight_history.dart';
 import 'sleep_regularity_analysis.dart';
 
 enum PeriodicReportKind { week, month, quarter, halfYear, year }
@@ -145,6 +148,115 @@ class PeriodicReportService {
     }
     await database.setAppMetadata(checkedDateKey, checkedDate);
     return loadArchive();
+  }
+
+
+  static Future<Map<String, Object?>?>? _insightRefreshInFlight;
+
+  /// Re-evaluates the current calendar month's tag patterns after a morning
+  /// report is saved. The previous calendar month is the comparison period.
+  /// Identical source observations are not written to history again.
+  Future<Map<String, Object?>?> refreshCurrentTagInsightHistory({DateTime? now}) {
+    final inFlight = _insightRefreshInFlight;
+    if (inFlight != null) return inFlight;
+    final future = _refreshCurrentTagInsightHistory(now: now);
+    _insightRefreshInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_insightRefreshInFlight, future)) {
+        _insightRefreshInFlight = null;
+      }
+    });
+  }
+
+  Future<Map<String, Object?>?> _refreshCurrentTagInsightHistory({
+    DateTime? now,
+  }) async {
+    final current = now ?? DateTime.now();
+    final currentStart = DateTime(current.year, current.month);
+    final currentEnd = DateTime(current.year, current.month + 1);
+    final previousStart = DateTime(current.year, current.month - 1);
+    final allSessions = (await database.getSessions(limit: null))
+        .where((session) =>
+            session.endedAt != null &&
+            session.endedAt!.isAfter(session.startedAt) &&
+            session.deletedAt == null)
+        .toList()
+      ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
+    final currentSessions = allSessions.where((session) =>
+        !session.startedAt.isBefore(currentStart) &&
+        session.startedAt.isBefore(currentEnd)).toList();
+    if (currentSessions.isEmpty) {
+      return TagInsightHistoryStore(
+        database.getAppMetadata,
+        database.setAppMetadata,
+      ).loadCurrent();
+    }
+    final previousSessions = allSessions.where((session) =>
+        !session.startedAt.isBefore(previousStart) &&
+        session.startedAt.isBefore(currentStart)).toList();
+
+    final ids = allSessions.map((session) => session.id).toList();
+    final stages = await database.getStagesForSessions(ids);
+    final morning = await database.getMorningReportsForSessions(ids);
+    final audio = await database.getAudioEvents();
+    final notes = await database.getNotes();
+    final tagsBySession = await database.getTagsForSessions(ids);
+    final allSleepMetrics = await database.getAllMetrics();
+    final allClimateSamples = await database.getClimateSamples();
+    final tagLabels = <String, String>{
+      for (final tag in SleepTag.catalog) tag.key: tag.label,
+    };
+    try {
+      final customTags = await CustomSleepTagStore(
+        database.getAppMetadata,
+        database.setAppMetadata,
+      ).load();
+      for (final tag in customTags) {
+        tagLabels[tag.key] = tag.label;
+      }
+    } catch (_) {
+      // Corrupt optional custom-tag metadata must not block the sleep report.
+    }
+
+    final analysis = _buildSnapshot(
+      kind: PeriodicReportKind.month,
+      start: currentStart,
+      end: currentEnd,
+      sessions: currentSessions,
+      previousSessions: previousSessions,
+      stages: stages,
+      morning: morning,
+      audio: audio,
+      notes: notes,
+      allSessions: allSessions,
+      allSleepMetrics: allSleepMetrics,
+      allClimateSamples: allClimateSamples,
+      scoreCache: <String, SleepScoreResult>{},
+      tagsBySession: tagsBySession,
+      tagLabels: tagLabels,
+    );
+    final patterns = Map<String, Object?>.from(
+      analysis['tagPatterns'] as Map,
+    );
+    final fingerprintSource = jsonEncode({
+      'periodStart': currentStart.toIso8601String(),
+      'periodEndExclusive': currentEnd.toIso8601String(),
+      'tagPatterns': patterns,
+    });
+    final digest = await Sha256().hash(utf8.encode(fingerprintSource));
+    final fingerprint = digest.bytes
+        .map((value) => value.toRadixString(16).padLeft(2, '0'))
+        .join();
+    return TagInsightHistoryStore(
+      database.getAppMetadata,
+      database.setAppMetadata,
+    ).record(
+      fingerprint: fingerprint,
+      generatedAt: current,
+      periodStart: currentStart,
+      periodEndExclusive: currentEnd,
+      tagPatterns: patterns,
+    );
   }
 
   Future<List<PeriodicReportSnapshot>> loadArchive() async {

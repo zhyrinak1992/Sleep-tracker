@@ -8,6 +8,7 @@ import '../../data/sleep_database.dart';
 import '../../data/comparison_suggestion_store.dart';
 import '../../models/sleep_tag.dart';
 import '../analysis/tag_sleep_comparison.dart';
+import '../analysis/periodic_report_service.dart';
 import '../diary/sleep_session_metrics.dart';
 import 'comparison_suggestion_analyzer.dart';
 import 'comparison_suggestion_card.dart';
@@ -581,6 +582,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (!mounted) { comment.dispose(); return; }
     if (result == 'skip') {
       await widget.database.saveMorningReport(sessionId: session.id, wellbeing: null, quality: null, answersJson: jsonEncode({'skipped': true}));
+      await _refreshTagInsightHistoryAfterMorningReport();
       comment.dispose();
       await _refresh();
       return;
@@ -591,9 +593,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       answersJson: jsonEncode({'wellbeing': wellbeing, 'sleepQuality': quality, 'sleepiness': sleepiness, 'comment': comment.text.trim(), 'skipped': false}),
     );
     await widget.database.updateMorningRating(session.id, wellbeing);
+    await _refreshTagInsightHistoryAfterMorningReport();
     comment.dispose();
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Утренний отчёт сохранён.')));
     await _refresh();
+  }
+
+  Future<void> _refreshTagInsightHistoryAfterMorningReport() async {
+    try {
+      await PeriodicReportService(
+        widget.database,
+      ).refreshCurrentTagInsightHistory();
+    } catch (_) {
+      // The morning report is already saved; analytics must not undo or block it.
+    }
   }
 
   String _duration(Duration? duration) {

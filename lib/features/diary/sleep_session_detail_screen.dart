@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../data/sleep_database.dart';
+import '../analysis/periodic_report_service.dart';
 import '../../data/notification_service.dart';
 import '../analysis/climate_analytics.dart';
 import '../analysis/sleep_score.dart';
@@ -140,12 +141,14 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
     if (result == 'skip') {
       await widget.database.saveMorningReport(sessionId: session.id, wellbeing: null, quality: null, answersJson: jsonEncode({'skipped': true}));
       await widget.database.updateMorningRating(session.id, null);
+      await _refreshTagInsightHistoryAfterMorningReport();
     } else if (result == 'save') {
       await widget.database.saveMorningReport(
         sessionId: session.id, wellbeing: wellbeing, quality: quality,
         answersJson: jsonEncode({'wellbeing': wellbeing, 'sleepQuality': quality, 'sleepiness': sleepiness, 'comment': comment.text.trim(), 'skipped': false}),
       );
       await widget.database.updateMorningRating(session.id, wellbeing);
+      await _refreshTagInsightHistoryAfterMorningReport();
     }
     comment.dispose();
     if (result == 'save' || result == 'skip') {
@@ -155,6 +158,16 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
       if (refreshedSession != null && mounted) {
         await _showMorningSummary(refreshedSession);
       }
+    }
+  }
+
+  Future<void> _refreshTagInsightHistoryAfterMorningReport() async {
+    try {
+      await PeriodicReportService(
+        widget.database,
+      ).refreshCurrentTagInsightHistory();
+    } catch (_) {
+      // The morning report is already saved; analytics must not undo or block it.
     }
   }
 
