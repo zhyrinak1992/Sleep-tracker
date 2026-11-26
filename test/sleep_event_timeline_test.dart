@@ -1,3 +1,5 @@
+import 'dart:ui' show Size;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sleep_tracker/features/diary/sleep_event_timeline.dart';
 
@@ -56,6 +58,41 @@ void main() {
       expect(events.map((event) => event.at), orderedEquals(
         events.map((event) => event.at).toList()..sort(),
       ));
+    });
+
+
+    test('plots pulse samples as discrete points using their real time spacing', () {
+      final events = SleepEventTimeline.build(
+        stages: const [],
+        metrics: [
+          for (var i = 0; i < 5; i++)
+            {
+              'metric_type': 'Пульс',
+              'value': [60, 61, 62, 63, 110][i],
+              'unit': 'уд/мин',
+              'measured_at': DateTime.utc(2026, 11, 24, 22)
+                  .add(Duration(minutes: [0, 10, 20, 30, 60][i]))
+                  .toIso8601String(),
+            },
+        ],
+        audioEvents: const [],
+      );
+      final pulse = events
+          .where((event) => event.kind == SleepTimelineEventKind.pulse)
+          .toList();
+      final points = SleepPulseTimelineGeometry.pointsFor(
+        pulse,
+        const Size(120, 80),
+      );
+
+      expect(points, hasLength(5));
+      expect(points[0].dx, closeTo(0, 0.001));
+      expect(points[1].dx, closeTo(20, 0.001));
+      expect(points[2].dx, closeTo(40, 0.001));
+      expect(points[3].dx, closeTo(60, 0.001));
+      expect(points[4].dx, closeTo(120, 0.001));
+      expect(points.first.dy, closeTo(70, 0.001));
+      expect(points.last.dy, closeTo(10, 0.001));
     });
 
     test('localizes sobbing category while preserving legacy localized categories', () {
