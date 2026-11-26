@@ -652,6 +652,34 @@ class _ReportCard extends StatelessWidget {
     });
     final scoreComponents = score['components'] is Map ? Map<String, Object?>.from(score['components'] as Map) : <String, Object?>{};
     final previousScore = previous['score'] is Map ? Map<String, Object?>.from(previous['score'] as Map) : <String, Object?>{};
+    final previousSleepMinutes = _number(previous['averageSleepMinutes']);
+    final sleepDurationDelta = report.averageSleepMinutes == null || previousSleepMinutes == null
+        ? null : report.averageSleepMinutes! - previousSleepMinutes;
+    final sleepDurationPercent = previousSleepMinutes == null || previousSleepMinutes == 0 ||
+            report.averageSleepMinutes == null
+        ? null : (report.averageSleepMinutes! - previousSleepMinutes) / previousSleepMinutes * 100;
+    final previousWellbeing = _number(previous['averageWellbeing']);
+    final wellbeingDelta = report.averageWellbeing == null || previousWellbeing == null
+        ? null : report.averageWellbeing! - previousWellbeing;
+    String signedDurationDelta(double? value) {
+      if (value == null) return 'Недостаточно сопоставимых данных';
+      final rounded = value.abs().round();
+      final sign = value > 0 ? '+' : value < 0 ? '−' : '';
+      final direction = value > 0 ? '↑ ' : value < 0 ? '↓ ' : '→ ';
+      return '$direction$sign${rounded ~/ 60} ч ${rounded % 60} мин';
+    }
+    String signedValueDelta(double? value, String suffix) {
+      if (value == null) return 'Недостаточно сопоставимых данных';
+      final sign = value > 0 ? '+' : value < 0 ? '−' : '';
+      final direction = value > 0 ? '↑ ' : value < 0 ? '↓ ' : '→ ';
+      return '$direction$sign${value.abs().toStringAsFixed(1)}$suffix';
+    }
+    String signedPercentDelta(double? value) {
+      if (value == null) return 'Процент недоступен (нет данных или предыдущий период равен нулю)';
+      final sign = value > 0 ? '+' : value < 0 ? '−' : '';
+      final direction = value > 0 ? '↑ ' : value < 0 ? '↓ ' : '→ ';
+      return '$direction$sign${value.abs().toStringAsFixed(1)}%';
+    }
     final shortest = report.data['shortestAverageMonth'];
     final longest = report.data['longestAverageMonth'];
     return Padding(
@@ -919,11 +947,28 @@ class _ReportCard extends StatelessWidget {
             _ReportLine(label: 'Ночей', value: report.nights.toString() + ' · ранее ' + (previous['nights'] ?? 0).toString()),
             _ReportLine(label: 'Средняя оценка сна', value: (score['average'] is num ? (score['average'] as num).toStringAsFixed(0) + ' / 100' : 'Нет данных') + ' · ранее ' + (previousScore['average'] is num ? (previousScore['average'] as num).toStringAsFixed(0) + ' / 100' : 'Нет данных')),
             _ReportLine(label: 'Средняя продолжительность сна', value: duration + ' · ранее ' + _formatDuration(previous['averageSleepMinutes']) + ' (' + (previous['sleepDurationSamples'] ?? 0).toString() + ' изм.)'),
+            _ReportDeltaLine(
+              label: 'Изменение длительности',
+              value: signedDurationDelta(sleepDurationDelta) + ' · ' + signedPercentDelta(sleepDurationPercent),
+              direction: sleepDurationDelta == null ? null : sleepDurationDelta!.compareTo(0),
+            ),
             _ReportLine(label: 'Время в постели', value: _formatDuration(report.averageTimeInBedMinutes) + ' · ранее ' + _formatDuration(previous['averageTimeInBedMinutes']) + ' (' + (previous['timeInBedSamples'] ?? 0).toString() + ' ночей)'),
             _ReportLine(label: 'Эффективность', value: _formatPercent(report.averageEfficiency) + ' · ранее ' + _formatPercent(_number(previous['averageEfficiency'])) + ' (' + (previous['efficiencySamples'] ?? 0).toString() + ' ночей)'),
             _ReportLine(label: 'Пробуждения', value: _formatNumber(report.averageAwakenings) + ' · ранее ' + _formatNumber(_number(previous['averageAwakenings'])) + ' (' + (previous['awakeningSamples'] ?? 0).toString() + ' ночей)'),
             _ReportLine(label: 'Качество сна', value: _formatScale(report.averageQuality) + ' · ранее ' + _formatScale(_number(previous['averageQuality'])) + ' (' + (previous['qualitySamples'] ?? 0).toString() + ' оценок)'),
-            _ReportLine(label: 'Самочувствие', value: _formatScale(report.averageWellbeing) + ' · ранее ' + _formatScale(_number(previous['averageWellbeing'])) + ' (' + (previous['wellbeingSamples'] ?? 0).toString() + ' оценок)'),
+            _ReportLine(label: 'Самочувствие', value: _formatScale(report.averageWellbeing) + ' · ранее ' + _formatScale(previousWellbeing) + ' (' + (previous['wellbeingSamples'] ?? 0).toString() + ' оценок)'),
+            _ReportDeltaLine(
+              label: 'Изменение самочувствия',
+              value: signedValueDelta(wellbeingDelta, ' балла'),
+              direction: wellbeingDelta == null ? null : wellbeingDelta!.compareTo(0),
+            ),
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Text(
+                'Стрелки показывают только направление математического изменения; увеличение длительности сна само по себе не означает улучшение его качества.',
+                style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.35),
+              ),
+            ),
           ],
           if (notes.isNotEmpty) ...[
             const Divider(height: 22),
@@ -1121,6 +1166,34 @@ class _InteractiveSleepTrendChartState extends State<_InteractiveSleepTrendChart
           }),
       ],
     ]);
+  }
+}
+
+class _ReportDeltaLine extends StatelessWidget {
+  const _ReportDeltaLine({required this.label, required this.value, required this.direction});
+  final String label;
+  final String value;
+  final int? direction;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = direction == null ? AppTheme.muted
+        : direction! > 0 ? Colors.teal : direction! < 0 ? Colors.deepOrange : AppTheme.muted;
+    final icon = direction == null ? Icons.remove_circle_outline
+        : direction! > 0 ? Icons.arrow_upward : direction! < 0 ? Icons.arrow_downward : Icons.trending_flat;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(children: [
+        Expanded(child: Text(label, style: const TextStyle(color: AppTheme.muted, fontSize: 13))),
+        const SizedBox(width: 12),
+        Flexible(child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 4),
+          Flexible(child: Text(value, textAlign: TextAlign.end,
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: color))),
+        ])),
+      ]),
+    );
   }
 }
 
