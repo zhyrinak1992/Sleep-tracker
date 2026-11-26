@@ -187,4 +187,57 @@ void main() {
     expect((h1.data['months'] as List).length, 2);
   });
 
+  test('weekly and monthly report buckets preserve local dates across the spring DST change', () async {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+    final directory = await Directory.systemTemp.createTemp('periodic-reports-dst-');
+    Database? openedDatabase;
+    addTearDown(() async {
+      await openedDatabase?.close();
+      SleepDatabase.instance.setDatabaseForTesting(null);
+      SleepDatabase.instance.setDatabasePathForTesting(null);
+      if (await directory.exists()) await directory.delete(recursive: true);
+    });
+    SleepDatabase.instance.setDatabasePathForTesting('${directory.path}/sleep.sqlite');
+    final db = await SleepDatabase.instance.database;
+    openedDatabase = db;
+
+    Future<void> addNight(String id, DateTime start) async {
+      await db.insert('sleep_sessions', {
+        'id': id,
+        'started_at': start.toIso8601String(),
+        'ended_at': start.add(const Duration(hours: 8)).toIso8601String(),
+        'source': 'manual',
+        'created_at': start.toIso8601String(),
+        'updated_at': start.toIso8601String(),
+        'user_edited': 0,
+      });
+    }
+
+    // In Europe/Berlin, clocks jump forward on 29 March 2026.
+    await addNight('dst-sunday', DateTime(2026, 3, 29, 0, 30));
+    await addNight('dst-monday', DateTime(2026, 3, 30, 0, 30));
+
+    final reports = await PeriodicReportService(SleepDatabase.instance)
+        .generateClosedReports(now: DateTime(2026, 4, 2));
+    final week = reports.singleWhere((report) =>
+        report.id == 'week_2026-03-23');
+    expect(week.start, DateTime(2026, 3, 23));
+    expect(week.endExclusive, DateTime(2026, 3, 30));
+    expect(week.nights, 1, reason: 'Monday 00:30 belongs to the next week');
+    final daily = (week.data['trendPoints'] as List).whereType<Map>().toList();
+    expect(daily, hasLength(1));
+    expect(daily.single['label'], '29.03');
+    expect((daily.single['nights'] as List).length, 1);
+    expect((daily.single['nights'] as List).single['sessionId'], 'dst-sunday');
+
+    final month = reports.singleWhere((report) =>
+        report.id == 'month_2026-03-01');
+    final buckets = (month.data['weeklyTrend'] as List).whereType<Map>().toList();
+    final finalBucket = buckets.singleWhere((bucket) => bucket['bucket'] == 5);
+    expect(finalBucket['dayFrom'], 29);
+    expect(finalBucket['dayTo'], 31);
+    expect(finalBucket['nights'], hasLength(2),
+        reason: 'The final monthly bucket starts at local midnight on 29 March');
+  });
 }
