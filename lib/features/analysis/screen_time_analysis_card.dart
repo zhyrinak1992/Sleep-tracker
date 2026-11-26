@@ -82,10 +82,11 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
     for (final session in sessions.where((item) => entries.containsKey(item.id))) {
       final stages = stagesBySession[session.id] ?? const <Map<String, Object?>>[];
       final metrics = SleepSessionMetrics.calculate(session: session, stages: stages);
+      final hasKnownSleepOnset = metrics.sleepOnsetAt != null || session.actualSleepStartedAt != null;
       final referenceStart = metrics.sleepOnsetAt ?? session.actualSleepStartedAt ?? session.startedAt;
       sleepOnsets[session.id] = metrics.sleepOnsetAt;
       final entry = entries[session.id]!;
-      final lastUseIsValid = entry.lastUseAt == null || (() {
+      final lastUseIsValid = entry.lastUseAt == null || !hasKnownSleepOnset || (() {
         final elapsed = referenceStart.difference(entry.lastUseAt!);
         return !elapsed.isNegative && elapsed <= const Duration(hours: 24);
       })();
@@ -265,11 +266,13 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
                   sessionId: session.id, windowMinutes: _windowMinutes,
                   screenMinutes: minutes, lastUseAt: lastUseAt, updatedAt: DateTime.now(),
                 );
-                try {
-                  entry.validateForSleepStart(sleepReference.reference);
-                } on FormatException catch (error) {
-                  setDialogState(() => validationError = error.message);
-                  return;
+                if (sleepReference.hasActualOnset) {
+                  try {
+                    entry.validateForSleepStart(sleepReference.reference);
+                  } on FormatException catch (error) {
+                    setDialogState(() => validationError = error.message);
+                    return;
+                  }
                 }
                 Navigator.pop(dialogContext, entry);
               },
