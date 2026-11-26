@@ -212,7 +212,7 @@ class _HealthDayTagNightMetricPeriodComparisonCardState
             ),
             const SizedBox(height: 4),
             Text(
-              'Показатель: ${widget.metric.label}. В каждом периоде отдельно сравниваются ночи с выбранной отметкой и без неё. Показываются фактические средние и размеры выборок.',
+              'Показатель: ${widget.metric.label}. Ночь сопоставляется с дневной отметкой по дате её окончания. В каждом периоде отдельно сравниваются ночи с выбранной отметкой и без неё; показываются фактические средние и размеры выборок.',
               style: const TextStyle(
                   color: AppTheme.muted, fontSize: 10, height: 1.4),
             ),
