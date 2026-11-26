@@ -2,12 +2,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sleep_tracker/features/analysis/screen_time_sleep_analysis.dart';
 
 void main() {
-  test('averages sleep onset around midnight without wrapping to midday', () {
-    final beforeMidnight = ScreenTimeSleepAnalysis.sleepStartAxis(DateTime(2026, 11, 25, 23, 30))!;
-    final afterMidnight = ScreenTimeSleepAnalysis.sleepStartAxis(DateTime(2026, 11, 26, 0, 30))!;
-    expect(beforeMidnight, 690);
-    expect(afterMidnight, 750);
-    expect(ScreenTimeSleepAnalysis.formatSleepStartAxis((beforeMidnight + afterMidnight) / 2), '00:00');
+  test('calculates circular sleep-onset averages across midnight and noon', () {
+    final beforeMidnight = ScreenTimeSleepAnalysis.sleepStartMinutesOfDay(DateTime(2026, 11, 25, 23, 30))!;
+    final afterMidnight = ScreenTimeSleepAnalysis.sleepStartMinutesOfDay(DateTime(2026, 11, 26, 0, 30))!;
+    final midnightMean = ScreenTimeSleepAnalysis.compare([
+      ScreenTimeSleepSample(exposureMinutes: 1, sleepStartMinutesOfDay: beforeMidnight),
+      ScreenTimeSleepSample(exposureMinutes: 2, sleepStartMinutesOfDay: afterMidnight),
+    ])!.lowerGroup.metric(ScreenTimeSleepMetric.sleepStartTime).average;
+    expect(ScreenTimeSleepAnalysis.formatSleepStartMinutes((beforeMidnight + afterMidnight) / 2), '00:00');
+    expect(midnightMean, isNotNull);
+    final morning = [
+      ScreenTimeSleepSample(exposureMinutes: 1, sleepStartMinutesOfDay: ScreenTimeSleepAnalysis.sleepStartMinutesOfDay(DateTime(2026, 11, 26, 11))!),
+      ScreenTimeSleepSample(exposureMinutes: 2, sleepStartMinutesOfDay: ScreenTimeSleepAnalysis.sleepStartMinutesOfDay(DateTime(2026, 11, 26, 13))!),
+    ];
+    final result = ScreenTimeSleepAnalysis.compare(morning)!;
+    expect(ScreenTimeSleepAnalysis.formatSleepStartMinutes(result.lowerGroup.metric(ScreenTimeSleepMetric.sleepStartTime).average!), '12:00');
   });
   test('splits screen-time observations by their data median', () {
     final samples = List.generate(8, (index) => ScreenTimeSleepSample(

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 enum ScreenTimeSleepMetric {
   sleepStartTime,
   sleepDuration,
@@ -11,7 +13,7 @@ enum ScreenTimeSleepMetric {
 class ScreenTimeSleepSample {
   const ScreenTimeSleepSample({
     required this.exposureMinutes,
-    this.sleepStartMinutesFromNoon,
+    this.sleepStartMinutesOfDay,
     this.sleepDurationMinutes,
     this.sleepEfficiencyPercent,
     this.awakeningCount,
@@ -21,7 +23,7 @@ class ScreenTimeSleepSample {
   });
 
   final double exposureMinutes;
-  final double? sleepStartMinutesFromNoon;
+  final double? sleepStartMinutesOfDay;
   final double? sleepDurationMinutes;
   final double? sleepEfficiencyPercent;
   final double? awakeningCount;
@@ -30,7 +32,7 @@ class ScreenTimeSleepSample {
   final double? wellbeing;
 
   double? valueFor(ScreenTimeSleepMetric metric) => switch (metric) {
-    ScreenTimeSleepMetric.sleepStartTime => sleepStartMinutesFromNoon,
+    ScreenTimeSleepMetric.sleepStartTime => sleepStartMinutesOfDay,
     ScreenTimeSleepMetric.sleepDuration => sleepDurationMinutes,
     ScreenTimeSleepMetric.sleepEfficiency => sleepEfficiencyPercent,
     ScreenTimeSleepMetric.awakenings => awakeningCount,
@@ -80,24 +82,37 @@ class ScreenTimeComparison {
     if (lower.validSamples < ScreenTimeSleepAnalysis.minimumValidSamplesPerGroup ||
         upper.validSamples < ScreenTimeSleepAnalysis.minimumValidSamplesPerGroup ||
         lower.average == null || upper.average == null) return null;
-    return upper.average! - lower.average!;
+    final difference = upper.average! - lower.average!;
+    if (metric != ScreenTimeSleepMetric.sleepStartTime) return difference;
+    if (difference > 720) return difference - 1440;
+    if (difference < -720) return difference + 1440;
+    return difference;
   }
 }
 
 class ScreenTimeSleepAnalysis {
   static const minimumValidSamplesPerGroup = 4;
 
-  /// Maps a clock time onto a continuous axis centred on noon, so values around midnight average correctly.
-  static double? sleepStartAxis(DateTime? value) {
+  /// Returns local clock minutes. Group means are calculated circularly to handle midnight.
+  static double? sleepStartMinutesOfDay(DateTime? value) {
     if (value == null) return null;
-    return ((value.hour * 60 + value.minute + 720) % 1440).toDouble();
+    return (value.hour * 60 + value.minute).toDouble();
   }
 
-  static String formatSleepStartAxis(double value) {
-    final minutes = ((value.round() - 720) % 1440 + 1440) % 1440;
+  static String formatSleepStartMinutes(double value) {
+    final minutes = ((value.round() % 1440) + 1440) % 1440;
     final hour = (minutes ~/ 60).toString().padLeft(2, '0');
     final minute = (minutes % 60).toString().padLeft(2, '0');
     return '$hour:$minute';
+  }
+
+  static double _circularMeanMinutes(List<double> values) {
+    final angles = values.map((value) => value * 2 * math.pi / 1440);
+    final sinMean = angles.map(math.sin).reduce((a, b) => a + b) / values.length;
+    final cosMean = angles.map(math.cos).reduce((a, b) => a + b) / values.length;
+    if (sinMean.abs() < 1e-10 && cosMean.abs() < 1e-10) return double.nan;
+    final angle = math.atan2(sinMean, cosMean);
+    return ((angle * 1440 / (2 * math.pi)) % 1440 + 1440) % 1440;
   }
 
   static ScreenTimeComparison? compare(Iterable<ScreenTimeSleepSample> samples) {
@@ -118,9 +133,14 @@ class ScreenTimeSleepAnalysis {
       for (final metric in ScreenTimeSleepMetric.values) {
         final values = group.map((sample) => sample.valueFor(metric))
             .whereType<double>().where((value) => value.isFinite).toList();
+        final average = values.isEmpty
+            ? null
+            : metric == ScreenTimeSleepMetric.sleepStartTime
+                ? _circularMeanMinutes(values)
+                : values.reduce((a, b) => a + b) / values.length;
         metrics[metric] = ScreenTimeMetricSummary(
           validSamples: values.length,
-          average: values.isEmpty ? null : values.reduce((a, b) => a + b) / values.length,
+          average: average != null && average.isFinite ? average : null,
         );
       }
       return ScreenTimeGroupSummary(nights: group.length, metrics: Map.unmodifiable(metrics));

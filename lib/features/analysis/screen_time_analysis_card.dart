@@ -103,7 +103,7 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
       if (entry.screenMinutes != null) {
         durationSamples.add(ScreenTimeSleepSample(
           exposureMinutes: entry.screenMinutes!.toDouble(),
-          sleepStartMinutesFromNoon: sleepStartAxis,
+          sleepStartMinutesOfDay: sleepStartAxis,
           sleepDurationMinutes: sleepDuration,
           sleepEfficiencyPercent: efficiency,
           awakeningCount: awakenings,
@@ -115,7 +115,7 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
         if (gap >= 0 && gap <= 1440) {
           lastUseSamples.add(ScreenTimeSleepSample(
             exposureMinutes: gap.toDouble(),
-            sleepStartMinutesFromNoon: sleepStartAxis,
+            sleepStartMinutesOfDay: sleepStartAxis,
             sleepDurationMinutes: sleepDuration,
             sleepEfficiencyPercent: efficiency,
             awakeningCount: awakenings,
@@ -315,7 +315,7 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
   };
 
   String _formatMetric(ScreenTimeSleepMetric metric, double value) => switch (metric) {
-    ScreenTimeSleepMetric.sleepStartTime => ScreenTimeSleepAnalysis.formatSleepStartAxis(value),
+    ScreenTimeSleepMetric.sleepStartTime => ScreenTimeSleepAnalysis.formatSleepStartMinutes(value),
     ScreenTimeSleepMetric.sleepDuration => _duration(value),
     ScreenTimeSleepMetric.sleepEfficiency => '${value.toStringAsFixed(1)}%',
     ScreenTimeSleepMetric.awakenings => value.toStringAsFixed(1),
