@@ -155,6 +155,7 @@ class PeriodicReportExport {
     'quarter' => 'Квартал',
     'halfYear' => 'Полугодие',
     'year' => 'Год',
+    'customRange' => 'Произвольный период',
     _ => 'Период',
   };
 
