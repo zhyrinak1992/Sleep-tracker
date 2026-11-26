@@ -95,8 +95,21 @@ class NotificationService {
   static int _nightReminderId(int dayOffset, int slotIndex) =>
       _nightReminderBaseId + dayOffset * 20 + slotIndex;
 
+  /// A partial queue is intentional: the user may have skipped one attempt or
+  /// deferred it. Rebuilding it on every app resume would silently undo that
+  /// choice. Refill only after the current rolling queue has fully expired.
+  static bool hasPendingNightReminderIds(Iterable<int> ids) => ids.any(
+    (id) => id == _deferredSleepOfferId ||
+        (id >= _nightReminderBaseId &&
+            id < _nightReminderBaseId + _nightReminderDays * 20),
+  );
+
   Future<void> scheduleNightReminders() async {
     await initialize();
+    final pending = await _plugin.pendingNotificationRequests();
+    if (hasPendingNightReminderIds(pending.map((request) => request.id))) {
+      return;
+    }
     await cancelNightReminders();
     final now = tz.TZDateTime.now(tz.local);
     for (var dayOffset = 0; dayOffset < _nightReminderDays; dayOffset++) {
