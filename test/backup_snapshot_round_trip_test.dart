@@ -397,9 +397,10 @@ void main() {
       whereArgs: ['sleep_personal_records_history_v1'],
     )).single['value'] as String;
     final recordHistory = jsonDecode(recordHistoryRaw) as List;
-    expect(recordHistory, hasLength(2));
-    expect(recordHistory.first['value'], 480);
-    expect(recordHistory.last['value'], 510);
+    // Legacy achievement metadata is retained locally but is no longer merged
+    // or surfaced because the achievements feature is out of scope.
+    expect(recordHistory, hasLength(1));
+    expect(recordHistory.single['value'], 480);
     expect(await destination.query('sleep_stages'), hasLength(1));
     expect(await destination.query('sleep_metrics'), hasLength(1));
     final audioRows = await destination.query('audio_events', orderBy: 'id');
