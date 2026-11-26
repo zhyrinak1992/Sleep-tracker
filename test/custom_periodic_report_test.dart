@@ -62,8 +62,8 @@ void main() {
     expect(archive.any((item) => item.id == report.id), isTrue);
     final csv = PeriodicReportExport.toCsv(report.data);
     expect(csv, contains('Произвольный период'));
-    expect(csv, contains('in-range-one'), isFalse,
-        reason: 'CSV includes aggregated values; IDs are retained in the report snapshot, not exported as personal identifiers.');
+    expect(csv, isNot(contains('in-range-one')),
+        reason: 'CSV includes aggregated values; session IDs are not exported.');
     expect(csv, contains('Динамика внутри периода'));
   });
 
