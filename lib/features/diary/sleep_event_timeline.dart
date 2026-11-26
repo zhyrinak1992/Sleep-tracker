@@ -66,35 +66,6 @@ class SleepEventTimeline {
       _addAwakening(events, start, end);
     }
 
-    final pulseRows = <({DateTime at, double value, String unit, String source})>[];
-    for (final row in metrics) {
-      if (row['metric_type'] != 'Пульс' || row['value'] is! num) continue;
-      final at = _date(row['measured_at']);
-      final value = (row['value'] as num).toDouble();
-      if (at == null || !value.isFinite || value <= 0) continue;
-      pulseRows.add((
-        at: at,
-        value: value,
-        unit: row['unit'] as String? ?? 'уд/мин',
-        source: row['source'] as String? ?? '',
-      ));
-    }
-    pulseRows.sort((a, b) => a.at.compareTo(b.at));
-    final elevatedIndexes = _relativeHighPulseIndexes(pulseRows.map((x) => x.value).toList());
-    for (var i = 0; i < pulseRows.length; i++) {
-      final sample = pulseRows[i];
-      final elevated = elevatedIndexes.contains(i);
-      events.add(SleepTimelineEvent(
-        kind: SleepTimelineEventKind.pulse,
-        at: sample.at,
-        title: elevated ? 'Пульс · выше диапазона этой ночи' : 'Пульс',
-        detail: '${_number(sample.value)} ${sample.unit}',
-        source: sample.source,
-        isElevated: elevated,
-        numericValue: sample.value,
-      ));
-    }
-
     for (final row in audioEvents) {
       final at = _date(row['captured_at']);
       if (at == null) continue;
@@ -126,6 +97,43 @@ class SleepEventTimeline {
       ));
     }
 
+    final pulseRows = <({DateTime at, double value, String unit, String source})>[];
+    for (final row in metrics) {
+      if (row['metric_type'] != 'Пульс' || row['value'] is! num) continue;
+      final at = _date(row['measured_at']);
+      final value = (row['value'] as num).toDouble();
+      if (at == null || !value.isFinite || value <= 0) continue;
+      pulseRows.add((
+        at: at,
+        value: value,
+        unit: row['unit'] as String? ?? 'уд/мин',
+        source: row['source'] as String? ?? '',
+      ));
+    }
+    pulseRows.sort((a, b) => a.at.compareTo(b.at));
+    final elevatedIndexes = _relativeHighPulseIndexes(pulseRows.map((x) => x.value).toList());
+    for (var i = 0; i < pulseRows.length; i++) {
+      final sample = pulseRows[i];
+      final elevated = elevatedIndexes.contains(i);
+      final temporalContext = elevated
+          ? _nearestEventContext(sample.at, events)
+          : null;
+      final sourceParts = [
+        if (sample.source.trim().isNotEmpty) sample.source.trim(),
+        if (temporalContext != null)
+          'Ближайшее по времени событие: $temporalContext',
+      ];
+      events.add(SleepTimelineEvent(
+        kind: SleepTimelineEventKind.pulse,
+        at: sample.at,
+        title: elevated ? 'Пульс · выше диапазона этой ночи' : 'Пульс',
+        detail: '${_number(sample.value)} ${sample.unit}',
+        source: sourceParts.isEmpty ? null : sourceParts.join(' · '),
+        isElevated: elevated,
+        numericValue: sample.value,
+      ));
+    }
+
     events.sort((a, b) {
       final timeOrder = a.at.compareTo(b.at);
       if (timeOrder != 0) return timeOrder;
@@ -149,6 +157,71 @@ class SleepEventTimeline {
       detail: '$minutes мин · ${DateFormat('HH:mm').format(start.toLocal())}–${DateFormat('HH:mm').format(end.toLocal())}',
       source: 'По интервалам фаз, предоставленным источником сна',
     ));
+  }
+
+  static String? _nearestEventContext(
+    DateTime pulseAt,
+    List<SleepTimelineEvent> events,
+  ) {
+    ({Duration distance, String description})? nearest;
+    for (final event in events) {
+      if (event.kind != SleepTimelineEventKind.awakening &&
+          event.kind != SleepTimelineEventKind.audio) {
+        continue;
+      }
+
+      late final Duration distance;
+      late final String description;
+      if (event.kind == SleepTimelineEventKind.awakening &&
+          event.until != null) {
+        if (!pulseAt.isBefore(event.at) && pulseAt.isBefore(event.until!)) {
+          distance = Duration.zero;
+          description = 'измерение совпало с периодом бодрствования';
+        } else if (pulseAt.isBefore(event.at)) {
+          distance = event.at.difference(pulseAt);
+          description =
+              'период бодрствования начался через ${_formatDistance(distance)} после измерения';
+        } else {
+          distance = pulseAt.difference(event.until!);
+          description =
+              'период бодрствования закончился за ${_formatDistance(distance)} до измерения';
+        }
+      } else {
+        final delta = event.at.difference(pulseAt);
+        distance = delta.abs();
+        final eventName = event.title.replaceFirst('Звуковое событие · ', '');
+        if (delta == Duration.zero) {
+          description = '$eventName совпало по времени с измерением';
+        } else if (delta.isNegative) {
+          description =
+              '$eventName — за ${_formatDistance(distance)} до измерения';
+        } else {
+          description =
+              '$eventName — через ${_formatDistance(distance)} после измерения';
+        }
+      }
+
+      if (nearest == null || distance < nearest.distance) {
+        nearest = (distance: distance, description: description);
+      }
+    }
+    return nearest?.description;
+  }
+
+  static String _formatDistance(Duration distance) {
+    if (distance.inHours > 0) {
+      final minutes = distance.inMinutes % 60;
+      return minutes == 0
+          ? '${distance.inHours} ч'
+          : '${distance.inHours} ч ${minutes} мин';
+    }
+    if (distance.inMinutes > 0) {
+      final seconds = distance.inSeconds % 60;
+      return seconds == 0
+          ? '${distance.inMinutes} мин'
+          : '${distance.inMinutes} мин ${seconds} с';
+    }
+    return '${distance.inSeconds} с';
   }
 
   static Set<int> _relativeHighPulseIndexes(List<double> values) {
@@ -211,7 +284,7 @@ class SleepEventTimelineCard extends StatelessWidget {
           const Text('Единая временная шкала', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
           const SizedBox(height: 5),
           const Text(
-            'Звуковые события, интервалы бодрствования и измерения пульса расположены по времени. Измерения пульса показаны отдельными точками по фактическим временным отметкам; промежутки не интерполируются.',
+            'Звуковые события, интервалы бодрствования и измерения пульса расположены по времени. Измерения пульса показаны отдельными точками без интерполяции; для статистически выделенных точек указано ближайшее событие и временной интервал. Совпадение не означает причинную связь.',
             style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4),
           ),
           if (pulse.length >= 2) ...[
