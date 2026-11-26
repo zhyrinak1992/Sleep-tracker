@@ -128,6 +128,28 @@ class HealthDayTagNightHistory {
     );
   }
 
+  /// Returns true only when the day has a saved diary entry and its tag
+  /// membership matches the requested group. A missing entry is unknown data,
+  /// not evidence that the tag was absent.
+  static bool matchesTagGroup({
+    required SleepSession session,
+    required Map<DateTime, List<String>> tagsByDay,
+    required String tag,
+    required bool withTag,
+  }) {
+    final endedAt = session.endedAt;
+    if (tag.trim().isEmpty ||
+        session.deletedAt != null ||
+        endedAt == null ||
+        !endedAt.isAfter(session.startedAt)) {
+      return false;
+    }
+    final day = DateTime(endedAt.year, endedAt.month, endedAt.day);
+    final recordedTags = tagsByDay[day];
+    if (recordedTags == null) return false;
+    return recordedTags.contains(tag) == withTag;
+  }
+
   static List<HealthDayTagNightMetricPoint> calculate({
     required Iterable<SleepSession> sessions,
     required Map<DateTime, List<String>> tagsByDay,
@@ -151,8 +173,14 @@ class HealthDayTagNightHistory {
           !endedAt.isAfter(session.startedAt)) continue;
       final day = DateTime(endedAt.year, endedAt.month, endedAt.day);
       if (day.isBefore(first) || !day.isBefore(end)) continue;
-      final tags = tagsByDay[day] ?? const <String>[];
-      if (tags.contains(tag) != withTag) continue;
+      if (!matchesTagGroup(
+        session: session,
+        tagsByDay: tagsByDay,
+        tag: tag,
+        withTag: withTag,
+      )) {
+        continue;
+      }
 
       final sessionStages = stagesBySession[session.id] ?? const [];
       final metrics = SleepSessionMetrics.calculate(
