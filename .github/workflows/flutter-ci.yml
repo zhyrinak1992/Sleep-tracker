@@ -40,7 +40,5 @@ jobs:
         env:
           TZ: Europe/Berlin
         run: flutter test test/health_report_service_test.dart --reporter expanded
-      - name: Verify SQLite achievement metadata restore
-        run: flutter test test/sleep_database_achievement_restore_test.dart --reporter expanded
       - name: Run tests
         run: flutter test --reporter expanded
