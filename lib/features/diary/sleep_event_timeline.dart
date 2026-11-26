@@ -188,7 +188,7 @@ class SleepEventTimeline {
         }
       } else {
         final delta = event.at.difference(pulseAt);
-        distance = delta.abs();
+        distance = delta.isNegative ? -delta : delta;
         final eventName = event.title.replaceFirst('Звуковое событие · ', '');
         if (delta == Duration.zero) {
           description = '$eventName совпало по времени с измерением';
