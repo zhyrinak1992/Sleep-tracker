@@ -10,6 +10,7 @@ Map<String, Object?> _snapshot({
   required String eventAt,
 }) => {
   'schemaVersion': 1,
+  'snapshotId': fingerprint,
   'fingerprint': fingerprint,
   'generatedAt': generatedAt,
   'periodStart': '2026-11-01T00:00:00.000',

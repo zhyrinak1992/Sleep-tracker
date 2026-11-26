@@ -38,13 +38,21 @@ class TagInsightHistoryStore {
     required Map<String, Object?> tagPatterns,
   }) async {
     final history = await loadHistory();
-    if (history.isNotEmpty && history.last['fingerprint'] == fingerprint) {
+    final periodStartIso = periodStart.toIso8601String();
+    final periodEndIso = periodEndExclusive.toIso8601String();
+    final previousIndex = history.lastIndexWhere((snapshot) =>
+        snapshot['periodStart'] == periodStartIso &&
+        snapshot['periodEndExclusive'] == periodEndIso);
+    final previousSnapshot =
+        previousIndex >= 0 ? history[previousIndex] : null;
+    if (previousSnapshot != null &&
+        previousSnapshot['fingerprint'] == fingerprint) {
       return null;
     }
 
     final previousInsights = <String, Map<String, Object?>>{};
-    if (history.isNotEmpty && history.last['insights'] is List) {
-      for (final raw in history.last['insights'] as List) {
+    if (previousSnapshot != null && previousSnapshot['insights'] is List) {
+      for (final raw in previousSnapshot['insights'] as List) {
         if (raw is! Map) continue;
         final insight = Map<String, Object?>.from(raw);
         final id = insight['id'];
@@ -148,6 +156,7 @@ class TagInsightHistoryStore {
       });
     final snapshot = <String, Object?>{
       'schemaVersion': 1,
+      'snapshotId': '$periodStartIso|${generatedAt.toIso8601String()}|$fingerprint',
       'fingerprint': fingerprint,
       'generatedAt': generatedAt.toIso8601String(),
       'periodStart': periodStart.toIso8601String(),

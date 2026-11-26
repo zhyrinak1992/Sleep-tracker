@@ -153,13 +153,21 @@ class PeriodicReportService {
 
   static Future<Map<String, Object?>?>? _insightRefreshInFlight;
 
-  /// Re-evaluates the current calendar month's tag patterns after a morning
-  /// report is saved. The previous calendar month is the comparison period.
+  /// Re-evaluates the calendar month containing the reported night after its
+  /// morning report is saved. The previous month remains the report context.
   /// Identical source observations are not written to history again.
-  Future<Map<String, Object?>?> refreshCurrentTagInsightHistory({DateTime? now}) {
-    final inFlight = _insightRefreshInFlight;
-    if (inFlight != null) return inFlight;
-    final future = _refreshCurrentTagInsightHistory(now: now);
+  Future<Map<String, Object?>?> refreshCurrentTagInsightHistory({required String sessionId, DateTime? now}) {
+    final previous = _insightRefreshInFlight;
+    final future = () async {
+      if (previous != null) {
+        try {
+          await previous;
+        } catch (_) {
+          // A failed earlier refresh must not prevent the next saved report.
+        }
+      }
+      return _refreshCurrentTagInsightHistory(sessionId: sessionId, now: now);
+    }();
     _insightRefreshInFlight = future;
     return future.whenComplete(() {
       if (identical(_insightRefreshInFlight, future)) {
@@ -169,12 +177,10 @@ class PeriodicReportService {
   }
 
   Future<Map<String, Object?>?> _refreshCurrentTagInsightHistory({
+    required String sessionId,
     DateTime? now,
   }) async {
     final current = now ?? DateTime.now();
-    final currentStart = DateTime(current.year, current.month);
-    final currentEnd = DateTime(current.year, current.month + 1);
-    final previousStart = DateTime(current.year, current.month - 1);
     final allSessions = (await database.getSessions(limit: null))
         .where((session) =>
             session.endedAt != null &&
@@ -182,6 +188,25 @@ class PeriodicReportService {
             session.deletedAt == null)
         .toList()
       ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
+    SleepSession? reportedSession;
+    for (final session in allSessions) {
+      if (session.id == sessionId) {
+        reportedSession = session;
+        break;
+      }
+    }
+    if (reportedSession == null) {
+      return TagInsightHistoryStore(
+        database.getAppMetadata,
+        database.setAppMetadata,
+      ).loadCurrent();
+    }
+    final currentStart = DateTime(
+      reportedSession.startedAt.year,
+      reportedSession.startedAt.month,
+    );
+    final currentEnd = DateTime(currentStart.year, currentStart.month + 1);
+    final previousStart = DateTime(currentStart.year, currentStart.month - 1);
     final currentSessions = allSessions.where((session) =>
         !session.startedAt.isBefore(currentStart) &&
         session.startedAt.isBefore(currentEnd)).toList();
@@ -241,7 +266,7 @@ class PeriodicReportService {
     final fingerprintSource = jsonEncode({
       'periodStart': currentStart.toIso8601String(),
       'periodEndExclusive': currentEnd.toIso8601String(),
-      'tagPatterns': patterns,
+      'currentPatterns': patterns['current'],
     });
     final digest = await Sha256().hash(utf8.encode(fingerprintSource));
     final fingerprint = digest.bytes

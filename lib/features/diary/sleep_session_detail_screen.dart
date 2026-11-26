@@ -141,14 +141,14 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
     if (result == 'skip') {
       await widget.database.saveMorningReport(sessionId: session.id, wellbeing: null, quality: null, answersJson: jsonEncode({'skipped': true}));
       await widget.database.updateMorningRating(session.id, null);
-      await _refreshTagInsightHistoryAfterMorningReport();
+      await _refreshTagInsightHistoryAfterMorningReport(session.id);
     } else if (result == 'save') {
       await widget.database.saveMorningReport(
         sessionId: session.id, wellbeing: wellbeing, quality: quality,
         answersJson: jsonEncode({'wellbeing': wellbeing, 'sleepQuality': quality, 'sleepiness': sleepiness, 'comment': comment.text.trim(), 'skipped': false}),
       );
       await widget.database.updateMorningRating(session.id, wellbeing);
-      await _refreshTagInsightHistoryAfterMorningReport();
+      await _refreshTagInsightHistoryAfterMorningReport(session.id);
     }
     comment.dispose();
     if (result == 'save' || result == 'skip') {
@@ -161,11 +161,11 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
     }
   }
 
-  Future<void> _refreshTagInsightHistoryAfterMorningReport() async {
+  Future<void> _refreshTagInsightHistoryAfterMorningReport(String sessionId) async {
     try {
       await PeriodicReportService(
         widget.database,
-      ).refreshCurrentTagInsightHistory();
+      ).refreshCurrentTagInsightHistory(sessionId: sessionId);
     } catch (_) {
       // The morning report is already saved; analytics must not undo or block it.
     }

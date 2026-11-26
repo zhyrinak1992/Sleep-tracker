@@ -582,7 +582,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (!mounted) { comment.dispose(); return; }
     if (result == 'skip') {
       await widget.database.saveMorningReport(sessionId: session.id, wellbeing: null, quality: null, answersJson: jsonEncode({'skipped': true}));
-      await _refreshTagInsightHistoryAfterMorningReport();
+      await _refreshTagInsightHistoryAfterMorningReport(session.id);
       comment.dispose();
       await _refresh();
       return;
@@ -593,17 +593,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       answersJson: jsonEncode({'wellbeing': wellbeing, 'sleepQuality': quality, 'sleepiness': sleepiness, 'comment': comment.text.trim(), 'skipped': false}),
     );
     await widget.database.updateMorningRating(session.id, wellbeing);
-    await _refreshTagInsightHistoryAfterMorningReport();
+    await _refreshTagInsightHistoryAfterMorningReport(session.id);
     comment.dispose();
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Утренний отчёт сохранён.')));
     await _refresh();
   }
 
-  Future<void> _refreshTagInsightHistoryAfterMorningReport() async {
+  Future<void> _refreshTagInsightHistoryAfterMorningReport(String sessionId) async {
     try {
       await PeriodicReportService(
         widget.database,
-      ).refreshCurrentTagInsightHistory();
+      ).refreshCurrentTagInsightHistory(sessionId: sessionId);
     } catch (_) {
       // The morning report is already saved; analytics must not undo or block it.
     }

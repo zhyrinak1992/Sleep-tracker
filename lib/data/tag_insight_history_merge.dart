@@ -52,24 +52,24 @@ class TagInsightHistoryMerge {
     required List<Map<String, Object?>> local,
     required List<Map<String, Object?>> imported,
   }) {
-    final byFingerprint = <String, Map<String, Object?>>{};
+    final bySnapshotId = <String, Map<String, Object?>>{};
     for (final snapshot in [...local, ...imported]) {
       _validateSnapshot(snapshot, 'История');
-      final fingerprint = snapshot['fingerprint'] as String;
-      final existing = byFingerprint[fingerprint];
-      byFingerprint[fingerprint] = existing == null
+      final snapshotId = snapshot['snapshotId'] as String;
+      final existing = bySnapshotId[snapshotId];
+      bySnapshotId[snapshotId] = existing == null
           ? Map<String, Object?>.from(snapshot)
           : _mergeSnapshot(existing, snapshot);
     }
-    final result = byFingerprint.values.toList()
+    final result = bySnapshotId.values.toList()
       ..sort((a, b) {
         final aDate = DateTime.parse(a['generatedAt'] as String);
         final bDate = DateTime.parse(b['generatedAt'] as String);
         final byDate = aDate.compareTo(bDate);
         return byDate != 0
             ? byDate
-            : (a['fingerprint'] as String)
-                .compareTo(b['fingerprint'] as String);
+            : (a['snapshotId'] as String)
+                .compareTo(b['snapshotId'] as String);
       });
     return result;
   }
@@ -156,6 +156,8 @@ class TagInsightHistoryMerge {
     }
 
     if (snapshot['schemaVersion'] != 1 ||
+        snapshot['snapshotId'] is! String ||
+        (snapshot['snapshotId'] as String).isEmpty ||
         snapshot['fingerprint'] is! String ||
         (snapshot['fingerprint'] as String).isEmpty ||
         snapshot['insights'] is! List) {

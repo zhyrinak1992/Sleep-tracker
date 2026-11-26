@@ -35,6 +35,52 @@ Map<String, Object?> _patterns(
 
 void main() {
   group('TagInsightHistoryStore', () {
+    test('compares updates only with the previous snapshot for the same calendar period', () async {
+      String? stored;
+      final store = TagInsightHistoryStore(
+        (key) async => key == TagInsightHistoryStore.metadataKey ? stored : null,
+        (key, value) async {
+          if (key == TagInsightHistoryStore.metadataKey) stored = value;
+        },
+      );
+      final novemberStart = DateTime(2026, 11);
+      final novemberEnd = DateTime(2026, 12);
+      final decemberStart = DateTime(2026, 12);
+      final decemberEnd = DateTime(2027, 1);
+
+      await store.record(
+        fingerprint: 'november-first',
+        generatedAt: DateTime(2026, 11, 10),
+        periodStart: novemberStart,
+        periodEndExclusive: novemberEnd,
+        tagPatterns: _patterns(60),
+      );
+      final december = await store.record(
+        fingerprint: 'december-first',
+        generatedAt: DateTime(2026, 12, 10),
+        periodStart: decemberStart,
+        periodEndExclusive: decemberEnd,
+        tagPatterns: _patterns(20),
+      );
+      expect(
+        ((december!['insights'] as List).single as Map)['status'],
+        'new',
+      );
+
+      final november = await store.record(
+        fingerprint: 'november-second',
+        generatedAt: DateTime(2026, 12, 11),
+        periodStart: novemberStart,
+        periodEndExclusive: novemberEnd,
+        tagPatterns: _patterns(45),
+      );
+      expect(
+        ((november!['insights'] as List).single as Map)['status'],
+        'weakened',
+      );
+      expect(await store.loadHistory(), hasLength(3));
+    });
+
     test('records new, weakened, no-longer-observed and insufficient statuses', () async {
       String? stored;
       final store = TagInsightHistoryStore(
@@ -181,6 +227,7 @@ void main() {
 
     final service = PeriodicReportService(SleepDatabase.instance);
     final first = await service.refreshCurrentTagInsightHistory(
+      sessionId: 'nov-tag-0',
       now: DateTime(2026, 11, 20),
     );
     expect(first, isNotNull);
@@ -193,6 +240,7 @@ void main() {
     expect(firstDuration['status'], 'new');
 
     final unchanged = await service.refreshCurrentTagInsightHistory(
+      sessionId: 'nov-tag-0',
       now: DateTime(2026, 11, 20),
     );
     expect(unchanged, isNull);
@@ -211,7 +259,8 @@ void main() {
       withCaffeine: true,
     );
     final updated = await service.refreshCurrentTagInsightHistory(
-      now: DateTime(2026, 11, 20),
+      sessionId: 'nov-tag-0',
+      now: DateTime(2026, 11, 21),
     );
     expect(updated, isNotNull);
     insights = updated!['insights'] as List;
@@ -220,5 +269,25 @@ void main() {
     );
     expect(updatedDuration['status'], 'weakened');
     expect((updatedDuration['current'] as Map)['withTagSamples'], 5);
+
+    await addNight(
+      id: 'oct-tag-new',
+      start: DateTime(2026, 10, 15, 22),
+      sleepMinutes: 420,
+      withCaffeine: true,
+    );
+    final octoberSnapshot = await service.refreshCurrentTagInsightHistory(
+      sessionId: 'oct-tag-new',
+      now: DateTime(2026, 11, 22),
+    );
+    expect(octoberSnapshot, isNotNull);
+    expect(
+      octoberSnapshot!['periodStart'],
+      DateTime(2026, 10).toIso8601String(),
+    );
+    final octoberDuration = (octoberSnapshot['insights'] as List)
+        .cast<Map>()
+        .singleWhere((item) => item['metricKey'] == 'duration');
+    expect(octoberDuration['status'], 'new');
   });
 }

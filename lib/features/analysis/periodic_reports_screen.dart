@@ -358,7 +358,7 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Текущий месяц: ${_monthLabel(start)} · сравнение ночей с отметкой и без неё. Это статистические наблюдения, не доказательство причин.',
+            'Период: ${_monthLabel(start)} · сравнение ночей с отметкой и без неё. Статус сопоставляется с предыдущими пересчётами этого же месяца; это не доказательство причин.',
             style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
           ),
           const SizedBox(height: 8),
