@@ -734,6 +734,202 @@ class PdfReportService {
     );
   }
 
+  /// Exports the complete saved detail for one completed night.
+  /// Only values actually stored for this session are included; missing data
+  /// is rendered as unavailable and no sleep phases or measurements are inferred.
+  static Future<void> exportSingleNight({
+    required SleepDatabase database,
+    required SleepSession session,
+  }) async {
+    final current = await database.getSessionById(session.id);
+    final night = current ?? session;
+    if (night.endedAt == null || !night.endedAt!.isAfter(night.startedAt)) {
+      throw StateError('Нельзя сформировать PDF для незавершённой ночи.');
+    }
+
+    final stages = await database.getStages(night.id);
+    final metrics = SleepSessionMetrics.calculate(session: night, stages: stages);
+    final morning = await database.getMorningReport(night.id);
+    final notes = await database.getNotes(sessionId: night.id);
+    final healthSamples = await database.getMetrics(night.id);
+    final healthSummaries = SleepMetricSummary.fromSamples(healthSamples);
+    final climateSamples = await database.getClimateSamples(
+      sessionId: night.id,
+      from: night.startedAt,
+      to: night.endedAt,
+    );
+    final audioEvents = await database.getAudioEvents(sessionId: night.id);
+
+    String dateTime(DateTime? value) => value == null
+        ? 'Нет данных'
+        : DateFormat('dd.MM.yyyy HH:mm').format(value.toLocal());
+    String duration(int? value) => value == null
+        ? 'Нет данных'
+        : '${value ~/ 60} ч ${(value % 60).toString().padLeft(2, '0')} мин';
+    String decimal(Object? value, {String suffix = ''}) =>
+        value is num && value.toDouble().isFinite
+            ? value.toStringAsFixed(1) + suffix
+            : 'Нет данных';
+
+    final regular = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Regular.ttf'));
+    final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));
+    final doc = pw.Document();
+    final stageRows = stages.where((row) =>
+      row['stage'] is String && row['started_at'] is String && row['ended_at'] is String
+    ).toList()..sort((a, b) =>
+      DateTime.parse(a['started_at']! as String).compareTo(DateTime.parse(b['started_at']! as String)));
+    final climateGroups = <(String, String), List<double>>{};
+    for (final row in climateSamples) {
+      final type = row['metric_type'], unit = row['unit'], value = row['value'];
+      if (type is String && unit is String && value is num && value.toDouble().isFinite) {
+        climateGroups.putIfAbsent((type, unit), () => []).add(value.toDouble());
+      }
+    }
+    final source = night.source == 'manual' || night.source == 'manual_entry'
+        ? 'Вручную' : night.source;
+    final fileDate = DateFormat('yyyyMMdd').format(night.startedAt);
+    doc.addPage(pw.MultiPage(
+      theme: pw.ThemeData.withFont(base: regular, bold: bold),
+      build: (_) => [
+        pw.Header(level: 0, child: pw.Text('Sleep Tracker — подробный отчёт о ночи')),
+        pw.Text(DateFormat('d MMMM yyyy', 'ru').format(night.startedAt)),
+        pw.Text('Сформирован: ${DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now())}'),
+        pw.SizedBox(height: 12),
+        pw.Header(level: 1, child: pw.Text('Основные сведения')),
+        pw.TableHelper.fromTextArray(
+          headers: ['Показатель', 'Значение'],
+          cellStyle: const pw.TextStyle(fontSize: 9),
+          headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+          data: [
+            ['Продолжительность в постели', duration(metrics.timeInBedMinutes)],
+            ['Продолжительность сна', duration(metrics.sleepDurationMinutes)],
+            ['Начало записи', dateTime(night.startedAt)],
+            ['Окончание записи', dateTime(night.endedAt)],
+            ['Фактическое засыпание', dateTime(metrics.sleepOnsetAt)],
+            ['Фактическое пробуждение', dateTime(metrics.sleepEndAt)],
+            ['Латентность засыпания', duration(metrics.sleepLatencyMinutes)],
+            ['Эффективность сна', metrics.sleepEfficiencyPercent == null ? 'Нет данных' : '${metrics.sleepEfficiencyPercent!.toStringAsFixed(1)}%'],
+            ['Покрытие интервала фазами', metrics.stageCoveragePercent == null ? 'Нет данных' : '${metrics.stageCoveragePercent!.toStringAsFixed(1)}%'],
+            ['Количество пробуждений', metrics.hasAwakeSamples ? metrics.awakeningCount.toString() : 'Нет данных'],
+            ['Источник записи', source],
+            ['Ручная корректировка', night.userEdited ? 'Да' : 'Нет'],
+          ],
+        ),
+        pw.SizedBox(height: 12),
+        pw.Header(level: 1, child: pw.Text('Фазы сна')),
+        if (metrics.stageBreakdownMinutes.isEmpty)
+          pw.Text('Источник не предоставил данные о фазах сна.')
+        else
+          pw.TableHelper.fromTextArray(
+            headers: ['Фаза', 'Продолжительность'],
+            cellStyle: const pw.TextStyle(fontSize: 9),
+            data: metrics.stageBreakdownMinutes.entries.map((entry) =>
+              [entry.key, duration(entry.value)]).toList(),
+          ),
+        if (stageRows.isNotEmpty) ...[
+          pw.SizedBox(height: 8),
+          pw.Text('Исходные интервалы фаз', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+          pw.TableHelper.fromTextArray(
+            headers: ['Фаза', 'Начало', 'Окончание'],
+            cellStyle: const pw.TextStyle(fontSize: 8),
+            headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+            data: stageRows.map((row) => [
+              row['stage'] as String,
+              dateTime(DateTime.tryParse(row['started_at']! as String)),
+              dateTime(DateTime.tryParse(row['ended_at']! as String)),
+            ]).toList(),
+          ),
+        ],
+        pw.SizedBox(height: 12),
+        pw.Header(level: 1, child: pw.Text('Утренний отчёт')),
+        if (morning == null || (morning['wellbeing'] == null && morning['sleep_quality'] == null))
+          pw.Text('Субъективные оценки не добавлены.')
+        else ...[
+          pw.Text('Самочувствие: ${decimal(morning['wellbeing'], suffix: ' / 5')}'),
+          pw.Text('Качество сна: ${decimal(morning['sleep_quality'], suffix: ' / 5')}'),
+        ],
+        if (morning?['answers_json'] is String && (morning!['answers_json'] as String).isNotEmpty)
+          pw.Text('Дополнительные ответы: ${morning['answers_json']}',
+            style: const pw.TextStyle(fontSize: 8)),
+        pw.SizedBox(height: 12),
+        pw.Header(level: 1, child: pw.Text('Физиологические измерения')),
+        if (healthSummaries.isEmpty)
+          pw.Text('Измерения Apple Health для этой ночи не сохранены.')
+        else
+          pw.TableHelper.fromTextArray(
+            headers: ['Показатель', 'Среднее', 'Минимум', 'Максимум', 'Измерений'],
+            cellStyle: const pw.TextStyle(fontSize: 8),
+            headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+            data: healthSummaries.map((summary) => [
+              summary.metricType,
+              '${summary.average.toStringAsFixed(1)} ${summary.unit}',
+              '${summary.minimum.toStringAsFixed(1)}',
+              '${summary.maximum.toStringAsFixed(1)}',
+              summary.count.toString(),
+            ]).toList(),
+          ),
+        pw.SizedBox(height: 12),
+        pw.Header(level: 1, child: pw.Text('Микроклимат спальни')),
+        if (climateGroups.isEmpty)
+          pw.Text('Измерения микроклимата для этой ночи не сохранены.')
+        else
+          pw.TableHelper.fromTextArray(
+            headers: ['Показатель', 'Среднее', 'Измерений'],
+            cellStyle: const pw.TextStyle(fontSize: 8),
+            headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+            data: climateGroups.entries.map((entry) {
+              final values = entry.value;
+              final avg = values.reduce((a, b) => a + b) / values.length;
+              final label = entry.key.$1 == 'temperature' ? 'Температура' :
+                  entry.key.$1 == 'humidity' ? 'Влажность' : entry.key.$1;
+              return [label, '${avg.toStringAsFixed(1)} ${entry.key.$2}', values.length.toString()];
+            }).toList(),
+          ),
+        pw.SizedBox(height: 12),
+        pw.Header(level: 1, child: pw.Text('Звуковые события')),
+        if (audioEvents.isEmpty)
+          pw.Text('Сохранённых звуковых событий для этой ночи нет.')
+        else
+          pw.TableHelper.fromTextArray(
+            headers: ['Категория', 'Время', 'Длительность', 'Уверенность'],
+            cellStyle: const pw.TextStyle(fontSize: 8),
+            headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+            data: audioEvents.map((event) => [
+              event['category'] as String? ?? 'Не указано',
+              dateTime(DateTime.tryParse(event['captured_at'] as String? ?? '')),
+              event['duration_ms'] is num ? '${((event['duration_ms'] as num) / 1000).toStringAsFixed(1)} с' : 'Нет данных',
+              event['confidence'] is num ? '${((event['confidence'] as num) * 100).toStringAsFixed(0)}%' : 'Нет данных',
+            ]).toList(),
+          ),
+        pw.SizedBox(height: 12),
+        pw.Header(level: 1, child: pw.Text('Заметки')),
+        if ((night.note?.trim().isEmpty ?? true) && notes.isEmpty)
+          pw.Text('Заметки к этой ночи не добавлены.')
+        else ...[
+          if (night.note?.trim().isNotEmpty ?? false)
+            pw.Padding(padding: const pw.EdgeInsets.only(bottom: 5), child: pw.Text(night.note!)),
+          ...notes.map((note) => pw.Padding(
+            padding: const pw.EdgeInsets.only(bottom: 5),
+            child: pw.Text(note.text),
+          )),
+        ],
+        pw.SizedBox(height: 10),
+        pw.Text(
+          'Отчёт содержит только сохранённые данные этой ночи. Отсутствующие значения не моделируются; расчётные показатели доступны только при достаточном исходном покрытии.',
+          style: const pw.TextStyle(fontSize: 8),
+        ),
+      ],
+    ));
+    final directory = await getTemporaryDirectory();
+    final file = File(p.join(directory.path, 'SleepTracker-night-$fileDate.pdf'));
+    await file.writeAsBytes(await doc.save(), flush: true);
+    await Share.shareXFiles(
+      [XFile(file.path, mimeType: 'application/pdf', name: p.basename(file.path))],
+      subject: 'Sleep Tracker — отчёт о ночи',
+      text: 'Подробный отчёт по одной сохранённой ночи.',
+    );
+  }
+
   static Future<void> exportHistory({int days = 30, DateTime? from, DateTime? to, bool includeNotes = false}) async {
     if ((from == null) != (to == null)) {
       throw ArgumentError('Для произвольного периода укажите обе даты: начало и окончание.');
