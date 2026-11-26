@@ -1434,6 +1434,16 @@ class _HealthTagMetricHistoryChartState
         widget.sessions.map((session) => session.id).toList(),
       );
 
+  Widget _periodComparisonCard(Map<DateTime, List<String>> tagsByDay) =>
+      HealthDayTagNightMetricPeriodComparisonCard(
+        database: widget.database,
+        sessions: widget.allSessions,
+        tagsByDay: tagsByDay,
+        tag: widget.tag,
+        initialRange: widget.range,
+        metric: _metric,
+      );
+
   @override
   Widget build(BuildContext context) => Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1485,13 +1495,29 @@ class _HealthTagMetricHistoryChartState
             );
             final available = points.where((point) => point.value != null).length;
             if (points.isEmpty) {
-              return const Text('В выбранном периоде нет завершённых ночей с этой отметкой.',
-                style: TextStyle(color: AppTheme.muted, fontSize: 11));
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'В выбранном периоде нет завершённых ночей с этой отметкой.',
+                    style: TextStyle(color: AppTheme.muted, fontSize: 11),
+                  ),
+                  const SizedBox(height: 12),
+                  _periodComparisonCard(tagsByDay),
+                ],
+              );
             }
             if (available == 0) {
-              return Text(
-                'Ночей с отметкой: ${points.length}. Для показателя «${_metric.label}» пока нет подтверждённых измерений.',
-                style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Ночей с отметкой: ${points.length}. Для показателя «${_metric.label}» пока нет подтверждённых измерений.',
+                    style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+                  ),
+                  const SizedBox(height: 12),
+                  _periodComparisonCard(tagsByDay),
+                ],
               );
             }
             final values = points.map((point) => point.value).toList();
@@ -1527,14 +1553,7 @@ class _HealthTagMetricHistoryChartState
                   ],
                 ),
                 const SizedBox(height: 12),
-                HealthDayTagNightMetricPeriodComparisonCard(
-                  database: widget.database,
-                  sessions: widget.allSessions,
-                  tagsByDay: tagsByDay,
-                  tag: widget.tag,
-                  initialRange: widget.range,
-                  metric: _metric,
-                ),
+                _periodComparisonCard(tagsByDay),
               ],
             );
           },
