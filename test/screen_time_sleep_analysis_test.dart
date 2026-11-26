@@ -5,18 +5,21 @@ void main() {
   test('calculates circular sleep-onset averages across midnight and noon', () {
     final beforeMidnight = ScreenTimeSleepAnalysis.sleepStartMinutesOfDay(DateTime(2026, 11, 25, 23, 30))!;
     final afterMidnight = ScreenTimeSleepAnalysis.sleepStartMinutesOfDay(DateTime(2026, 11, 26, 0, 30))!;
-    final midnightMean = ScreenTimeSleepAnalysis.compare([
+    final midnightComparison = ScreenTimeSleepAnalysis.compare([
       ScreenTimeSleepSample(exposureMinutes: 1, sleepStartMinutesOfDay: beforeMidnight),
-      ScreenTimeSleepSample(exposureMinutes: 2, sleepStartMinutesOfDay: afterMidnight),
-    ])!.lowerGroup.metric(ScreenTimeSleepMetric.sleepStartTime).average;
-    expect(ScreenTimeSleepAnalysis.formatSleepStartMinutes((beforeMidnight + afterMidnight) / 2), '00:00');
-    expect(midnightMean, isNotNull);
+      ScreenTimeSleepSample(exposureMinutes: 1, sleepStartMinutesOfDay: afterMidnight),
+    ])!;
+    expect(ScreenTimeSleepAnalysis.formatSleepStartMinutes(
+      midnightComparison.lowerGroup.metric(ScreenTimeSleepMetric.sleepStartTime).average!,
+    ), '00:00');
     final morning = [
       ScreenTimeSleepSample(exposureMinutes: 1, sleepStartMinutesOfDay: ScreenTimeSleepAnalysis.sleepStartMinutesOfDay(DateTime(2026, 11, 26, 11))!),
-      ScreenTimeSleepSample(exposureMinutes: 2, sleepStartMinutesOfDay: ScreenTimeSleepAnalysis.sleepStartMinutesOfDay(DateTime(2026, 11, 26, 13))!),
+      ScreenTimeSleepSample(exposureMinutes: 1, sleepStartMinutesOfDay: ScreenTimeSleepAnalysis.sleepStartMinutesOfDay(DateTime(2026, 11, 26, 13))!),
     ];
     final result = ScreenTimeSleepAnalysis.compare(morning)!;
-    expect(ScreenTimeSleepAnalysis.formatSleepStartMinutes(result.lowerGroup.metric(ScreenTimeSleepMetric.sleepStartTime).average!), '12:00');
+    expect(ScreenTimeSleepAnalysis.formatSleepStartMinutes(
+      result.lowerGroup.metric(ScreenTimeSleepMetric.sleepStartTime).average!,
+    ), '12:00');
   });
   test('splits screen-time observations by their data median', () {
     final samples = List.generate(8, (index) => ScreenTimeSleepSample(
@@ -37,6 +40,17 @@ void main() {
     expect(result.differenceFor(ScreenTimeSleepMetric.sleepEfficiency), 4);
   });
 
+  test('calculates the direction of sleep-onset shifts across midnight', () {
+    final samples = <ScreenTimeSleepSample>[];
+    for (var i = 0; i < 4; i++) {
+      samples.add(ScreenTimeSleepSample(exposureMinutes: i.toDouble(),
+        sleepStartMinutesOfDay: ScreenTimeSleepAnalysis.sleepStartMinutesOfDay(DateTime(2026, 11, 25, 23))));
+      samples.add(ScreenTimeSleepSample(exposureMinutes: (i + 4).toDouble(),
+        sleepStartMinutesOfDay: ScreenTimeSleepAnalysis.sleepStartMinutesOfDay(DateTime(2026, 11, 26, 1))));
+    }
+    final result = ScreenTimeSleepAnalysis.compare(samples)!;
+    expect(result.differenceFor(ScreenTimeSleepMetric.sleepStartTime), 120);
+  });
   test('does not compare groups when one side has fewer than four nights', () {
     final samples = List.generate(7, (index) => ScreenTimeSleepSample(
       exposureMinutes: index.toDouble(), sleepDurationMinutes: 400 + index.toDouble(),
