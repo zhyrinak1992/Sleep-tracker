@@ -127,6 +127,7 @@ class HealthDayTagNightHistory {
     required DateTime start,
     required DateTime endExclusive,
     required HealthDayTagNightMetric metric,
+    bool withTag = true,
   }) {
     if (tag.trim().isEmpty || !endExclusive.isAfter(start)) {
       throw ArgumentError('Некорректные параметры истории отметки.');
