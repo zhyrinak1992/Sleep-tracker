@@ -16,9 +16,9 @@ class _SleepSessionComparisonScreenState extends State<SleepSessionComparisonScr
   late Future<List<SleepSession>> _sessionsFuture;
   String? _firstId, _secondId;
   @override
-  void initState() { super.initState(); _sessionsFuture = widget.database.getSessions(limit: 10000); }
+  void initState() { super.initState(); _sessionsFuture = widget.database.getSessions(limit: null); }
   Future<void> _reload() async {
-    setState(() => _sessionsFuture = widget.database.getSessions(limit: 10000));
+    setState(() => _sessionsFuture = widget.database.getSessions(limit: null));
     await _sessionsFuture;
   }
   SleepSession? _byId(List<SleepSession> sessions, String? id) {

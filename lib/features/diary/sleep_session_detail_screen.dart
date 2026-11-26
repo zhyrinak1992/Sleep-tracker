@@ -188,7 +188,7 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
 
     final currentAnswers = parseAnswers(report);
     final scoreCutoff = session.startedAt.subtract(const Duration(days: 100));
-    final priorSessions = (await widget.database.getSessions(limit: 365))
+    final priorSessions = (await widget.database.getSessions(limit: null))
         .where((item) => item.id != session.id && !item.isOpen &&
             item.startedAt.isBefore(session.startedAt) &&
             !item.startedAt.isBefore(scoreCutoff))

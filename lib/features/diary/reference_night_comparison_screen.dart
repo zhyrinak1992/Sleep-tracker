@@ -19,10 +19,10 @@ class _ReferenceNightComparisonScreenState extends State<ReferenceNightCompariso
   @override
   void initState() {
     super.initState();
-    _sessionsFuture = widget.database.getSessions(limit: 10000);
+    _sessionsFuture = widget.database.getSessions(limit: null);
   }
   Future<void> _reload() async {
-    setState(() => _sessionsFuture = widget.database.getSessions(limit: 10000));
+    setState(() => _sessionsFuture = widget.database.getSessions(limit: null));
     await _sessionsFuture;
   }
   String _date(SleepSession s) => DateFormat('d MMM yyyy, HH:mm', 'ru').format(s.startedAt);
