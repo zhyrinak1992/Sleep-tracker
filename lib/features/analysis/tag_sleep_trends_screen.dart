@@ -48,6 +48,7 @@ class _TagSleepTrendsScreenState extends State<TagSleepTrendsScreen>
   late Future<_TagSleepTrendsData> _future;
   TagSleepMetric _metric = TagSleepMetric.sleepDuration;
   Set<String> _selected = {'caffeine', 'stress', 'activity'};
+  DateTimeRange? _selectedRange;
 
   static const _lineColors = <Color>[
     AppTheme.teal,
@@ -116,6 +117,47 @@ class _TagSleepTrendsScreenState extends State<TagSleepTrendsScreen>
       efficiency: efficiency,
       latency: latency,
     );
+  }
+
+  Future<void> _choosePeriod(List<SleepSession> completed) async {
+    if (completed.isEmpty) return;
+    final dates = completed.map((session) => session.startedAt).toList();
+    final earliest = dates.reduce((a, b) => a.isBefore(b) ? a : b);
+    final latest = dates.reduce((a, b) => a.isAfter(b) ? a : b);
+    var initialStart = _selectedRange?.start ?? earliest;
+    var initialEnd = _selectedRange?.end ?? latest;
+    if (initialStart.isBefore(earliest)) initialStart = earliest;
+    if (initialEnd.isAfter(latest)) initialEnd = latest;
+    if (initialStart.isAfter(initialEnd)) {
+      initialStart = earliest;
+      initialEnd = latest;
+    }
+    final selected = await showDateRangePicker(
+      context: context,
+      firstDate: DateUtils.dateOnly(earliest),
+      lastDate: DateUtils.dateOnly(latest),
+      initialDateRange: DateTimeRange(
+        start: DateUtils.dateOnly(initialStart),
+        end: DateUtils.dateOnly(initialEnd),
+      ),
+      helpText: 'Выберите период анализа',
+      cancelText: 'Отмена',
+      confirmText: 'Применить',
+      saveText: 'Применить',
+    );
+    if (!mounted || selected == null) return;
+    setState(() {
+      _selectedRange = DateTimeRange(
+        start: DateUtils.dateOnly(selected.start),
+        end: DateUtils.dateOnly(selected.end),
+      );
+    });
+  }
+
+  String _periodLabel(DateTime start, DateTime endInclusive) {
+    final first = DateFormat('d MMM yyyy', 'ru').format(start);
+    final last = DateFormat('d MMM yyyy', 'ru').format(endInclusive);
+    return '$first — $last';
   }
 
   String _formatValue(double? value) {
@@ -191,7 +233,12 @@ class _TagSleepTrendsScreenState extends State<TagSleepTrendsScreen>
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('${DateFormat('LLLL yyyy', 'ru').format(point.month)} · $tagLabel'),
+        title: Text(
+          (point.isPartialPeriod
+              ? '${DateFormat('d MMM yyyy', 'ru').format(point.periodStart)} — ${DateFormat('d MMM yyyy', 'ru').format(point.periodEndExclusive.subtract(const Duration(days: 1)))}'
+              : DateFormat('LLLL yyyy', 'ru').format(point.month)) +
+              ' · $tagLabel',
+        ),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -262,14 +309,31 @@ class _TagSleepTrendsScreenState extends State<TagSleepTrendsScreen>
         final orderedTags = availableTags.where((tag) => selected.contains(tag.key)).take(5).toList();
         final first = tags.map((session) => session.startedAt).reduce((a, b) => a.isBefore(b) ? a : b);
         final last = tags.map((session) => session.startedAt).reduce((a, b) => a.isAfter(b) ? a : b);
-        final startMonth = DateTime(first.year, first.month);
-        final endMonth = DateTime(last.year, last.month + 1);
+        var periodStart = _selectedRange?.start ?? DateUtils.dateOnly(first);
+        var periodEndInclusive = _selectedRange?.end ?? DateUtils.dateOnly(last);
+        if (periodStart.isBefore(DateUtils.dateOnly(first))) {
+          periodStart = DateUtils.dateOnly(first);
+        }
+        if (periodEndInclusive.isAfter(DateUtils.dateOnly(last))) {
+          periodEndInclusive = DateUtils.dateOnly(last);
+        }
+        if (periodStart.isAfter(periodEndInclusive)) {
+          periodStart = DateUtils.dateOnly(first);
+          periodEndInclusive = DateUtils.dateOnly(last);
+        }
+        final periodEndExclusive = periodEndInclusive.add(const Duration(days: 1));
+        final startMonth = DateTime(periodStart.year, periodStart.month);
+        final endMonth = periodEndExclusive.day == 1
+            ? DateTime(periodEndExclusive.year, periodEndExclusive.month)
+            : DateTime(periodEndExclusive.year, periodEndExclusive.month + 1);
         final series = TagSleepTrendAnalysis.calculate(
           sessions: data.sessions,
           tagsBySession: data.tagsBySession,
           tagKeys: orderedTags.map((tag) => tag.key),
           startMonth: startMonth,
           endMonthExclusive: endMonth,
+          periodStart: periodStart,
+          periodEndExclusive: periodEndExclusive,
           metric: _metric,
           awakeningCountsBySession: data.awakeningCounts,
           efficiencyBySession: data.efficiency,
@@ -284,6 +348,35 @@ class _TagSleepTrendsScreenState extends State<TagSleepTrendsScreen>
             const SectionCard(child: Text(
               'Каждая линия — отдельная отметка. Для каждого месяца сравниваются завершённые ночи с этой отметкой и без неё. Ночи могут независимо участвовать в нескольких линиях.',
               style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.45),
+            )),
+            const SizedBox(height: 12),
+            SectionCard(child: Row(
+              children: [
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Период анализа', style: TextStyle(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 3),
+                    Text(
+                      _selectedRange == null
+                          ? 'Вся история'
+                          : _periodLabel(periodStart, periodEndInclusive),
+                      style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                    ),
+                  ],
+                )),
+                TextButton.icon(
+                  onPressed: () => _choosePeriod(tags),
+                  icon: const Icon(Icons.date_range_rounded, size: 17),
+                  label: const Text('Выбрать'),
+                ),
+                if (_selectedRange != null)
+                  IconButton(
+                    tooltip: 'Вся история',
+                    onPressed: () => setState(() => _selectedRange = null),
+                    icon: const Icon(Icons.restart_alt_rounded),
+                  ),
+              ],
             )),
             const SizedBox(height: 12),
             SectionCard(child: Column(
@@ -360,6 +453,15 @@ class _TagSleepTrendsScreenState extends State<TagSleepTrendsScreen>
                     ),
                   ),
                 ),
+                if (series.isNotEmpty &&
+                    series.first.points.any((point) => point.isPartialPeriod))
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      '* — выбран только фрагмент календарного месяца',
+                      style: TextStyle(color: AppTheme.muted, fontSize: 10),
+                    ),
+                  ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 12,
@@ -389,7 +491,10 @@ class _TagSleepTrendsScreenState extends State<TagSleepTrendsScreen>
                   final index = entry.key;
                   return ExpansionTile(
                     tilePadding: EdgeInsets.zero,
-                    title: Text(DateFormat('LLLL yyyy', 'ru').format(month)),
+                    title: Text(
+                      DateFormat('LLLL yyyy', 'ru').format(month) +
+                          (series.first.points[index].isPartialPeriod ? ' · неполный период' : ''),
+                    ),
                     subtitle: Text(series.map((item) {
                       final point = item.points[index];
                       return '${availableTags.firstWhere((tag) => tag.key == item.tagKey).label}: с отметкой ${point.comparison.withTag.nights}, без отметки ${point.comparison.withoutTag.nights}';
@@ -562,7 +667,8 @@ class _TagTrendPainter extends CustomPainter {
       final x = months.length <= 1
           ? left + plotWidth / 2
           : left + plotWidth * i / (months.length - 1);
-      final label = DateFormat('MMM yy', 'ru').format(months[i]);
+      final partial = series.isNotEmpty && series.first.points[i].isPartialPeriod;
+      final label = DateFormat('MMM yy', 'ru').format(months[i]) + (partial ? '*' : '');
       drawLabel(label, Offset(x - 23, size.height - 24), width: 48);
     }
   }

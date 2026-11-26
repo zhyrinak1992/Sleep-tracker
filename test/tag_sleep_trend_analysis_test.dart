@@ -74,6 +74,53 @@ void main() {
       expect(result.single.points.single.comparison.isSufficient, isFalse);
     });
 
+    test('clips first and last calendar months to the selected date range', () {
+      final sessions = <SleepSession>[
+        _night('outside-before', DateTime(2026, 4, 1), minutes: 600),
+        for (var i = 0; i < 4; i++)
+          _night('tag-$i', DateTime(2026, 4, i + 3), minutes: 450),
+        for (var i = 0; i < 4; i++)
+          _night('plain-$i', DateTime(2026, 4, i + 8), minutes: 390),
+        _night('outside-after', DateTime(2026, 4, 13), minutes: 300),
+      ];
+      final result = TagSleepTrendAnalysis.calculate(
+        sessions: sessions,
+        tagsBySession: {
+          'outside-before': {'caffeine'},
+          for (var i = 0; i < 4; i++) 'tag-$i': {'caffeine'},
+        },
+        tagKeys: const ['caffeine'],
+        startMonth: DateTime(2026, 4),
+        endMonthExclusive: DateTime(2026, 5),
+        periodStart: DateTime(2026, 4, 2),
+        periodEndExclusive: DateTime(2026, 4, 13),
+        metric: TagSleepMetric.sleepDuration,
+      );
+
+      final point = result.single.points.single;
+      expect(point.isPartialPeriod, isTrue);
+      expect(point.periodStart, DateTime(2026, 4, 2));
+      expect(point.periodEndExclusive, DateTime(2026, 4, 13));
+      expect(point.comparison.withTag.nights, 4);
+      expect(point.comparison.withoutTag.nights, 4);
+      expect(point.comparison.difference, 60);
+    });
+
+    test('keeps a full calendar month marked as complete', () {
+      final result = TagSleepTrendAnalysis.calculate(
+        sessions: const [],
+        tagsBySession: const {},
+        tagKeys: const ['caffeine'],
+        startMonth: DateTime(2026, 5),
+        endMonthExclusive: DateTime(2026, 6),
+        periodStart: DateTime(2026, 5),
+        periodEndExclusive: DateTime(2026, 6),
+        metric: TagSleepMetric.sleepDuration,
+      );
+
+      expect(result.single.points.single.isPartialPeriod, isFalse);
+    });
+
     test('creates a continuous month axis across empty months', () {
       final months = TagSleepTrendAnalysis.monthsBetween(
         DateTime(2026, 1, 20),
