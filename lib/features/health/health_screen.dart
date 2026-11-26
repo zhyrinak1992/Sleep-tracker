@@ -18,6 +18,11 @@ import 'health_day_tag_metric_period_comparison_card.dart';
 import 'health_day_tag_monthly_report.dart';
 import 'health_day_tag_monthly_reports_screen.dart';
 
+typedef _HealthTagHistoryData = ({
+  Map<String, List<Map<String, Object?>>> stagesBySession,
+  Map<String, Map<String, Object?>> morningReportsBySession,
+});
+
 class HealthScreen extends StatefulWidget {
   const HealthScreen({super.key, required this.database});
   final SleepDatabase database;
