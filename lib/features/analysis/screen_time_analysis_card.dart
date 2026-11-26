@@ -51,6 +51,7 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
     final legacy = await widget.database.getAppMetadataByPrefix('sleep_tracker_screen_time_v1_');
     final entries = <String, ScreenTimeEntry>{};
     final damaged = <String>{};
+    final invalidLastUse = <String>{};
     for (final session in sessions) {
       final raw = stored[ScreenTimeEntry.keyFor(session.id, _windowMinutes)];
       if (raw == null || raw.isEmpty) continue;
@@ -84,14 +85,13 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
       final referenceStart = metrics.sleepOnsetAt ?? session.actualSleepStartedAt ?? session.startedAt;
       sleepOnsets[session.id] = metrics.sleepOnsetAt;
       final entry = entries[session.id]!;
-      try {
-        entry.validateForSleepStart(referenceStart);
-      } on FormatException {
-        entries.remove(session.id);
-        damaged.add(session.id);
-        continue;
-      }
+      final lastUseIsValid = entry.lastUseAt == null || (() {
+        final elapsed = referenceStart.difference(entry.lastUseAt!);
+        return !elapsed.isNegative && elapsed <= const Duration(hours: 24);
+      })();
+      if (!lastUseIsValid) invalidLastUse.add(session.id);
       final morning = morningReportsBySession[session.id] ?? const <String, Object?>{};
+      final sleepStartAxis = ScreenTimeSleepAnalysis.sleepStartAxis(metrics.sleepOnsetAt);
       final sleepDuration = metrics.sleepDurationMinutes?.toDouble();
       final efficiency = metrics.sleepEfficiencyPercent;
       final awakenings = metrics.hasAwakeSamples &&
@@ -103,17 +103,19 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
       if (entry.screenMinutes != null) {
         durationSamples.add(ScreenTimeSleepSample(
           exposureMinutes: entry.screenMinutes!.toDouble(),
+          sleepStartMinutesFromNoon: sleepStartAxis,
           sleepDurationMinutes: sleepDuration,
           sleepEfficiencyPercent: efficiency,
           awakeningCount: awakenings,
           morningRating: rating, sleepQuality: quality, wellbeing: wellbeing,
         ));
       }
-      if (entry.lastUseAt != null && metrics.sleepOnsetAt != null) {
+      if (entry.lastUseAt != null && lastUseIsValid && metrics.sleepOnsetAt != null) {
         final gap = metrics.sleepOnsetAt!.difference(entry.lastUseAt!).inMinutes;
         if (gap >= 0 && gap <= 1440) {
           lastUseSamples.add(ScreenTimeSleepSample(
             exposureMinutes: gap.toDouble(),
+            sleepStartMinutesFromNoon: sleepStartAxis,
             sleepDurationMinutes: sleepDuration,
             sleepEfficiencyPercent: efficiency,
             awakeningCount: awakenings,
@@ -125,6 +127,9 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
     return _ScreenTimeAnalysisData(
       sessions: sessions, entries: Map.unmodifiable(entries),
       damagedSessionIds: Set.unmodifiable(damaged),
+      invalidLastUseSessionIds: Set.unmodifiable(invalidLastUse),
+      durationEntryCount: entries.values.where((entry) => entry.screenMinutes != null).length,
+      lastUseEntryCount: entries.values.where((entry) => entry.lastUseAt != null).length,
       legacyEntriesCount: legacyCount, sleepOnsets: Map.unmodifiable(sleepOnsets),
       durationComparison: ScreenTimeSleepAnalysis.compare(durationSamples),
       lastUseComparison: ScreenTimeSleepAnalysis.compare(lastUseSamples),
@@ -139,12 +144,18 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
     });
   }
 
-  Future<DateTime> _sleepReference(SleepSession session, _ScreenTimeAnalysisData data) async {
+  Future<({DateTime reference, bool hasActualOnset})> _sleepReference(
+    SleepSession session, _ScreenTimeAnalysisData data,
+  ) async {
     final existing = data.sleepOnsets[session.id];
-    if (existing != null) return existing;
+    if (existing != null) return (reference: existing, hasActualOnset: true);
+    if (session.actualSleepStartedAt != null) {
+      return (reference: session.actualSleepStartedAt!, hasActualOnset: true);
+    }
     final stages = await widget.database.getStages(session.id);
     final metrics = SleepSessionMetrics.calculate(session: session, stages: stages);
-    return metrics.sleepOnsetAt ?? session.actualSleepStartedAt ?? session.startedAt;
+    final onset = metrics.sleepOnsetAt;
+    return (reference: onset ?? session.startedAt, hasActualOnset: onset != null);
   }
 
   Future<void> _editEntry(
@@ -158,7 +169,7 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
     );
     var includeLastUse = existing?.lastUseAt != null;
     var selectedTime = existing?.lastUseAt == null
-        ? TimeOfDay.fromDateTime(sleepReference.subtract(const Duration(minutes: 30)))
+        ? TimeOfDay.fromDateTime(sleepReference.reference.subtract(const Duration(minutes: 30)))
         : TimeOfDay.fromDateTime(existing!.lastUseAt!);
     var validationError = '';
     final result = await showDialog<Object?>(
@@ -205,7 +216,7 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
                   icon: const Icon(Icons.schedule),
                   label: Text('Последнее использование: ${selectedTime.format(context)}'),
                 ),
-              if (data.sleepOnsets[session.id] == null && session.actualSleepStartedAt == null)
+              if (!sleepReference.hasActualOnset)
                 const Padding(
                   padding: EdgeInsets.only(top: 8),
                   child: Text('Фактическое время засыпания пока не определено. Время сохранится как ориентир по началу записи, но не попадёт в сравнение интервала до засыпания.',
@@ -242,7 +253,7 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
                 if (includeLastUse) {
                   try {
                     lastUseAt = ScreenTimeEntry.resolveLastUseTime(
-                      sleepReference, hour: selectedTime.hour, minute: selectedTime.minute,
+                      sleepReference.reference, hour: selectedTime.hour, minute: selectedTime.minute,
                     );
                   } on FormatException catch (error) {
                     setDialogState(() => validationError = error.message);
@@ -254,7 +265,7 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
                   screenMinutes: minutes, lastUseAt: lastUseAt, updatedAt: DateTime.now(),
                 );
                 try {
-                  entry.validateForSleepStart(sleepReference);
+                  entry.validateForSleepStart(sleepReference.reference);
                 } on FormatException catch (error) {
                   setDialogState(() => validationError = error.message);
                   return;
@@ -278,6 +289,14 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
     if (mounted) setState(() => _future = _load());
   }
 
+  String _entryDateRange(_ScreenTimeAnalysisData data) {
+    final recordedSessions = data.sessions.where((session) => data.entries.containsKey(session.id)).toList();
+    if (recordedSessions.isEmpty) return 'нет отметок';
+    final first = recordedSessions.last.startedAt;
+    final last = recordedSessions.first.startedAt;
+    return '${DateFormat('d MMM yyyy', 'ru').format(first)} — ${DateFormat('d MMM yyyy', 'ru').format(last)}';
+  }
+
   String _minutes(double value) => '${value.round()} мин';
   String _duration(double value) {
     final minutes = value.round();
@@ -294,6 +313,7 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
   };
 
   String _formatMetric(ScreenTimeSleepMetric metric, double value) => switch (metric) {
+    ScreenTimeSleepMetric.sleepStartTime => ScreenTimeSleepAnalysis.formatSleepStartAxis(value),
     ScreenTimeSleepMetric.sleepDuration => _duration(value),
     ScreenTimeSleepMetric.sleepEfficiency => '${value.toStringAsFixed(1)}%',
     ScreenTimeSleepMetric.awakenings => value.toStringAsFixed(1),
@@ -303,6 +323,7 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
   String _formatDifference(ScreenTimeSleepMetric metric, double value) {
     final sign = value > 0 ? '+' : '';
     return switch (metric) {
+      ScreenTimeSleepMetric.sleepStartTime => '$sign${value.abs().round()} мин ${value > 0 ? 'позже' : 'раньше'}',
       ScreenTimeSleepMetric.sleepDuration => '$sign${value.round()} мин',
       ScreenTimeSleepMetric.sleepEfficiency => '$sign${value.toStringAsFixed(1)} п.п.',
       ScreenTimeSleepMetric.awakenings => '$sign${value.toStringAsFixed(1)}',
@@ -361,13 +382,16 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
   Widget _sessionRow(SleepSession session, _ScreenTimeAnalysisData data) {
     final entry = data.entries[session.id];
     final damaged = data.damagedSessionIds.contains(session.id);
+    final onset = data.sleepOnsets[session.id];
     final details = damaged
         ? 'Сохранённая отметка повреждена; она не изменена и не включена в анализ.'
         : entry == null
             ? 'Отметка не добавлена'
             : [
+                if (onset != null) 'засыпание в ${DateFormat('HH:mm').format(onset)}',
                 if (entry.screenMinutes != null) '${entry.screenMinutes} мин за $_windowMinutes мин',
                 if (entry.lastUseAt != null) 'последний раз в ${DateFormat('HH:mm').format(entry.lastUseAt!)}',
+                if (data.invalidLastUseSessionIds.contains(session.id)) 'время последнего использования вне допустимого интервала — исправь',
                 'введено вручную',
               ].join(' · ');
     return ListTile(
@@ -423,13 +447,23 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
               onSelectionChanged: (values) => _changeWindow(values.first),
             ),
             const SizedBox(height: 8),
-            Text('Период: ${widget.periodLabel} · заполнено $recorded из $completed завершённых ночей',
+            Text('Период: ${widget.periodLabel} · заполнено $recorded из $completed завершённых ночей (длительность: ${data.durationEntryCount}, последнее использование: ${data.lastUseEntryCount})',
               style: const TextStyle(color: AppTheme.teal, fontSize: 11)),
+            if (recorded > 0) ...[
+              const SizedBox(height: 3),
+              Text('Даты отметок: ${_entryDateRange(data)}', style: const TextStyle(color: AppTheme.muted, fontSize: 10)),
+            ],
             if (data.legacyEntriesCount > 0)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Text('Найдено старых отметок: ${data.legacyEntriesCount}. Они сохранены, но не включены в расчёт, так как для них не указано окно 30/60/120 минут.',
                   style: const TextStyle(color: AppTheme.muted, fontSize: 10, height: 1.35)),
+              ),
+            if (data.invalidLastUseSessionIds.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text('Время последнего использования не попадает в интервал до засыпания в ${data.invalidLastUseSessionIds.length} отметках. Они сохранены; их можно исправить.',
+                  style: const TextStyle(color: AppTheme.muted, fontSize: 10)),
               ),
             if (data.damagedSessionIds.isNotEmpty)
               Padding(
@@ -486,18 +520,23 @@ class _ScreenTimeAnalysisCardState extends State<ScreenTimeAnalysisCard> {
 class _ScreenTimeAnalysisData {
   const _ScreenTimeAnalysisData({
     required this.sessions, required this.entries, required this.damagedSessionIds,
-    required this.legacyEntriesCount, required this.sleepOnsets,
+    required this.invalidLastUseSessionIds, required this.durationEntryCount,
+    required this.lastUseEntryCount, required this.legacyEntriesCount, required this.sleepOnsets,
     required this.durationComparison, required this.lastUseComparison,
   });
 
   factory _ScreenTimeAnalysisData.empty() => const _ScreenTimeAnalysisData(
-    sessions: [], entries: {}, damagedSessionIds: {}, legacyEntriesCount: 0,
+    sessions: [], entries: {}, damagedSessionIds: {}, invalidLastUseSessionIds: {},
+    durationEntryCount: 0, lastUseEntryCount: 0, legacyEntriesCount: 0,
     sleepOnsets: {}, durationComparison: null, lastUseComparison: null,
   );
 
   final List<SleepSession> sessions;
   final Map<String, ScreenTimeEntry> entries;
   final Set<String> damagedSessionIds;
+  final Set<String> invalidLastUseSessionIds;
+  final int durationEntryCount;
+  final int lastUseEntryCount;
   final int legacyEntriesCount;
   final Map<String, DateTime?> sleepOnsets;
   final ScreenTimeComparison? durationComparison;

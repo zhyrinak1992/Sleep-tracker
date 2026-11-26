@@ -1,4 +1,5 @@
 enum ScreenTimeSleepMetric {
+  sleepStartTime,
   sleepDuration,
   sleepEfficiency,
   awakenings,
@@ -10,6 +11,7 @@ enum ScreenTimeSleepMetric {
 class ScreenTimeSleepSample {
   const ScreenTimeSleepSample({
     required this.exposureMinutes,
+    this.sleepStartMinutesFromNoon,
     this.sleepDurationMinutes,
     this.sleepEfficiencyPercent,
     this.awakeningCount,
@@ -19,6 +21,7 @@ class ScreenTimeSleepSample {
   });
 
   final double exposureMinutes;
+  final double? sleepStartMinutesFromNoon;
   final double? sleepDurationMinutes;
   final double? sleepEfficiencyPercent;
   final double? awakeningCount;
@@ -27,6 +30,7 @@ class ScreenTimeSleepSample {
   final double? wellbeing;
 
   double? valueFor(ScreenTimeSleepMetric metric) => switch (metric) {
+    ScreenTimeSleepMetric.sleepStartTime => sleepStartMinutesFromNoon,
     ScreenTimeSleepMetric.sleepDuration => sleepDurationMinutes,
     ScreenTimeSleepMetric.sleepEfficiency => sleepEfficiencyPercent,
     ScreenTimeSleepMetric.awakenings => awakeningCount,
@@ -82,6 +86,19 @@ class ScreenTimeComparison {
 
 class ScreenTimeSleepAnalysis {
   static const minimumValidSamplesPerGroup = 4;
+
+  /// Maps a clock time onto a continuous axis centred on noon, so values around midnight average correctly.
+  static double? sleepStartAxis(DateTime? value) {
+    if (value == null) return null;
+    return ((value.hour * 60 + value.minute + 720) % 1440).toDouble();
+  }
+
+  static String formatSleepStartAxis(double value) {
+    final minutes = ((value.round() - 720) % 1440 + 1440) % 1440;
+    final hour = (minutes ~/ 60).toString().padLeft(2, '0');
+    final minute = (minutes % 60).toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
 
   static ScreenTimeComparison? compare(Iterable<ScreenTimeSleepSample> samples) {
     final valid = samples.where((sample) =>
