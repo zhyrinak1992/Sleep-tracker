@@ -532,7 +532,7 @@ class PdfReportService {
         ]).toList(),
       ));
     }
-    final nightlyBuckets = snapshot['kind'] == 'week' ? trendPoints
+    final nightlyBuckets = snapshot['kind'] == 'customRange' || snapshot['kind'] == 'week' ? trendPoints
         : snapshot['kind'] == 'month' ? weeklyTrend : months;
     final nightlyRows = <List<String>>[];
     for (final bucket in nightlyBuckets) {
