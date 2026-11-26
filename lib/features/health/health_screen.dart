@@ -14,6 +14,7 @@ import 'health_day_tag_library.dart';
 import 'health_day_tag_period_comparison.dart';
 import 'health_day_tag_history_period.dart';
 import 'health_day_tag_sleep_history.dart';
+import 'health_day_tag_metric_period_comparison_card.dart';
 import 'health_day_tag_monthly_report.dart';
 import 'health_day_tag_monthly_reports_screen.dart';
 
@@ -965,6 +966,7 @@ class _HealthTagStatsCardState extends State<_HealthTagStatsCard> {
           _HealthTagMetricHistoryChart(
             database: widget.database,
             sessions: sessionsInPeriod,
+            allSessions: widget.sessions,
             entries: entries,
             tag: selected,
             range: historyRange,
@@ -1390,6 +1392,7 @@ class _HealthTagMetricHistoryChart extends StatefulWidget {
   const _HealthTagMetricHistoryChart({
     required this.database,
     required this.sessions,
+    required this.allSessions,
     required this.entries,
     required this.tag,
     required this.range,
@@ -1397,6 +1400,7 @@ class _HealthTagMetricHistoryChart extends StatefulWidget {
 
   final SleepDatabase database;
   final List<SleepSession> sessions;
+  final List<SleepSession> allSessions;
   final Map<DateTime, _HealthDayEntry> entries;
   final String tag;
   final HealthDayTagHistoryRange range;
@@ -1521,6 +1525,15 @@ class _HealthTagMetricHistoryChartState
                     Text(_date(points.last.date),
                       style: const TextStyle(color: AppTheme.muted, fontSize: 9)),
                   ],
+                ),
+                const SizedBox(height: 12),
+                HealthDayTagNightMetricPeriodComparisonCard(
+                  database: widget.database,
+                  sessions: widget.allSessions,
+                  tagsByDay: tagsByDay,
+                  tag: widget.tag,
+                  initialRange: widget.range,
+                  metric: _metric,
                 ),
               ],
             );
