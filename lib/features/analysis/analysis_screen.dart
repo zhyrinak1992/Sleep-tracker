@@ -18,6 +18,7 @@ import 'activity_analysis_card.dart';
 import 'weather_analysis_card.dart';
 import 'sleep_period_comparison_screen.dart';
 import 'tag_sleep_comparison_card.dart';
+import 'tag_sleep_trends_screen.dart';
 import 'sleep_regularity_analysis.dart';
 import 'sleep_achievements_screen.dart';
 import 'audio_event_analysis_card.dart';
@@ -343,9 +344,19 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             const SizedBox(height: 4),
             TagSleepComparisonCard(
               database: widget.database,
-              sessions: current.sessions,
+              sessions: all,
               start: start,
               endExclusive: SleepAnalytics.nextPeriodStart(start, _period),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => TagSleepTrendsScreen(database: widget.database),
+                )),
+                icon: const Icon(Icons.show_chart_rounded),
+                label: const Text('Динамика закономерностей'),
+              ),
             ),
             const SizedBox(height: 14),
             ScreenTimeAnalysisCard(database: widget.database, sessions: current.sessions, periodLabel: _periodTitle(start)),
