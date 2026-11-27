@@ -21,6 +21,7 @@ import 'sleep_period_comparison_screen.dart';
 import 'tag_sleep_comparison_card.dart';
 import 'sleep_regularity_analysis.dart';
 import 'sleep_achievements_card.dart';
+import 'sleep_achievements_screen.dart';
 import 'audio_event_analysis_card.dart';
 import 'periodic_report_service.dart';
 import 'periodic_reports_screen.dart';
@@ -323,6 +324,16 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               endExclusive: SleepAnalytics.nextPeriodStart(start, _period),
             ),
             const SizedBox(height: 14),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => SleepAchievementsScreen(sessions: all),
+                )),
+                icon: const Icon(Icons.emoji_events_outlined),
+                label: const Text('Все достижения и рекорды'),
+              ),
+            ),
             SleepAchievementsCard(sessions: all),
             const SizedBox(height: 14),
             IndividualSleepNeedCard(database: widget.database),
