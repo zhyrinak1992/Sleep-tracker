@@ -642,7 +642,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
         children: [
-          const HomeEnvironmentCard(database: widget.database),
+          HomeEnvironmentCard(database: widget.database),
           const StorageWarningBanner(),
           if (_comparisonSuggestion != null) ...[
             const SizedBox(height: 12),
