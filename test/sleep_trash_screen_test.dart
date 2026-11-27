@@ -58,7 +58,14 @@ void main() {
         home: SleepTrashScreen(database: SleepDatabase.instance),
       ),
     );
-    await tester.pumpAndSettle();
+    // Use bounded pumps because the test binding may retain an indeterminate
+    // progress animation while the database Future resolves.
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+  }
+
+  Future<void> pumpUi(WidgetTester tester) async {
+    await tester.pump(const Duration(milliseconds: 350));
   }
 
   testWidgets(
@@ -71,21 +78,21 @@ void main() {
 
       expect(find.byType(Checkbox), findsNothing);
       await tester.tap(find.text('Выбрать записи'));
-      await tester.pumpAndSettle();
+      await pumpUi(tester);
 
       expect(find.byType(Checkbox), findsNWidgets(3));
       expect(find.text('Удалить выбранные (0)'), findsOneWidget);
 
       await tester.tap(find.byType(Checkbox).at(0));
-      await tester.pumpAndSettle();
+      await pumpUi(tester);
       expect(find.text('Удалить выбранные (1)'), findsOneWidget);
 
       await tester.tap(find.byType(Checkbox).at(1));
-      await tester.pumpAndSettle();
+      await pumpUi(tester);
       expect(find.text('Удалить выбранные (2)'), findsOneWidget);
 
       await tester.tap(find.byType(Checkbox).at(0));
-      await tester.pumpAndSettle();
+      await pumpUi(tester);
       expect(find.text('Удалить выбранные (1)'), findsOneWidget);
       expect(
         tester.widgetList<Checkbox>(find.byType(Checkbox))
@@ -94,7 +101,7 @@ void main() {
       );
 
       await tester.tap(find.text('Отмена выбора'));
-      await tester.pumpAndSettle();
+      await pumpUi(tester);
       expect(find.byType(Checkbox), findsNothing);
       expect(find.text('Выбрать записи'), findsOneWidget);
     },
