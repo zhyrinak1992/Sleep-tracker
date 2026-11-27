@@ -20,6 +20,14 @@ void main() {
       '${temporaryDirectory.path}/test.db',
     );
     await database.execute('''
+      CREATE TABLE sleep_sessions (
+        id TEXT PRIMARY KEY,
+        started_at TEXT NOT NULL,
+        ended_at TEXT,
+        deleted_at TEXT
+      )
+    ''');
+    await database.execute('''
       CREATE TABLE audio_events (
         id TEXT PRIMARY KEY,
         session_id TEXT,
@@ -41,6 +49,40 @@ void main() {
     if (await temporaryDirectory.exists()) {
       await temporaryDirectory.delete(recursive: true);
     }
+  });
+
+  test('audio event is linked only to the night interval containing its capture time', () async {
+    await database.insert('sleep_sessions', {
+      'id': 'night-before',
+      'started_at': DateTime.utc(2026, 11, 21, 21).toIso8601String(),
+      'ended_at': DateTime.utc(2026, 11, 22, 6).toIso8601String(),
+      'deleted_at': null,
+    });
+    await database.insert('sleep_sessions', {
+      'id': 'night-after',
+      'started_at': DateTime.utc(2026, 11, 22, 22).toIso8601String(),
+      'ended_at': null,
+      'deleted_at': null,
+    });
+    await database.insert('sleep_sessions', {
+      'id': 'deleted-night',
+      'started_at': DateTime.utc(2026, 11, 22, 12).toIso8601String(),
+      'ended_at': DateTime.utc(2026, 11, 22, 13).toIso8601String(),
+      'deleted_at': DateTime.utc(2026, 11, 23).toIso8601String(),
+    });
+
+    expect(
+      await SleepDatabase.instance.getSessionIdForTimestamp(DateTime.utc(2026, 11, 22, 2)),
+      'night-before',
+    );
+    expect(
+      await SleepDatabase.instance.getSessionIdForTimestamp(DateTime.utc(2026, 11, 23, 1)),
+      'night-after',
+    );
+    expect(
+      await SleepDatabase.instance.getSessionIdForTimestamp(DateTime.utc(2026, 11, 22, 15)),
+      isNull,
+    );
   });
 
   test('automatic classification never overwrites a manual correction', () async {
