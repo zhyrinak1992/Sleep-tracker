@@ -32,6 +32,9 @@ jobs:
       - name: Generate Android platform files in CI workspace
         run: flutter create --platforms=android --project-name sleep_tracker .
 
+      - name: Remove generated placeholder widget test
+        run: rm -f test/widget_test.dart
+
       - name: Resolve dependencies
         run: flutter pub get
 
