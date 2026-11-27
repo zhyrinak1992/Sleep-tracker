@@ -17,6 +17,7 @@ import '../diary/sleep_session_detail_screen.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/storage_warning_banner.dart';
+import 'home_environment_card.dart';
 
 class NightSessionScreen extends StatefulWidget {
   const NightSessionScreen({super.key, required this.database, required this.session});
@@ -641,37 +642,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 4, 4, 18),
-            child: Row(
-              children: [
-                const Icon(Icons.calendar_month_rounded, color: Color(0xFFE8C7F6), size: 19),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    DateFormat('EEEE, d MMMM', 'ru').format(now),
-                    style: const TextStyle(color: Color(0xFFE9E0F7), fontSize: 13,
-                      letterSpacing: .7, fontWeight: FontWeight.w600),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF211B43),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: const Color(0xFF9F80C8).withValues(alpha: .75)),
-                    boxShadow: [BoxShadow(color: const Color(0xFFB98CEB).withValues(alpha: .12), blurRadius: 18)],
-                  ),
-                  child: const Row(children: [
-                    Icon(Icons.nightlight_round, color: Color(0xFFFFD8A8), size: 15),
-                    SizedBox(width: 7),
-                    Text('РЕЖИМ СНА', style: TextStyle(color: Colors.white, fontSize: 10,
-                      letterSpacing: 1.1, fontWeight: FontWeight.w700)),
-                  ]),
-                ),
-              ],
-            ),
-          ),
+          const HomeEnvironmentCard(database: widget.database),
           const StorageWarningBanner(),
           if (_comparisonSuggestion != null) ...[
             const SizedBox(height: 12),
