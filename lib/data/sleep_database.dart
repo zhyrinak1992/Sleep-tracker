@@ -876,6 +876,23 @@ class SleepDatabase {
     return rows.isEmpty ? null : SleepSession.fromMap(rows.first);
   }
 
+  /// Finds the night whose recorded interval contains the actual event time.
+  /// Uses UTC instants and includes both interval boundaries. Returns null when
+  /// no single recorded night contains the event; never guesses by proximity.
+  Future<String?> getSessionIdForTimestamp(DateTime timestamp) async {
+    final db = await database;
+    final instant = timestamp.toUtc().toIso8601String();
+    final rows = await db.query(
+      'sleep_sessions',
+      columns: ['id'],
+      where: 'deleted_at IS NULL AND started_at <= ? AND (ended_at IS NULL OR ended_at >= ?)',
+      whereArgs: [instant, instant],
+      orderBy: 'started_at DESC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.single['id'] as String;
+  }
+
   Future<SleepSession?> getOpenSession() async {
     final db = await database;
     final rows = await db.query(
