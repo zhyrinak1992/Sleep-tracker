@@ -3,6 +3,7 @@ import 'package:disk_usage/disk_usage.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'sleep_database.dart';
+import 'storage_path_classifier.dart';
 
 class StorageSnapshot {
   const StorageSnapshot({
@@ -36,37 +37,78 @@ class StorageService {
 
   static const defaultWarningThreshold = 1024 * 1024 * 1024;
   static const thresholdMetadataKey = 'storage_warning_threshold_bytes';
+  static const allowedWarningThresholds = <int>{
+    500 * 1024 * 1024,
+    1024 * 1024 * 1024,
+    2 * 1024 * 1024 * 1024,
+  };
 
   Future<StorageSnapshot> measure() async {
     final documents = await getApplicationDocumentsDirectory();
     final support = await getApplicationSupportDirectory();
+    Directory? library;
+    try {
+      library = await getLibraryDirectory();
+    } catch (_) {
+      // Some non-Apple platforms do not expose a Library directory.
+    }
     final cache = await getApplicationCacheDirectory();
     final temporary = await getTemporaryDirectory();
 
-    final cacheBytes = await _directoryBytes(cache);
-    final temporaryBytes = await _directoryBytes(temporary);
-    final databaseBytes = await _databaseBytes(documents);
-    final audioBytes = await _directoryBytes(Directory(p.join(documents.path, 'audio_events')));
-    final reportBytes = await _extensionBytes(temporary, '.pdf');
-    final backupBytes = await _extensionBytes(temporary, '.stbackup');
-
     final uniqueDirectories = <String>[];
-    final candidates = [documents.path, support.path, cache.path, temporary.path]
+    final candidates = [documents.path, support.path, if (library != null) library.path, cache.path, temporary.path]
       ..sort((a, b) => a.length.compareTo(b.length));
     for (final candidate in candidates) {
       final normalized = p.normalize(p.absolute(candidate));
-      if (!uniqueDirectories.any((parent) => normalized == parent || p.isWithin(parent, normalized))) {
+      if (!uniqueDirectories.any((parent) =>
+          normalized == parent || p.isWithin(parent, normalized))) {
         uniqueDirectories.add(normalized);
       }
     }
-    var appBytes = 0;
-    for (final path in uniqueDirectories) {
-      appBytes += await _directoryBytes(Directory(path));
+
+    var databaseBytes = 0;
+    var audioBytes = 0;
+    var reportBytes = 0;
+    var backupBytes = 0;
+    var cacheBytes = 0;
+    var otherBytes = 0;
+    final seenFiles = <String>{};
+
+    for (final rootPath in uniqueDirectories) {
+      final root = Directory(rootPath);
+      if (!await root.exists()) continue;
+      await for (final entity in root.list(recursive: true, followLinks: false)) {
+        if (entity is! File) continue;
+        final normalized = p.normalize(p.absolute(entity.path));
+        if (!seenFiles.add(normalized)) continue;
+        final bytes = await _entityBytes(entity);
+        switch (StoragePathClassifier.classify(
+          filePath: normalized,
+          documentsPath: documents.path,
+          cachePath: cache.path,
+          temporaryPath: temporary.path,
+        )) {
+          case StorageFileCategory.database:
+            databaseBytes += bytes;
+          case StorageFileCategory.audio:
+            audioBytes += bytes;
+          case StorageFileCategory.report:
+            reportBytes += bytes;
+          case StorageFileCategory.backup:
+            backupBytes += bytes;
+          case StorageFileCategory.cache:
+            cacheBytes += bytes;
+          case StorageFileCategory.other:
+            otherBytes += bytes;
+        }
+      }
     }
 
-    final freeBytes = await _safeDiskValue(() => DiskUsage.freeSpace());
-    final totalDiskBytes = await _safeDiskValue(() => DiskUsage.totalSpace());
-    final otherBytes = (appBytes - databaseBytes - audioBytes - reportBytes - backupBytes - cacheBytes).clamp(0, appBytes).toInt();
+    final appBytes = databaseBytes + audioBytes + reportBytes +
+        backupBytes + cacheBytes + otherBytes;
+    final temporaryBytes = await _directoryBytes(temporary);
+    final freeBytes = await _safeDiskValue(() => DiskUsage.freeSpace(documents.path));
+    final totalDiskBytes = await _safeDiskValue(() => DiskUsage.totalSpace(documents.path));
 
     return StorageSnapshot(
       appBytes: appBytes,
@@ -94,12 +136,7 @@ class StorageService {
   }
 
   Future<void> setWarningThreshold(int bytes) async {
-    const allowed = {
-      500 * 1024 * 1024,
-      1024 * 1024 * 1024,
-      2 * 1024 * 1024 * 1024,
-    };
-    if (!allowed.contains(bytes)) {
+    if (!allowedWarningThresholds.contains(bytes)) {
       throw ArgumentError.value(bytes, 'bytes', 'Недопустимый порог предупреждения.');
     }
     await SleepDatabase.instance.setAppMetadata(thresholdMetadataKey, bytes.toString());
@@ -122,31 +159,6 @@ class StorageService {
       }
     }
     return removedBytes;
-  }
-
-  Future<int> _databaseBytes(Directory documents) async {
-    if (!await documents.exists()) return 0;
-    var total = 0;
-    await for (final entity in documents.list(followLinks: false)) {
-      final name = p.basename(entity.path);
-      if (name == 'sleep_tracker.sqlite' ||
-          name.startsWith('sleep_tracker.sqlite-') ||
-          name.startsWith('sleep_tracker.sqlite.')) {
-        total += await _entityBytes(entity);
-      }
-    }
-    return total;
-  }
-
-  Future<int> _extensionBytes(Directory directory, String extension) async {
-    if (!await directory.exists()) return 0;
-    var total = 0;
-    await for (final entity in directory.list(recursive: true, followLinks: false)) {
-      if (entity is File && p.extension(entity.path).toLowerCase() == extension) {
-        total += await _entityBytes(entity);
-      }
-    }
-    return total;
   }
 
   Future<int> _directoryBytes(Directory directory) async {
