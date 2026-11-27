@@ -50,6 +50,13 @@ if ($LASTEXITCODE -ne 0) {
     throw "Команда flutter create завершилась с ошибкой. Проверьте вывод Flutter."
 }
 
+# Flutter may create a generic sample test that does not belong to this app.
+# The iOS build workflow already excludes this generated placeholder.
+$placeholderTest = Join-Path $repoRoot "test/widget_test.dart"
+if (Test-Path $placeholderTest) {
+    Remove-Item $placeholderTest -Force
+}
+
 foreach ($relativePath in $before.Keys) {
     $fullPath = Join-Path $repoRoot $relativePath
     if (-not (Test-Path $fullPath)) {
