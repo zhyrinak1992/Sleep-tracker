@@ -15,15 +15,17 @@ import 'climate_trend_chart.dart';
 import 'daytime_sleep_card.dart';
 import 'activity_summary_card.dart';
 import 'activity_analysis_card.dart';
-import 'screen_time_analysis_card.dart';
 import 'weather_analysis_card.dart';
 import 'sleep_period_comparison_screen.dart';
 import 'tag_sleep_comparison_card.dart';
+import 'tag_sleep_trends_screen.dart';
 import 'sleep_regularity_analysis.dart';
-import 'sleep_achievements_card.dart';
 import 'audio_event_analysis_card.dart';
+import 'screen_time_analysis_card.dart';
 import 'periodic_report_service.dart';
 import 'periodic_reports_screen.dart';
+import '../health/health_day_tag_monthly_report.dart';
+import '../health/health_day_tag_monthly_reports_screen.dart';
 import 'sleep_dynamics_screen.dart';
 import 'sleep_forecast_screen.dart';
 import '../home/comparison_suggestion_history_screen.dart';
@@ -45,12 +47,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   @override
   void initState() {
     super.initState();
-    _future = widget.database.getSessions(limit: 10000);
+    _future = widget.database.getSessions(limit: null);
     unawaited(_generateClosedReports());
   }
 
   void _reload() {
-    setState(() => _future = widget.database.getSessions(limit: 10000));
+    setState(() => _future = widget.database.getSessions(limit: null));
     unawaited(_generateClosedReports());
   }
 
@@ -58,7 +60,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     try {
       await PeriodicReportService(widget.database).generateClosedReports();
     } catch (_) {
-      // Report generation must not block the primary analysis screen.
+      // Periodic report generation must not block the primary analysis screen.
+    }
+    try {
+      await HealthDayTagMonthlyReportService(widget.database).generateClosedReports();
+    } catch (_) {
+      // Health tag reports must not block the primary analysis screen.
     }
   }
 
@@ -70,7 +77,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   }
 
   DateTime _bucketStart(DateTime periodStart, int index) {
-    if (_period == AnalysisPeriod.week) return periodStart.add(Duration(days: index));
+    if (_period == AnalysisPeriod.week) return SleepAnalytics.addCalendarDays(periodStart, index);
     if (_period == AnalysisPeriod.month) {
       return DateTime(periodStart.year, periodStart.month, index * 7 + 1);
     }
@@ -78,7 +85,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   }
 
   DateTime _bucketEnd(DateTime periodStart, int index) {
-    if (_period == AnalysisPeriod.week) return periodStart.add(Duration(days: index + 1));
+    if (_period == AnalysisPeriod.week) return SleepAnalytics.addCalendarDays(periodStart, index + 1);
     if (_period == AnalysisPeriod.year) return DateTime(periodStart.year, index + 2);
     final next = DateTime(periodStart.year, periodStart.month, (index + 1) * 7 + 1);
     final monthEnd = DateTime(periodStart.year, periodStart.month + 1);
@@ -110,7 +117,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       return value == null ? 'Нет данных' : _duration(value);
     }
     String bucketTitle(DateTime start, DateTime end) =>
-      '${DateFormat('d MMM', 'ru').format(start)} — ${DateFormat('d MMM', 'ru').format(end.subtract(const Duration(days: 1)))}';
+      '${DateFormat('d MMM', 'ru').format(start)} — ${DateFormat('d MMM', 'ru').format(SleepAnalytics.addCalendarDays(end, -1))}';
 
     Widget sessionList(List<SleepSession> sessions) {
       if (sessions.isEmpty) return const Text('Нет завершённых записей', style: TextStyle(color: AppTheme.muted));
@@ -159,7 +166,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
   String _periodTitle(DateTime start) {
     if (_period == AnalysisPeriod.week) {
-      final end = start.add(const Duration(days: 6));
+      final end = SleepAnalytics.addCalendarDays(start, 6);
       return '${DateFormat('d MMM', 'ru').format(start)} — ${DateFormat('d MMM', 'ru').format(end)}';
     }
     if (_period == AnalysisPeriod.year) return start.year.toString();
@@ -233,6 +240,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             )),
             icon: const Icon(Icons.description_outlined),
             label: const Text('Периодические отчёты'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => HealthDayTagMonthlyReportsScreen(database: widget.database),
+            )),
+            icon: const Icon(Icons.event_note_rounded),
+            label: const Text('Месячные отчёты по дневным отметкам'),
           ),
           const SizedBox(height: 18),
           SegmentedButton<AnalysisPeriod>(
@@ -315,15 +329,25 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             // Регулярность оценивается по всей доступной истории, а не по выбранной неделе/месяцу:
             // иначе порог в 7 ночей недостижим для большинства недельных срезов.
             _RegularityCard(sessions: all, database: widget.database),
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
             TagSleepComparisonCard(
               database: widget.database,
-              sessions: current.sessions,
+              sessions: all,
               start: start,
               endExclusive: SleepAnalytics.nextPeriodStart(start, _period),
             ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => TagSleepTrendsScreen(database: widget.database),
+                )),
+                icon: const Icon(Icons.show_chart_rounded),
+                label: const Text('Динамика закономерностей'),
+              ),
+            ),
             const SizedBox(height: 14),
-            SleepAchievementsCard(sessions: all),
+            ScreenTimeAnalysisCard(database: widget.database, sessions: current.sessions, periodLabel: _periodTitle(start)),
             const SizedBox(height: 14),
             IndividualSleepNeedCard(database: widget.database),
             const SizedBox(height: 14),
@@ -332,8 +356,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             ActivitySummaryCard(database: widget.database),
             const SizedBox(height: 14),
             ActivityAnalysisCard(database: widget.database, sessions: current.sessions),
-            const SizedBox(height: 14),
-            ScreenTimeAnalysisCard(database: widget.database, sessions: current.sessions),
             const SizedBox(height: 14),
             WeatherAnalysisCard(database: widget.database, sessions: current.sessions),
             const SizedBox(height: 14),

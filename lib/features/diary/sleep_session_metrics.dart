@@ -33,6 +33,10 @@ class SleepSessionMetrics {
   final int awakeningCount;
   final Map<String, int> stageBreakdownMinutes;
 
+  /// Whether the source supplied any valid awake-stage interval.
+  /// A count of zero is meaningful only when this is true.
+  bool get hasAwakeSamples => stageBreakdownMinutes.containsKey('Бодрствование');
+
   static SleepSessionMetrics calculate({
     required SleepSession session,
     required List<Map<String, Object?>> stages,
@@ -101,12 +105,17 @@ class SleepSessionMetrics {
     final firstAwakening = awakeningCandidates.isEmpty
         ? null
         : awakeningCandidates.first;
-    final finalWake = actualEnd ?? bedEnd;
+    // A button press ends the recording interval; it is not proof of actual waking.
+    final finalWake = actualEnd;
     final coverage = inBed == null || inBed <= 0
         ? null
         : (coverageMinutes / inBed * 100).clamp(0, 100).toDouble();
+    final hasConfirmedSleepBoundaries =
+        session.actualSleepStartedAt != null &&
+        session.actualSleepEndedAt != null;
     final efficiency = inBed != null && inBed > 0 &&
-        awakeMinutes > 0 && coverage != null && coverage >= 80 &&
+        (awakeMinutes > 0 || hasConfirmedSleepBoundaries) &&
+        coverage != null && coverage >= 80 &&
         asleepMinutes > 0 && asleepMinutes <= inBed
         ? asleepMinutes / inBed * 100
         : null;
@@ -134,8 +143,11 @@ class SleepSessionMetrics {
   static bool _isAsleep(String stage) {
     if (_isAwake(stage)) return false;
     return stage.contains('сон') || stage.contains('asleep') ||
-        stage.contains('core') || stage.contains('deep') ||
-        stage.contains('light') || stage.contains('rem');
+        stage.contains('core') || stage.contains('основн') ||
+        stage.contains('deep') || stage.contains('глубок') ||
+        stage.contains('light') || stage.contains('лёгк') ||
+        stage.contains('легк') || stage.contains('rem') ||
+        stage.contains('быстр');
   }
 
   static int _mergedMinutes(List<_SleepInterval> intervals) =>

@@ -20,8 +20,16 @@ class _SleepTrashScreenState extends State<SleepTrashScreen> {
   @override
   void initState() { super.initState(); _items = widget.database.getTrashedSessions(); }
   Future<void> _reload() async {
-    setState(() => _items = widget.database.getTrashedSessions());
-    await NotificationService.instance.scheduleTrashExpiry(await widget.database.getTrashExpiryDates());
+    final items = await widget.database.getTrashedSessions();
+    final expiryDates = await widget.database.getTrashExpiryDates();
+    await NotificationService.instance.scheduleTrashExpiry(expiryDates);
+    if (!mounted) return;
+    final remainingIds = items.map((session) => session.id).toSet();
+    setState(() {
+      _items = Future.value(items);
+      _selectedIds.removeWhere((id) => !remainingIds.contains(id));
+      if (_selectedIds.isEmpty) _selectionMode = false;
+    });
   }
 
   Future<void> _restore(SleepSession session) async {

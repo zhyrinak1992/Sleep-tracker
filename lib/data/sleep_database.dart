@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
@@ -10,17 +11,33 @@ import '../models/sleep_note.dart';
 import 'sleep_change_history.dart';
 import 'comparison_suggestion_history_merge.dart';
 import 'backup_restore_planner.dart';
+import 'tag_insight_history_merge.dart';
 
 class SleepDatabase {
   SleepDatabase._();
   static final SleepDatabase instance = SleepDatabase._();
   static const _uuid = Uuid();
   Database? _db;
+  String? _databasePathForTesting;
+
+  /// Supplies an in-memory database to exercise real restore transactions in tests.
+  @visibleForTesting
+  void setDatabaseForTesting(Database? database) {
+    _db = database;
+  }
+
+  /// Uses a temporary on-disk path while exercising the real open/upgrade callbacks.
+  @visibleForTesting
+  void setDatabasePathForTesting(String? path) {
+    _databasePathForTesting = path;
+    _db = null;
+  }
 
   Future<Database> get database async {
     if (_db != null) return _db!;
-    final directory = await getApplicationDocumentsDirectory();
-    final dbPath = p.join(directory.path, 'sleep_tracker.sqlite');
+    final testPath = _databasePathForTesting;
+    final dbPath = testPath ??
+        p.join((await getApplicationDocumentsDirectory()).path, 'sleep_tracker.sqlite');
     _db = await openDatabase(
       dbPath,
       version: 8,
@@ -112,13 +129,13 @@ class SleepDatabase {
           await db.execute('CREATE INDEX idx_sleep_notes_updated ON sleep_notes(updated_at)');
           final legacyNotes = await db.query('sleep_sessions',
               columns: ['id', 'note', 'created_at', 'updated_at'],
-              where: 'note IS NOT NULL AND TRIM(note) <> ""');
+              where: "note IS NOT NULL AND TRIM(note) <> ''");
           for (final row in legacyNotes) {
             final now = DateTime.now().toUtc().toIso8601String();
             await db.insert('sleep_notes', {
               'id': _uuid.v4(),
               'session_id': row['id'],
-              'body': (row['note'] as String).trim(),
+              'body': row['note'] as String,
               'created_at': row['created_at'] ?? now,
               'updated_at': row['updated_at'] ?? now,
             });
@@ -361,6 +378,17 @@ class SleepDatabase {
             'key': key,
             'value': jsonEncode(mergedHistory),
           }, conflictAlgorithm: ConflictAlgorithm.replace);
+        } else if (key == TagInsightHistoryMerge.metadataKey) {
+          final localRaw = exists.isEmpty ? null : exists.first['value'] as String?;
+          final importedRaw = row['value'] as String? ?? '[]';
+          final mergedHistory = TagInsightHistoryMerge.merge(
+            local: TagInsightHistoryMerge.decode(localRaw, 'Локальная'),
+            imported: TagInsightHistoryMerge.decode(importedRaw, 'Резервная копия'),
+          );
+          await txn.insert('app_metadata', {
+            'key': key,
+            'value': jsonEncode(mergedHistory),
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
         } else if (key == 'comparison_suggestion_history_v1') {
           final localRaw = exists.isEmpty ? null : exists.first['value'] as String?;
           final importedRaw = row['value'] as String? ?? '[]';
@@ -565,13 +593,26 @@ class SleepDatabase {
   }
 
   Future<void> restoreSessionFromTrash(String sessionId) async {
-    final count = await (await database).update('sleep_sessions', {'deleted_at': null, 'updated_at': DateTime.now().toUtc().toIso8601String()}, where: 'id = ? AND deleted_at IS NOT NULL', whereArgs: [sessionId]);
-    if (count == 0) throw StateError('Запись не найдена в корзине.');
+    // Enforce the 30-day retention boundary even if the periodic cleanup
+    // timer has not run yet (for example, after a long period in the background).
+    await purgeExpiredTrash();
+    final count = await (await database).update(
+      'sleep_sessions',
+      {'deleted_at': null, 'updated_at': DateTime.now().toUtc().toIso8601String()},
+      where: 'id = ? AND deleted_at IS NOT NULL',
+      whereArgs: [sessionId],
+    );
+    if (count == 0) throw StateError('Запись не найдена в корзине или срок хранения истёк.');
   }
 
   Future<int> restoreAllTrashedSessions() async {
+    await purgeExpiredTrash();
     final now = DateTime.now().toUtc().toIso8601String();
-    return (await database).update('sleep_sessions', {'deleted_at': null, 'updated_at': now}, where: 'deleted_at IS NOT NULL');
+    return (await database).update(
+      'sleep_sessions',
+      {'deleted_at': null, 'updated_at': now},
+      where: 'deleted_at IS NOT NULL',
+    );
   }
 
   Future<void> permanentlyDeleteSession(String sessionId) => permanentlyDeleteSessions([sessionId]);
@@ -601,12 +642,18 @@ class SleepDatabase {
 
   Future<int> purgeExpiredTrash({DateTime? now}) async {
     final db = await database;
-    final cutoff = (now ?? DateTime.now()).toUtc().subtract(const Duration(days: 30)).toIso8601String();
+    final cutoff = (now ?? DateTime.now()).toUtc().subtract(const Duration(days: 30));
     final audioPaths = <String>[];
     var deletedCount = 0;
     await db.transaction((txn) async {
-      final expired = await txn.query('sleep_sessions', columns: ['id'], where: 'deleted_at IS NOT NULL AND deleted_at <= ?', whereArgs: [cutoff]);
-      for (final row in expired) {
+      final trashed = await txn.query(
+        'sleep_sessions',
+        columns: ['id', 'deleted_at'],
+        where: 'deleted_at IS NOT NULL',
+      );
+      for (final row in trashed) {
+        final deletedAt = DateTime.parse(row['deleted_at']! as String).toUtc();
+        if (deletedAt.isAfter(cutoff)) continue;
         final id = row['id']! as String;
         final audio = await txn.query('audio_events', columns: ['file_path'], where: 'session_id = ?', whereArgs: [id]);
         audioPaths.addAll(audio.map((item) => item['file_path']).whereType<String>());
@@ -618,11 +665,13 @@ class SleepDatabase {
   }
 
   Future<List<DateTime>> getTrashExpiryDates() async {
+    await purgeExpiredTrash();
     final rows = await (await database).query('sleep_sessions', columns: ['deleted_at'], where: 'deleted_at IS NOT NULL');
     return rows.map((row) => DateTime.parse(row['deleted_at']! as String).toLocal().add(const Duration(days: 30))).toList();
   }
 
   Future<List<SleepSession>> getTrashedSessions() async {
+    await purgeExpiredTrash();
     final rows = await (await database).query('sleep_sessions', where: 'deleted_at IS NOT NULL', orderBy: 'deleted_at DESC');
     return rows.map(SleepSession.fromMap).toList();
   }
@@ -762,7 +811,8 @@ class SleepDatabase {
     if (path is String && path.isNotEmpty) { try { await File(path).delete(); } catch (_) {} }
     await db.delete('audio_events', where: 'id = ?', whereArgs: [id]);
   }
-  Future<void> updateAudioClassification(String id, String category, double confidence) async => (await database).update('audio_events', {'category': category, 'confidence': confidence, 'user_corrected': 0}, where: 'id = ?', whereArgs: [id]);
+  /// Automatic classification must never overwrite a category corrected by the user.
+  Future<void> updateAudioClassification(String id, String category, double confidence) async => (await database).update('audio_events', {'category': category, 'confidence': confidence}, where: 'id = ? AND user_corrected = 0', whereArgs: [id]);
   Future<void> updateAudioCategory(String id, String category) async => (await database).update('audio_events', {'category': category, 'user_corrected': 1}, where: 'id = ?', whereArgs: [id]);
   /// Удаляет только аудиофайлы старше срока хранения; карточки событий
   /// остаются в БД для истории, статистики и резервного копирования.
@@ -826,6 +876,23 @@ class SleepDatabase {
     return rows.isEmpty ? null : SleepSession.fromMap(rows.first);
   }
 
+  /// Finds the night whose recorded interval contains the actual event time.
+  /// Uses UTC instants and includes both interval boundaries. Returns null when
+  /// no single recorded night contains the event; never guesses by proximity.
+  Future<String?> getSessionIdForTimestamp(DateTime timestamp) async {
+    final db = await database;
+    final instant = timestamp.toUtc().toIso8601String();
+    final rows = await db.query(
+      'sleep_sessions',
+      columns: ['id'],
+      where: 'deleted_at IS NULL AND started_at <= ? AND (ended_at IS NULL OR ended_at >= ?)',
+      whereArgs: [instant, instant],
+      orderBy: 'started_at DESC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.single['id'] as String;
+  }
+
   Future<SleepSession?> getOpenSession() async {
     final db = await database;
     final rows = await db.query(
@@ -837,7 +904,7 @@ class SleepDatabase {
     return rows.isEmpty ? null : SleepSession.fromMap(rows.first);
   }
 
-  Future<List<SleepSession>> getSessions({int limit = 100}) async {
+  Future<List<SleepSession>> getSessions({int? limit = 100}) async {
     final db = await database;
     final rows = await db.query(
       'sleep_sessions',
@@ -863,6 +930,30 @@ class SleepDatabase {
     final values = session.toMap()..['button_started_at'] = now.toUtc().toIso8601String();
     await db.insert('sleep_sessions', values);
     return session;
+  }
+
+  /// Removes a session created for a start attempt that never began recording.
+  /// Only an active session can be discarded; completed history is never removed.
+  Future<void> discardUnstartedSession(String id) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'sleep_sessions',
+        columns: ['id', 'ended_at'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      if (rows.single['ended_at'] != null) {
+        throw StateError('Нельзя отменить уже завершённую ночную сессию.');
+      }
+      await txn.delete(
+        'sleep_sessions',
+        where: 'id = ? AND ended_at IS NULL',
+        whereArgs: [id],
+      );
+    });
   }
 
   Future<SleepSession> finishSession(String id) async {

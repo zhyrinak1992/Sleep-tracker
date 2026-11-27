@@ -10,14 +10,29 @@ on:
       - 'pubspec.yaml'
       - 'pubspec.lock'
       - '.github/workflows/ios-unsigned-build.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'lib/**'
+      - 'assets/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.github/workflows/ios-unsigned-build.yml'
   workflow_dispatch:
+
+# Keep each pull-request build queued independently. A shared branch-level
+# group would cancel the previous pending macOS build whenever another commit
+# arrives, preventing the unsigned IPA from ever reaching a runner.
+concurrency:
+  group: ios-unsigned-${{ github.ref }}-${{ github.run_id }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
   build-ios:
-    runs-on: macos-15
+    runs-on: macos-15-intel
     steps:
       - name: Checkout source
         uses: actions/checkout@v5
@@ -44,6 +59,7 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Add :NSHealthShareUsageDescription string "Трекер сна считывает интервалы сна и доступные показатели из Apple Health для формирования дневника и аналитики."' ios/Runner/Info.plist
           /usr/libexec/PlistBuddy -c 'Add :NSHealthUpdateUsageDescription string "Разрешение записи в Apple Health не используется приложением; ключ добавлен для совместимости HealthKit."' ios/Runner/Info.plist
           /usr/libexec/PlistBuddy -c 'Add :NSMicrophoneUsageDescription string "Микрофон используется для обнаружения звуковых событий и сохранения отдельных аудиофрагментов во время ночного наблюдения."' ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c 'Add :NSLocationWhenInUseUsageDescription string "Геолокация используется только для определения текущей температуры на улице."' ios/Runner/Info.plist
           /usr/libexec/PlistBuddy -c 'Add :NSFaceIDUsageDescription string "Face ID используется для защиты личных данных о сне в приложении Sleep Tracker."' ios/Runner/Info.plist
           /usr/libexec/PlistBuddy -c 'Add :UIBackgroundModes array' ios/Runner/Info.plist
           /usr/libexec/PlistBuddy -c 'Add :UIBackgroundModes:0 string audio' ios/Runner/Info.plist
@@ -135,6 +151,7 @@ jobs:
                   if value.contains("laugh") { return "laugh" }
                   if value.contains("speech") || value.contains("talking") || value.contains("conversation") || value.contains("human voice") { return "speech" }
                   if value.contains("groan") || value.contains("moan") { return "groan" }
+                  if value.contains("sob") || value.contains("cry") { return "sobbing" }
                   if value.contains("noise") || value.contains("traffic") || value.contains("wind") { return "noise" }
                   return "unknown"
               }

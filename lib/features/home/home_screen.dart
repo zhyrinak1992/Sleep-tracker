@@ -8,6 +8,7 @@ import '../../data/sleep_database.dart';
 import '../../data/comparison_suggestion_store.dart';
 import '../../models/sleep_tag.dart';
 import '../analysis/tag_sleep_comparison.dart';
+import '../analysis/periodic_report_service.dart';
 import '../diary/sleep_session_metrics.dart';
 import 'comparison_suggestion_analyzer.dart';
 import 'comparison_suggestion_card.dart';
@@ -16,6 +17,7 @@ import '../diary/sleep_session_detail_screen.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/storage_warning_banner.dart';
+import 'home_environment_card.dart';
 
 class NightSessionScreen extends StatefulWidget {
   const NightSessionScreen({super.key, required this.database, required this.session});
@@ -238,6 +240,8 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   SleepSession? _open;
   SleepSession? _latest;
+  SleepSessionMetrics? _latestMetrics;
+  int _latestAudioEventCount = 0;
   bool _loading = true;
   bool _refreshing = false;
   bool _refreshRequested = false;
@@ -318,7 +322,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _refreshInternal() async {
     final open = await widget.database.getOpenSession();
-    final sessions = await widget.database.getSessions(limit: 10000);
+    final sessions = await widget.database.getSessions(limit: null);
+    SleepSessionMetrics? latestMetrics;
+    var latestAudioEventCount = 0;
+    if (sessions.isNotEmpty) {
+      final latest = sessions.first;
+      final latestEvents = await widget.database.getAudioEvents(sessionId: latest.id);
+      latestAudioEventCount = latestEvents.length;
+      if (!latest.isOpen) {
+        final latestStages = await widget.database.getStages(latest.id);
+        latestMetrics = SleepSessionMetrics.calculate(
+          session: latest,
+          stages: latestStages,
+        );
+      }
+    }
     ComparisonSuggestionRecord? suggestion;
     Map<String, String> labels = const {};
     try {
@@ -335,15 +353,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final awakenings = <String, int>{};
       for (final session in relevant) {
         final rows = stages[session.id] ?? const <Map<String, Object?>>[];
-        final hasAwakeSamples = rows.any((row) {
-          final stage = (row['stage'] as String? ?? '').toLowerCase();
-          return stage.contains('бодрств') || stage == 'awake' || stage.contains('awake');
-        });
-        if (hasAwakeSamples) {
-          awakenings[session.id] = SleepSessionMetrics.calculate(
-            session: session,
-            stages: rows,
-          ).awakeningCount;
+        final metrics = SleepSessionMetrics.calculate(
+          session: session,
+          stages: rows,
+        );
+        // A zero awakening count is meaningful only with confirmed awake
+        // samples and sufficient stage coverage.
+        if (metrics.hasAwakeSamples &&
+            metrics.stageCoveragePercent != null &&
+            metrics.stageCoveragePercent! >= 80) {
+          awakenings[session.id] = metrics.awakeningCount;
         }
       }
       final customTags = await CustomSleepTagStore(
@@ -376,6 +395,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     setState(() {
       _open = open;
       _latest = sessions.isEmpty ? null : sessions.first;
+      _latestMetrics = latestMetrics;
+      _latestAudioEventCount = latestAudioEventCount;
       _comparisonSuggestion = suggestion;
       _suggestionTagLabels = labels;
       _loading = false;
@@ -419,7 +440,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           // "recording" session in the diary.
           await AudioObservationService.instance.startObservation();
         } catch (audioError) {
-          await widget.database.finishSession(session.id);
+          await widget.database.discardUnstartedSession(session.id);
           // Starting the night cancels queued reminders. If microphone
           // permission or recorder startup fails, restore the reminder queue.
           await NotificationService.instance.scheduleNightReminders();
@@ -562,6 +583,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (!mounted) { comment.dispose(); return; }
     if (result == 'skip') {
       await widget.database.saveMorningReport(sessionId: session.id, wellbeing: null, quality: null, answersJson: jsonEncode({'skipped': true}));
+      await _refreshTagInsightHistoryAfterMorningReport(session.id);
       comment.dispose();
       await _refresh();
       return;
@@ -572,9 +594,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       answersJson: jsonEncode({'wellbeing': wellbeing, 'sleepQuality': quality, 'sleepiness': sleepiness, 'comment': comment.text.trim(), 'skipped': false}),
     );
     await widget.database.updateMorningRating(session.id, wellbeing);
+    await _refreshTagInsightHistoryAfterMorningReport(session.id);
     comment.dispose();
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Утренний отчёт сохранён.')));
     await _refresh();
+  }
+
+  Future<void> _refreshTagInsightHistoryAfterMorningReport(String sessionId) async {
+    try {
+      await PeriodicReportService(
+        widget.database,
+      ).refreshCurrentTagInsightHistory(sessionId: sessionId);
+    } catch (_) {
+      // The morning report is already saved; analytics must not undo or block it.
+    }
   }
 
   String _duration(Duration? duration) {
@@ -583,6 +616,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final minutes = duration.inMinutes.remainder(60);
     return '$hours ч ${minutes.toString().padLeft(2, '0')} мин';
   }
+
+  String _sleepMinutes(int? minutes) {
+    if (minutes == null || minutes <= 0) return 'Нет достоверных данных';
+    return '${minutes ~/ 60} ч ${minutes.remainder(60).toString().padLeft(2, '0')} мин';
+  }
+
+  String _sleepTime(DateTime? value) => value == null
+      ? 'Нет подтверждённых данных'
+      : DateFormat('HH:mm').format(value);
 
   @override
   void dispose() {
@@ -600,37 +642,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 4, 4, 18),
-            child: Row(
-              children: [
-                const Icon(Icons.calendar_month_rounded, color: Color(0xFFE8C7F6), size: 19),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    DateFormat('EEEE, d MMMM', 'ru').format(now),
-                    style: const TextStyle(color: Color(0xFFE9E0F7), fontSize: 13,
-                      letterSpacing: .7, fontWeight: FontWeight.w600),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF211B43),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: const Color(0xFF9F80C8).withValues(alpha: .75)),
-                    boxShadow: [BoxShadow(color: const Color(0xFFB98CEB).withValues(alpha: .12), blurRadius: 18)],
-                  ),
-                  child: const Row(children: [
-                    Icon(Icons.nightlight_round, color: Color(0xFFFFD8A8), size: 15),
-                    SizedBox(width: 7),
-                    Text('РЕЖИМ СНА', style: TextStyle(color: Colors.white, fontSize: 10,
-                      letterSpacing: 1.1, fontWeight: FontWeight.w700)),
-                  ]),
-                ),
-              ],
-            ),
-          ),
+          HomeEnvironmentCard(database: widget.database),
           const StorageWarningBanner(),
           if (_comparisonSuggestion != null) ...[
             const SizedBox(height: 12),
@@ -826,13 +838,61 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       Text(DateFormat('d MMMM yyyy, HH:mm').format(_latest!.startedAt),
                         style: const TextStyle(color: AppTheme.muted)),
                       const SizedBox(height: 10),
-                      Text(_latest!.isOpen ? 'Наблюдение продолжается' : _duration(_latest!.duration),
-                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                      Text(
+                        _latest!.isOpen
+                            ? 'Наблюдение продолжается'
+                            : _sleepMinutes(_latestMetrics?.sleepDurationMinutes),
+                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'В постели: ${_duration(_latest!.duration)}',
+                        style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 18,
+                        runSpacing: 8,
+                        children: [
+                          _LatestSleepFact(
+                            label: 'Засыпание',
+                            value: _sleepTime(
+                              _latestMetrics?.sleepOnsetAt ?? _latest!.actualSleepStartedAt,
+                            ),
+                          ),
+                          _LatestSleepFact(
+                            label: 'Пробуждение',
+                            value: _sleepTime(
+                              _latestMetrics?.sleepEndAt ?? _latest!.actualSleepEndedAt,
+                            ),
+                          ),
+                          _LatestSleepFact(
+                            label: 'Звуковые события',
+                            value: _latestAudioEventCount.toString(),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 8),
                       Text(_latest!.morningRating == null
                         ? 'Утренняя оценка ещё не добавлена'
                         : 'Самочувствие: ${_latest!.morningRating}/5',
                         style: const TextStyle(color: AppTheme.muted)),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => SleepSessionDetailScreen(
+                                database: widget.database,
+                                session: _latest!,
+                              ),
+                            ),
+                          ).then((_) => _refresh()),
+                          icon: const Icon(Icons.open_in_new, size: 16),
+                          label: const Text('Подробный отчёт'),
+                        ),
+                      ),
                     ],
                   ),
           ),
@@ -859,6 +919,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ),
     );
   }
+}
+
+class _LatestSleepFact extends StatelessWidget {
+  const _LatestSleepFact({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+      const SizedBox(height: 3),
+      Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+    ],
+  );
 }
 
 class _PremiumSleepPainter extends CustomPainter {

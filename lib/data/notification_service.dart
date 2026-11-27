@@ -53,6 +53,36 @@ class NotificationService {
       ));
   }
 
+  Future<void> healthDayTagMonthlyReportReady(String monthKey) async {
+    await initialize();
+    const monthNames = [
+      'январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
+      'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь',
+    ];
+    final parts = monthKey.split('-');
+    final month = parts.length == 2 ? int.tryParse(parts[1]) : null;
+    final monthLabel = month != null && month >= 1 && month <= 12 && parts.length == 2
+        ? '${monthNames[month - 1]} ${parts[0]}'
+        : monthKey;
+    final numericMonth = int.tryParse(monthKey.replaceAll('-', '')) ?? 0;
+    final notificationId = 6200000 + numericMonth;
+    await _plugin.show(
+      notificationId,
+      'Месячный отчёт по отметкам готов',
+      'Сохранён обзор дневных отметок за $monthLabel. Откройте «Моё здоровье», чтобы посмотреть частоту и изменения.',
+      const NotificationDetails(
+        iOS: DarwinNotificationDetails(presentAlert: true, presentSound: true),
+        android: AndroidNotificationDetails(
+          'health_tag_reports',
+          'Отчёты по дневным отметкам',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+        ),
+      ),
+      payload: 'health_day_tag_month:$monthKey',
+    );
+  }
+
   // Three rolling days keep 42 night reminders below iOS's pending
   // local-notification limit while leaving room for other app notifications.
   static const int _nightReminderBaseId = 5000;
@@ -65,8 +95,21 @@ class NotificationService {
   static int _nightReminderId(int dayOffset, int slotIndex) =>
       _nightReminderBaseId + dayOffset * 20 + slotIndex;
 
+  /// A partial queue is intentional: the user may have skipped one attempt or
+  /// deferred it. Rebuilding it on every app resume would silently undo that
+  /// choice. Refill only after the current rolling queue has fully expired.
+  static bool hasPendingNightReminderIds(Iterable<int> ids) => ids.any(
+    (id) => id == _deferredSleepOfferId ||
+        (id >= _nightReminderBaseId &&
+            id < _nightReminderBaseId + _nightReminderDays * 20),
+  );
+
   Future<void> scheduleNightReminders() async {
     await initialize();
+    final pending = await _plugin.pendingNotificationRequests();
+    if (hasPendingNightReminderIds(pending.map((request) => request.id))) {
+      return;
+    }
     await cancelNightReminders();
     final now = tz.TZDateTime.now(tz.local);
     for (var dayOffset = 0; dayOffset < _nightReminderDays; dayOffset++) {

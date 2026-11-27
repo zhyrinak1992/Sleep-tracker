@@ -19,6 +19,13 @@ SleepSession _session({
 
 void main() {
   group('TagSleepComparison', () {
+    test('labels trend difference axes with the selected metric units', () {
+      expect(
+        TagSleepMetric.values.map((metric) => metric.differenceAxisLabel),
+        ['Разница, мин', 'Разница, %', 'Разница, мин', 'Разница, из 5', 'Разница, эпизодов'],
+      );
+    });
+
     final start = DateTime(2026, 11, 1);
     final end = DateTime(2026, 12, 1);
 
@@ -51,6 +58,39 @@ void main() {
       expect(result.difference, 60);
     });
 
+    test('excludes soft-deleted nights from both comparison groups', () {
+      final sessions = <SleepSession>[
+        for (var i = 0; i < 4; i++)
+          _session(id: 'tag-$i', start: start.add(Duration(days: i))),
+        for (var i = 0; i < 4; i++)
+          _session(id: 'plain-$i', start: start.add(Duration(days: i + 5))),
+        SleepSession(
+          id: 'deleted-tag',
+          startedAt: start.add(const Duration(days: 12)),
+          endedAt: start.add(const Duration(days: 13)),
+          source: 'apple_health:Apple Watch',
+          deletedAt: DateTime(2026, 11, 20),
+        ),
+      ];
+      final tags = <String, Set<String>>{
+        for (var i = 0; i < 4; i++) 'tag-$i': {'caffeine'},
+        'deleted-tag': {'caffeine'},
+      };
+
+      final result = TagSleepComparison.calculate(
+        sessions: sessions,
+        tagsBySession: tags,
+        tagKeys: {'caffeine'},
+        start: start,
+        endExclusive: end,
+        metric: TagSleepMetric.sleepDuration,
+      );
+
+      expect(result.withTag.nights, 4);
+      expect(result.withoutTag.nights, 4);
+      expect(result.withTag.sessionIds, isNot(contains('deleted-tag')));
+    });
+
     test('requires every selected tag to be present for a combined comparison', () {
       final sessions = <SleepSession>[
         for (var i = 0; i < 4; i++)
@@ -79,6 +119,107 @@ void main() {
       expect(result.withTag.average, 450);
       expect(result.withoutTag.average, 405);
       expect(result.difference, 45);
+    });
+
+    test('compares efficiency and sleep latency only when actual metrics are available', () {
+      final sessions = <SleepSession>[
+        for (var i = 0; i < 4; i++)
+          _session(id: 'tag-$i', start: start.add(Duration(days: i))),
+        for (var i = 0; i < 4; i++)
+          _session(id: 'plain-$i', start: start.add(Duration(days: i + 5))),
+        _session(id: 'missing-efficiency', start: start.add(const Duration(days: 12))),
+      ];
+      final tags = <String, Set<String>>{
+        for (var i = 0; i < 4; i++) 'tag-$i': {'caffeine'},
+      };
+      final efficiency = <String, double>{
+        for (var i = 0; i < 4; i++) 'tag-$i': 82,
+        for (var i = 0; i < 4; i++) 'plain-$i': 90,
+      };
+      final latency = <String, int>{
+        for (var i = 0; i < 4; i++) 'tag-$i': 28,
+        for (var i = 0; i < 4; i++) 'plain-$i': 16,
+      };
+
+      final efficiencyResult = TagSleepComparison.calculate(
+        sessions: sessions,
+        tagsBySession: tags,
+        tagKeys: {'caffeine'},
+        start: start,
+        endExclusive: end,
+        metric: TagSleepMetric.sleepEfficiency,
+        efficiencyBySession: efficiency,
+      );
+      final latencyResult = TagSleepComparison.calculate(
+        sessions: sessions,
+        tagsBySession: tags,
+        tagKeys: {'caffeine'},
+        start: start,
+        endExclusive: end,
+        metric: TagSleepMetric.sleepLatency,
+        sleepLatencyBySession: latency,
+      );
+
+      expect(efficiencyResult.isSufficient, isTrue);
+      expect(efficiencyResult.withTag.average, 82);
+      expect(efficiencyResult.withoutTag.average, 90);
+      expect(efficiencyResult.difference, -8);
+      expect(latencyResult.isSufficient, isTrue);
+      expect(latencyResult.withTag.average, 28);
+      expect(latencyResult.withoutTag.average, 16);
+      expect(latencyResult.difference, 12);
+    });
+
+    test('excludes out-of-range and non-integral metric values', () {
+      final sessions = <SleepSession>[
+        for (var i = 0; i < 4; i++)
+          _session(id: 'tag-$i', start: start.add(Duration(days: i))),
+        for (var i = 0; i < 4; i++)
+          _session(id: 'plain-$i', start: start.add(Duration(days: i + 5))),
+      ];
+      final tags = <String, Set<String>>{
+        for (var i = 0; i < 4; i++) 'tag-$i': {'caffeine'},
+      };
+      final efficiency = <String, double>{
+        'tag-0': 85,
+        'tag-1': 90,
+        'tag-2': -1,
+        'tag-3': 101,
+        for (var i = 0; i < 4; i++) 'plain-$i': 92,
+      };
+      final latency = <String, int>{
+        'tag-0': 20,
+        'tag-1': 30,
+        'tag-2': -1,
+        'tag-3': 1441,
+        for (var i = 0; i < 4; i++) 'plain-$i': 15,
+      };
+
+      final efficiencyResult = TagSleepComparison.calculate(
+        sessions: sessions,
+        tagsBySession: tags,
+        tagKeys: {'caffeine'},
+        start: start,
+        endExclusive: end,
+        metric: TagSleepMetric.sleepEfficiency,
+        efficiencyBySession: efficiency,
+      );
+      final latencyResult = TagSleepComparison.calculate(
+        sessions: sessions,
+        tagsBySession: tags,
+        tagKeys: {'caffeine'},
+        start: start,
+        endExclusive: end,
+        metric: TagSleepMetric.sleepLatency,
+        sleepLatencyBySession: latency,
+      );
+
+      expect(efficiencyResult.withTag.nights, 2);
+      expect(efficiencyResult.withTag.average, 87.5);
+      expect(efficiencyResult.isSufficient, isFalse);
+      expect(latencyResult.withTag.nights, 2);
+      expect(latencyResult.withTag.average, 25);
+      expect(latencyResult.isSufficient, isFalse);
     });
 
     test('does not treat manual button times as actual sleep duration', () {

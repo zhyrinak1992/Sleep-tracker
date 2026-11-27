@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../data/sleep_database.dart';
 import '../../models/sleep_session.dart';
@@ -49,8 +50,17 @@ class _AudioEventAnalysisCardState extends State<AudioEventAnalysisCard> {
     return '$minutes мин ${remainder.toString().padLeft(2, '0')} с';
   }
 
-  String _categoryLabel(String value) =>
-      value == 'unknown' ? 'Неопределённый звук' : value;
+  String _categoryLabel(String value) => switch (value) {
+    'snore' || 'snoring' => 'Храп',
+    'speech' || 'talking' => 'Разговоры во сне',
+    'cough' => 'Кашель',
+    'laugh' || 'laughter' => 'Смех',
+    'groan' || 'moan' => 'Стоны',
+    'sobbing' || 'crying' => 'Всхлипывания',
+    'noise' => 'Другие звуки',
+    'unknown' => 'Неопределённый звук',
+    _ => value,
+  };
 
   @override
   Widget build(BuildContext context) => FutureBuilder<List<Map<String, Object?>>>(
@@ -65,6 +75,7 @@ class _AudioEventAnalysisCardState extends State<AudioEventAnalysisCard> {
       final events = snapshot.data ?? const <Map<String, Object?>>[];
       final currentIds = widget.currentSessions.map((item) => item.id).toSet();
       final previousIds = widget.previousSessions.map((item) => item.id).toSet();
+      final sessionsById = {for (final session in widget.currentSessions) session.id: session};
       final current = AudioEventPeriodSummary.summarize(events: events, sessionIds: currentIds);
       final previous = AudioEventPeriodSummary.summarize(events: events, sessionIds: previousIds);
       if (current.eventCount == 0 && previous.eventCount == 0) {
@@ -102,14 +113,50 @@ class _AudioEventAnalysisCardState extends State<AudioEventAnalysisCard> {
           ]),
           const SizedBox(height: 8),
           for (final category in categories)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 3),
-              child: Row(children: [
-                Expanded(child: Text(_categoryLabel(category), style: const TextStyle(color: AppTheme.muted))),
-                Text('${current.categoryCounts[category] ?? 0}', style: const TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(width: 8),
-                SizedBox(width: 66, child: Text('пред. ${previous.categoryCounts[category] ?? 0}', textAlign: TextAlign.end, style: const TextStyle(color: AppTheme.muted, fontSize: 11))),
-              ]),
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(left: 8, bottom: 6),
+              title: Text(_categoryLabel(category), style: const TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: Text(
+                'Сейчас: ${current.categoryCounts[category] ?? 0} · ${_duration(current.categoryDurationMs[category] ?? 0)}'
+                '   Пред.: ${previous.categoryCounts[category] ?? 0} · ${_duration(previous.categoryDurationMs[category] ?? 0)}',
+                style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+              ),
+              children: [
+                if ((current.categoryEvents[category] ?? const []).isEmpty)
+                  const ListTile(
+                    dense: true,
+                    title: Text('В выбранном периоде событий этой категории нет.',
+                      style: TextStyle(color: AppTheme.muted, fontSize: 12)),
+                  )
+                else
+                  ...(current.categoryEvents[category] ?? const []).map((event) {
+                    final captured = DateTime.tryParse(event['captured_at'] as String? ?? '');
+                    final sessionId = event['session_id'] as String?;
+                    final session = sessionId == null ? null : sessionsById[sessionId];
+                    final rawDuration = event['duration_ms'];
+                    final duration = rawDuration is int && rawDuration > 0 ? rawDuration : 0;
+                    final confidence = event['confidence'];
+                    final corrected = event['user_corrected'] == 1;
+                    final details = <String>[
+                      if (session != null) 'Ночь ${DateFormat('dd.MM.yyyy').format(session.startedAt)}',
+                      _duration(duration),
+                      if (confidence is num && confidence.isFinite && !corrected)
+                        'уверенность ${(confidence * 100).round()}%',
+                      if (corrected) 'категория исправлена вручную',
+                    ];
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        captured == null ? 'Время события не указано' : DateFormat('dd.MM.yyyy · HH:mm').format(captured.toLocal()),
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      subtitle: Text(details.join(' · '),
+                        style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+                    );
+                  }),
+              ],
             ),
           const SizedBox(height: 8),
           const Text('Длительность рассчитывается по метаданным зарегистрированных коротких сегментов, а не по общему времени работы микрофона. Сами аудиофайлы хранятся 7 дней; статистика событий остаётся в истории. Категории берутся из фактических меток классификатора.', style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4)),

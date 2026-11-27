@@ -48,7 +48,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
   }
 
   Future<_DynamicsData> _load() async {
-    final sessions = await widget.database.getSessions(limit: 10000);
+    final sessions = await widget.database.getSessions(limit: null);
     final ids = sessions.where((s) => s.endedAt != null).map((s) => s.id).toList();
     final stages = await widget.database.getStagesForSessions(ids);
     final morning = await widget.database.getMorningReportsForSessions(ids);
@@ -163,7 +163,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
 
   String _periodTitle(DateTime start) {
     if (_period == SleepDynamicsPeriod.week) {
-      final end = start.add(const Duration(days: 6));
+      final end = SleepDynamicsAnalysis.addCalendarDays(start, 6);
       return DateFormat('d MMM', 'ru').format(start) + ' — ' + DateFormat('d MMM yyyy', 'ru').format(end);
     }
     if (_period == SleepDynamicsPeriod.month) return DateFormat('LLLL yyyy', 'ru').format(start);
@@ -198,7 +198,7 @@ class _SleepDynamicsScreenState extends State<SleepDynamicsScreen> {
 
   String _dateRange(DateTime start, DateTime endExclusive) =>
     DateFormat('d MMM', 'ru').format(start) + ' — ' +
-    DateFormat('d MMM yyyy', 'ru').format(endExclusive.subtract(const Duration(days: 1)));
+    DateFormat('d MMM yyyy', 'ru').format(SleepDynamicsAnalysis.addCalendarDays(endExclusive, -1));
 
   Future<void> _exportDynamics(
     _DynamicsData data,

@@ -90,6 +90,25 @@ void main() {
       }
     });
 
+    test('formats inclusive dates using local calendar arithmetic across DST', () {
+      expect(
+        SleepDynamicsAnalysis.addCalendarDays(DateTime(2026, 3, 23), 6),
+        DateTime(2026, 3, 29),
+      );
+      expect(
+        SleepDynamicsAnalysis.addCalendarDays(DateTime(2026, 3, 30), -1),
+        DateTime(2026, 3, 29),
+      );
+      expect(
+        SleepDynamicsAnalysis.addCalendarDays(DateTime(2026, 10, 26), 6),
+        DateTime(2026, 11, 1),
+      );
+      expect(
+        SleepDynamicsAnalysis.addCalendarDays(DateTime(2026, 11, 1), -1),
+        DateTime(2026, 10, 31),
+      );
+    });
+
     test('keeps weekly chart bucket boundaries at local midnight across DST', () {
       final week = SleepDynamicsAnalysis.bucketRange(
         DateTime(2026, 3, 23), SleepDynamicsPeriod.week, 6);

@@ -11,6 +11,7 @@ import 'sleep_database.dart';
 import 'backup_crypto.dart';
 import 'backup_manifest.dart';
 import 'backup_restore_planner.dart';
+import 'tag_insight_history_merge.dart';
 
 /// Ручной перенос локальной базы Sleep Tracker в переносимый JSON-файл.
 /// Восстановление полностью заменяет текущие данные и выполняется транзакционно.
@@ -18,10 +19,32 @@ class BackupService {
   BackupService._();
   static final BackupService instance = BackupService._();
 
+  static String audioExtensionForRestore(String? originalPath) {
+    final extension = originalPath == null ? '' : p.extension(originalPath);
+    if (extension.length < 2 || extension.length > 9) return '.audio';
+    final valid = extension.substring(1).codeUnits.every((unit) =>
+        (unit >= 48 && unit <= 57) ||
+        (unit >= 65 && unit <= 90) ||
+        (unit >= 97 && unit <= 122));
+    return valid ? extension : '.audio';
+  }
+
+  static Future<File> writeAudioBytesForRestore({
+    required String destinationPath,
+    required List<int> bytes,
+  }) async {
+    final file = File(destinationPath);
+    await file.writeAsBytes(bytes, flush: true);
+    return file;
+  }
+
   static const format = 'sleep_tracker_backup';
   static const formatVersion = 5;
 
-  Future<void> exportToFiles({String? password}) async {
+  static List<int> encodeExportDocument(Map<String, Object?> document) =>
+      utf8.encode(const JsonEncoder.withIndent('  ').convert(document));
+
+  Future<void> exportToFiles() async {
     final snapshot = await SleepDatabase.instance.exportSnapshot();
     final audioRows = (snapshot['audio_events'] as List).cast<Map<String, Object?>>();
     var audioBytesTotal = 0;
@@ -47,22 +70,18 @@ class BackupService {
       'manifest': manifest,
       'data': snapshot,
     };
-    final plaintext = const JsonEncoder.withIndent('  ').convert(document);
-    final encrypted = password != null && password.isNotEmpty;
-    final outputBytes = encrypted
-        ? await BackupCrypto.encryptDocument(plaintext: plaintext, password: password)
-        : utf8.encode(plaintext);
+    // TЗ v258 (decision v256): new manual exports do not require a separate password.
+    // Integrity is checked by the manifest and SHA-256 digests for audio attachments.
+    final outputBytes = encodeExportDocument(document);
     final temp = await getTemporaryDirectory();
     final stamp = DateTime.now().toIso8601String().replaceAll(':', '-').split('.').first;
-    final extension = encrypted ? 'stbackup' : 'sleepbackup';
+    const extension = 'sleepbackup';
     final file = File(p.join(temp.path, 'SleepTracker-backup-$stamp.$extension'));
     await file.writeAsBytes(outputBytes, flush: true);
     await Share.shareXFiles(
       [XFile(file.path, mimeType: 'application/octet-stream', name: p.basename(file.path))],
       subject: 'Резервная копия Sleep Tracker',
-      text: encrypted
-          ? 'Зашифрованная резервная копия. Для восстановления потребуется заданный пароль.'
-          : 'Резервная копия Sleep Tracker. Дополнительный пароль не требуется.',
+      text: 'Переносимая резервная копия Sleep Tracker. Отдельный пароль не требуется.',
     );
   }
 
@@ -104,6 +123,7 @@ class BackupService {
     _validateAudioArchive(data, decoded['formatVersion'] as int);
     _validateSleepChangeHistory(data);
     _validateComparisonSuggestionHistory(data);
+    TagInsightHistoryMerge.validateBackupMetadata(data);
     final availableBytes = await _availableStorageBytes();
     final impact = await SleepDatabase.instance.previewRestoreImpact(
       data,
@@ -199,7 +219,7 @@ class BackupService {
     }
   }
 
-  Future<BackupImportResult> restorePreparedBackup({required BackupImportDraft draft, required bool merge}) async {
+  Future<BackupImportResult> restorePreparedBackup({required BackupImportDraft draft, required bool merge, Directory? documentsDirectoryForTesting}) async {
     final data = jsonDecode(jsonEncode(draft.data)) as Map<String, dynamic>;
     final freshImpact = await SleepDatabase.instance.previewRestoreImpact(
       data,
@@ -221,7 +241,7 @@ class BackupService {
     final audioRows = ((data['audio_events'] as List?) ?? const [])
         .map((row) => Map<String, dynamic>.from(row as Map)).toList();
 
-    final docs = await getApplicationDocumentsDirectory();
+    final docs = documentsDirectoryForTesting ?? await getApplicationDocumentsDirectory();
     final audioDir = Directory(p.join(docs.path, 'audio_events'));
     await audioDir.create(recursive: true);
     final createdFiles = <File>[];
@@ -238,13 +258,18 @@ class BackupService {
         }
         final audioBytes = base64Decode(encoded as String);
         final originalPath = row['file_path'];
-        final extension = originalPath is String ? p.extension(originalPath) : '';
-        final safeExtension = RegExp(r'^\\.[a-zA-Z0-9]{1,8}$').hasMatch(extension) ? extension : '.audio';
+        final safeExtension = audioExtensionForRestore(
+          originalPath is String ? originalPath : null,
+        );
         final id = row['id'] as String;
         final restored = File(p.join(audioDir.path,
           'restored_${DateTime.now().microsecondsSinceEpoch}_${i}_${id.hashCode.abs()}$safeExtension'));
-        await restored.writeAsBytes(audioBytes, flush: true);
+        // Track the destination before writing so a partial write is also cleaned up.
         createdFiles.add(restored);
+        await writeAudioBytesForRestore(
+          destinationPath: restored.path,
+          bytes: audioBytes,
+        );
         row['file_path'] = restored.path;
         restoredRows.add(row);
       }
@@ -278,6 +303,18 @@ class BackupService {
 
 class BackupImportDraft {
   BackupImportDraft._({required this.document, required this.data, required this.preview, required this.impact});
+
+  factory BackupImportDraft.forTesting({
+    required Map<String, dynamic> document,
+    required Map<String, dynamic> data,
+    required BackupImportPreview preview,
+    required BackupRestoreImpact impact,
+  }) => BackupImportDraft._(
+    document: document,
+    data: data,
+    preview: preview,
+    impact: impact,
+  );
   final Map<String, dynamic> document;
   final Map<String, dynamic> data;
   final BackupImportPreview preview;

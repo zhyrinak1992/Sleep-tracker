@@ -17,6 +17,7 @@ void main() {
     expect(summary.nightsWithEvents, 2);
     expect(summary.savedDurationMs, 2500);
     expect(summary.categoryCounts, {'snoring': 2, 'unknown': 1});
+    expect(summary.categoryDurationMs, {'snoring': 2000, 'unknown': 500});
   });
 
   test('handles missing categories and invalid durations without inventing events', () {
@@ -31,6 +32,24 @@ void main() {
     expect(summary.nightsWithEvents, 1);
     expect(summary.savedDurationMs, 400);
     expect(summary.categoryCounts, {'unknown': 2});
+    expect(summary.categoryDurationMs, {'unknown': 400});
+  });
+
+
+  test('keeps per-category events in chronological order with their durations', () {
+    final summary = AudioEventPeriodSummary.summarize(
+      sessionIds: {'night-1'},
+      events: [
+        {'id': 'later', 'session_id': 'night-1', 'category': 'snore', 'duration_ms': 1200, 'captured_at': '2026-11-01T02:10:00.000'},
+        {'id': 'earlier', 'session_id': 'night-1', 'category': 'snore', 'duration_ms': 800, 'captured_at': '2026-11-01T01:20:00.000'},
+      ],
+    );
+
+    expect(summary.categoryDurationMs['snore'], 2000);
+    expect(
+      summary.categoryEvents['snore']!.map((event) => event['id']).toList(),
+      ['earlier', 'later'],
+    );
   });
 
   test('returns empty summary when no selected nights exist', () {

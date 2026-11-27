@@ -110,6 +110,8 @@ class ComparisonSuggestionAnalyzer {
 
   static double thresholdFor(TagSleepMetric metric) => switch (metric) {
     TagSleepMetric.sleepDuration => 20,
+    TagSleepMetric.sleepEfficiency => double.infinity,
+    TagSleepMetric.sleepLatency => double.infinity,
     TagSleepMetric.morningRating => 0.5,
     TagSleepMetric.awakeningCount => 0.5,
   };
@@ -147,6 +149,8 @@ class ComparisonSuggestionAnalyzer {
       if (entry.value.length < minimumNightsPerGroup || existing.contains(entry.key)) continue;
       final keys = pairs[entry.key]!;
       for (final metric in TagSleepMetric.values) {
+        if (metric == TagSleepMetric.sleepEfficiency ||
+            metric == TagSleepMetric.sleepLatency) continue;
         final result = TagSleepComparison.calculate(
           sessions: sessions,
           tagsBySession: tagsBySession,

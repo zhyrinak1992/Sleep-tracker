@@ -2,17 +2,23 @@ import 'dart:convert';
 
 import '../../models/sleep_session.dart';
 
-enum TagSleepMetric { sleepDuration, morningRating, awakeningCount }
+enum TagSleepMetric { sleepDuration, sleepEfficiency, sleepLatency, morningRating, awakeningCount }
 
 extension TagSleepMetricLabel on TagSleepMetric {
   String get label => switch (this) {
     TagSleepMetric.sleepDuration => 'Продолжительность сна',
+    TagSleepMetric.sleepEfficiency => 'Эффективность сна',
+    TagSleepMetric.sleepLatency => 'Задержка засыпания',
     TagSleepMetric.morningRating => 'Утренняя оценка',
     TagSleepMetric.awakeningCount => 'Зарегистрированные эпизоды бодрствования',
   };
 
+  String get differenceAxisLabel => 'Разница, $unit';
+
   String get unit => switch (this) {
     TagSleepMetric.sleepDuration => 'мин',
+    TagSleepMetric.sleepEfficiency => '%',
+    TagSleepMetric.sleepLatency => 'мин',
     TagSleepMetric.morningRating => 'из 5',
     TagSleepMetric.awakeningCount => 'эпизодов',
   };
@@ -53,6 +59,17 @@ class TagSleepComparison {
     return end.difference(start).inMinutes.toDouble();
   }
 
+  static bool _isValidMetricValue(TagSleepMetric metric, double value) =>
+      switch (metric) {
+        TagSleepMetric.sleepDuration => value > 0,
+        TagSleepMetric.sleepEfficiency => value >= 0 && value <= 100,
+        TagSleepMetric.sleepLatency => value >= 0 && value <= 1440,
+        TagSleepMetric.morningRating =>
+          value >= 1 && value <= 5 && value == value.roundToDouble(),
+        TagSleepMetric.awakeningCount =>
+          value >= 0 && value == value.roundToDouble(),
+      };
+
   static TagSleepComparisonResult calculate({
     required Iterable<SleepSession> sessions,
     required Map<String, Set<String>> tagsBySession,
@@ -61,6 +78,8 @@ class TagSleepComparison {
     required DateTime endExclusive,
     required TagSleepMetric metric,
     Map<String, int> awakeningCountsBySession = const {},
+    Map<String, double> efficiencyBySession = const {},
+    Map<String, int> sleepLatencyBySession = const {},
   }) {
     if (tagKeys.isEmpty || tagKeys.any((key) => key.trim().isEmpty) || !endExclusive.isAfter(start)) {
       throw ArgumentError('Некорректные параметры сравнения.');
@@ -71,17 +90,21 @@ class TagSleepComparison {
     final withSessionIds = <String>[];
     final withoutSessionIds = <String>[];
     for (final session in sessions) {
-      if (session.startedAt.isBefore(start) || !session.startedAt.isBefore(endExclusive)) {
+      if (session.deletedAt != null ||
+          session.startedAt.isBefore(start) ||
+          !session.startedAt.isBefore(endExclusive)) {
         continue;
       }
       if (session.endedAt == null || !session.endedAt!.isAfter(session.startedAt)) continue;
 
       final value = switch (metric) {
         TagSleepMetric.sleepDuration => _actualSleepMinutes(session),
+        TagSleepMetric.sleepEfficiency => efficiencyBySession[session.id],
+        TagSleepMetric.sleepLatency => sleepLatencyBySession[session.id]?.toDouble(),
         TagSleepMetric.morningRating => session.morningRating?.toDouble(),
         TagSleepMetric.awakeningCount => awakeningCountsBySession[session.id]?.toDouble(),
       };
-      if (value == null || !value.isFinite) continue;
+      if (value == null || !value.isFinite || !_isValidMetricValue(metric, value)) continue;
 
       final sessionTags = tagsBySession[session.id] ?? const <String>{};
       final hasTag = tagKeys.every(sessionTags.contains);

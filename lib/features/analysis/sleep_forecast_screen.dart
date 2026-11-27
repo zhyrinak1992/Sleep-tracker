@@ -24,7 +24,7 @@ class _SleepForecastScreenState extends State<SleepForecastScreen> {
   @override
   void initState() {
     super.initState();
-    _future = widget.database.getSessions(limit: 365);
+    _future = widget.database.getSessions(limit: null);
   }
 
   int _minute(TimeOfDay value) => value.hour * 60 + value.minute;

@@ -19,10 +19,10 @@ class _ReferenceNightComparisonScreenState extends State<ReferenceNightCompariso
   @override
   void initState() {
     super.initState();
-    _sessionsFuture = widget.database.getSessions(limit: 10000);
+    _sessionsFuture = widget.database.getSessions(limit: null);
   }
   Future<void> _reload() async {
-    setState(() => _sessionsFuture = widget.database.getSessions(limit: 10000));
+    setState(() => _sessionsFuture = widget.database.getSessions(limit: null));
     await _sessionsFuture;
   }
   String _date(SleepSession s) => DateFormat('d MMM yyyy, HH:mm', 'ru').format(s.startedAt);
@@ -96,7 +96,11 @@ class _ReferenceNightComparisonScreenState extends State<ReferenceNightCompariso
                       _metric('Длительность сна', _duration(baseline.sleepDurationMinutes)),
                       _metric('Время в постели', _duration(baseline.timeInBedMinutes)),
                       _metric('Эффективность', baseline.sleepEfficiencyPercent == null ? 'Нет данных' : '${baseline.sleepEfficiencyPercent!.toStringAsFixed(1)}%'),
-                      _metric('Пробуждения', '${baseline.awakeningCount}'),
+                      _metric(
+                        'Пробуждения',
+                        baseline.hasAwakeSamples && baseline.stageCoveragePercent != null && baseline.stageCoveragePercent! >= 80
+                            ? '${baseline.awakeningCount}' : 'Нет данных',
+                      ),
                       _metric('Бодрствование', _duration(baseline.awakeStageMinutes)),
                       _metric('Самочувствие', baselineNight.morningRating == null ? 'Не оценено' : '${baselineNight.morningRating} из 5'),
                     ])),
@@ -113,7 +117,17 @@ class _ReferenceNightComparisonScreenState extends State<ReferenceNightCompariso
                         Text(_delta(metric.sleepDurationMinutes, baseline.sleepDurationMinutes), style: const TextStyle(color: AppTheme.teal, fontSize: 12)),
                         const Divider(height: 16),
                         _metric('Эффективность', metric.sleepEfficiencyPercent == null ? 'Нет данных' : '${metric.sleepEfficiencyPercent!.toStringAsFixed(1)}%'),
-                        _metric('Пробуждения', '${metric.awakeningCount} · ${_delta(metric.awakeningCount, baseline.awakeningCount, unit: "эп.")}'),
+                        _metric(
+                          'Пробуждения',
+                          metric.hasAwakeSamples && metric.stageCoveragePercent != null && metric.stageCoveragePercent! >= 80
+                              ? '${metric.awakeningCount} · ${_delta(
+                                  metric.awakeningCount,
+                                  baseline.hasAwakeSamples && baseline.stageCoveragePercent != null && baseline.stageCoveragePercent! >= 80
+                                      ? baseline.awakeningCount : null,
+                                  unit: "эп.",
+                                )}'
+                              : 'Нет данных',
+                        ),
                         _metric('Бодрствование', _duration(metric.awakeStageMinutes)),
                         _metric('Самочувствие', night.morningRating == null ? 'Не оценено' : '${night.morningRating} из 5'),
                         if (night.note?.trim().isNotEmpty == true) ...[const Divider(height: 16), Text(night.note!, style: const TextStyle(color: AppTheme.muted, fontSize: 12))],

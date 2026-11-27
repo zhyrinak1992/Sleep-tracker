@@ -31,7 +31,7 @@ class _SuggestedTagComparisonScreenState extends State<SuggestedTagComparisonScr
   void initState() {
     super.initState();
     // Fetch again at open time: the suggestion is a prompt, not a frozen result.
-    _sessions = widget.database.getSessions(limit: 10000);
+    _sessions = widget.database.getSessions(limit: null);
   }
 
   String _period(DateTime start, DateTime end) {

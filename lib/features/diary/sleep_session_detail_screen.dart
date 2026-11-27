@@ -2,13 +2,16 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../data/sleep_database.dart';
+import '../analysis/periodic_report_service.dart';
 import '../../data/notification_service.dart';
+import '../../data/pdf_report_service.dart';
 import '../analysis/climate_analytics.dart';
 import '../analysis/sleep_score.dart';
-import 'screen_time_card.dart';
 import 'weather_night_detail_card.dart';
 import 'sleep_session_metrics_card.dart';
 import 'sleep_session_metrics.dart';
+import 'sleep_event_timeline.dart';
+import 'sleep_night_audio_card.dart';
 import 'sleep_metric_summary.dart';
 import '../../models/sleep_session.dart';
 import '../../models/sleep_note.dart';
@@ -31,6 +34,7 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
   late Future<List<Map<String, Object?>>> _stagesFuture;
   late Future<List<Map<String, Object?>>> _metricsFuture;
   late Future<List<Map<String, Object?>>> _climateFuture;
+  late Future<List<SleepTimelineEvent>> _timelineFuture;
   late Future<Map<String, Object?>?> _reportFuture;
 
   @override
@@ -41,7 +45,22 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
     _stagesFuture = widget.database.getStages(widget.session.id);
     _metricsFuture = widget.database.getMetrics(widget.session.id);
     _climateFuture = _loadClimate(widget.session);
+    _timelineFuture = _loadTimeline();
     _reportFuture = widget.database.getMorningReport(widget.session.id);
+  }
+
+  Future<void> _exportNightPdf(SleepSession session) async {
+    try {
+      await PdfReportService.exportSingleNight(
+        database: widget.database,
+        session: session,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось сформировать PDF: $error')),
+      );
+    }
   }
 
   Future<void> _reload() async {
@@ -51,9 +70,21 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
       _stagesFuture = widget.database.getStages(widget.session.id);
       _metricsFuture = widget.database.getMetrics(widget.session.id);
       _climateFuture = _loadClimate(widget.session);
+      _timelineFuture = _loadTimeline();
       _reportFuture = widget.database.getMorningReport(widget.session.id);
     });
     await _future;
+  }
+
+  Future<List<SleepTimelineEvent>> _loadTimeline() async {
+    final stages = await _stagesFuture;
+    final metrics = await _metricsFuture;
+    final audioEvents = await widget.database.getAudioEvents(sessionId: widget.session.id);
+    return SleepEventTimeline.build(
+      stages: stages,
+      metrics: metrics,
+      audioEvents: audioEvents,
+    );
   }
 
   Future<List<Map<String, Object?>>> _loadClimate(SleepSession session) {
@@ -126,12 +157,14 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
     if (result == 'skip') {
       await widget.database.saveMorningReport(sessionId: session.id, wellbeing: null, quality: null, answersJson: jsonEncode({'skipped': true}));
       await widget.database.updateMorningRating(session.id, null);
+      await _refreshTagInsightHistoryAfterMorningReport(session.id);
     } else if (result == 'save') {
       await widget.database.saveMorningReport(
         sessionId: session.id, wellbeing: wellbeing, quality: quality,
         answersJson: jsonEncode({'wellbeing': wellbeing, 'sleepQuality': quality, 'sleepiness': sleepiness, 'comment': comment.text.trim(), 'skipped': false}),
       );
       await widget.database.updateMorningRating(session.id, wellbeing);
+      await _refreshTagInsightHistoryAfterMorningReport(session.id);
     }
     comment.dispose();
     if (result == 'save' || result == 'skip') {
@@ -141,6 +174,16 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
       if (refreshedSession != null && mounted) {
         await _showMorningSummary(refreshedSession);
       }
+    }
+  }
+
+  Future<void> _refreshTagInsightHistoryAfterMorningReport(String sessionId) async {
+    try {
+      await PeriodicReportService(
+        widget.database,
+      ).refreshCurrentTagInsightHistory(sessionId: sessionId);
+    } catch (_) {
+      // The morning report is already saved; analytics must not undo or block it.
     }
   }
 
@@ -174,7 +217,7 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
 
     final currentAnswers = parseAnswers(report);
     final scoreCutoff = session.startedAt.subtract(const Duration(days: 100));
-    final priorSessions = (await widget.database.getSessions(limit: 365))
+    final priorSessions = (await widget.database.getSessions(limit: null))
         .where((item) => item.id != session.id && !item.isOpen &&
             item.startedAt.isBefore(session.startedAt) &&
             !item.startedAt.isBefore(scoreCutoff))
@@ -218,7 +261,9 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
       if (duration != null && duration > 0) previousDurations.add(duration.toDouble());
       final efficiency = previousMetrics.sleepEfficiencyPercent;
       if (efficiency != null) previousEfficiencies.add(efficiency);
-      if (previousMetrics.stageBreakdownMinutes.containsKey('Бодрствование')) {
+      if (previousMetrics.hasAwakeSamples &&
+          previousMetrics.stageCoveragePercent != null &&
+          previousMetrics.stageCoveragePercent! >= 80) {
         previousAwakenings.add(previousMetrics.awakeningCount.toDouble());
       }
     }
@@ -245,9 +290,48 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
     final currentSleepiness = currentAnswers['sleepiness'] is num
         ? (currentAnswers['sleepiness'] as num).toDouble()
         : null;
-    final currentAwakenings = metrics.stageBreakdownMinutes.containsKey('Бодрствование')
+    final currentAwakenings = metrics.hasAwakeSamples &&
+        metrics.stageCoveragePercent != null &&
+        metrics.stageCoveragePercent! >= 80
         ? metrics.awakeningCount.toDouble()
         : null;
+
+    final climateEnd = session.endedAt ?? DateTime.now();
+    final climateRows = climateEnd.isAfter(session.startedAt)
+        ? await widget.database.getClimateSamples(
+            sessionId: session.id,
+            from: session.startedAt,
+            to: climateEnd,
+          )
+        : <Map<String, Object?>>[];
+    final temperatureSamples = climateRows
+        .where((row) => row['metric_type'] == 'temperature').toList();
+    final humiditySamples = climateRows
+        .where((row) => row['metric_type'] == 'humidity').toList();
+    final temperatureSummary = ClimateMetricSummary.fromSamples(
+      temperatureSamples,
+      metricType: 'temperature',
+      expectedInterval: const Duration(minutes: 15),
+    );
+    final humiditySummary = ClimateMetricSummary.fromSamples(
+      humiditySamples,
+      metricType: 'humidity',
+      expectedInterval: const Duration(minutes: 15),
+    );
+
+    String climateSummaryText(ClimateMetricSummary? summary) {
+      if (summary == null) return 'За эту ночь фактические измерения не поступали.';
+      final unit = summary.unit.isEmpty ? '' : ' ${summary.unit}';
+      final coverage = summary.coveragePercent == null
+          ? ''
+          : '; расчётное покрытие ${summary.coveragePercent!.toStringAsFixed(0)}%';
+      return 'Мин. ${summary.minimum.toStringAsFixed(1)}$unit; '
+          'макс. ${summary.maximum.toStringAsFixed(1)}$unit; '
+          'среднее ${summary.average.toStringAsFixed(1)}$unit; '
+          'последнее ${summary.lastValue.toStringAsFixed(1)}$unit '
+          'в ${DateFormat('HH:mm').format(summary.lastMeasuredAt)}. '
+          '${summary.count} измерений$coverage.';
+    }
 
     String durationLabel(int? minutes) => minutes == null
         ? 'Нет достоверных данных'
@@ -321,7 +405,7 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
               _detailRow(
                 'Зарегистрированные пробуждения',
                 currentAwakenings == null
-                    ? 'Нет данных Apple Health'
+                    ? 'Нет подтверждённых интервалов бодрствования'
                     : metrics.awakeningCount.toString(),
                 icon: Icons.wb_sunny_outlined,
               ),
@@ -330,6 +414,38 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                 events.length.toString(),
                 icon: Icons.graphic_eq_rounded,
               ),
+              const Divider(height: 22),
+              const Text('Микроклимат спальни', style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              Text('Температура: ${climateSummaryText(temperatureSummary)}',
+                style: const TextStyle(fontSize: 12, height: 1.4)),
+              if (temperatureSummary != null && temperatureSamples.length > 1)
+                SizedBox(
+                  height: 34,
+                  width: double.infinity,
+                  child: CustomPaint(
+                    painter: _ClimateSparklinePainter(
+                      values: temperatureSamples
+                          .map((row) => (row['value'] as num).toDouble()).toList(),
+                      color: AppTheme.teal,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              Text('Влажность: ${climateSummaryText(humiditySummary)}',
+                style: const TextStyle(fontSize: 12, height: 1.4)),
+              if (humiditySummary != null && humiditySamples.length > 1)
+                SizedBox(
+                  height: 34,
+                  width: double.infinity,
+                  child: CustomPaint(
+                    painter: _ClimateSparklinePainter(
+                      values: humiditySamples
+                          .map((row) => (row['value'] as num).toDouble()).toList(),
+                      color: AppTheme.accentPink,
+                    ),
+                  ),
+                ),
               if (orderedCategories.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 const Text('Категории звуков', style: TextStyle(fontWeight: FontWeight.w600)),
@@ -599,6 +715,11 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
           title: const Text('Карточка ночи'),
           actions: [
             if (!session.isOpen) IconButton(
+              tooltip: 'Экспортировать отчёт о ночи в PDF',
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              onPressed: () => _exportNightPdf(session),
+            ),
+            if (!session.isOpen) IconButton(
               tooltip: 'Переместить в корзину',
               icon: const Icon(Icons.delete_outline),
               onPressed: () async {
@@ -656,11 +777,32 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                         const SizedBox(height: 8),
                         _detailRow('Нажатие «Ложусь спать»', _dateTime(session.buttonStartedAt), icon: Icons.touch_app_outlined),
                         const Divider(height: 1),
-                        _detailRow('Фактическое засыпание', _dateTime(session.actualSleepStartedAt), icon: Icons.bedtime_outlined),
-                        const Divider(height: 1),
-                        _detailRow('Нажатие «Я проснулась»', _dateTime(session.buttonEndedAt), icon: Icons.touch_app_outlined),
-                        const Divider(height: 1),
-                        _detailRow('Фактическое пробуждение', _dateTime(session.actualSleepEndedAt), icon: Icons.wb_sunny_outlined),
+                        FutureBuilder<List<Map<String, Object?>>>(
+                          future: _stagesFuture,
+                          builder: (context, stagesSnapshot) {
+                            final metrics = stagesSnapshot.hasData
+                                ? SleepSessionMetrics.calculate(
+                                    session: session,
+                                    stages: stagesSnapshot.data!,
+                                  )
+                                : null;
+                            return Column(children: [
+                              _detailRow(
+                                'Фактическое засыпание',
+                                _dateTime(metrics?.sleepOnsetAt ?? session.actualSleepStartedAt),
+                                icon: Icons.bedtime_outlined,
+                              ),
+                              const Divider(height: 1),
+                              _detailRow('Нажатие «Я проснулась»', _dateTime(session.buttonEndedAt), icon: Icons.touch_app_outlined),
+                              const Divider(height: 1),
+                              _detailRow(
+                                'Фактическое пробуждение',
+                                _dateTime(metrics?.sleepEndAt ?? session.actualSleepEndedAt),
+                                icon: Icons.wb_sunny_outlined,
+                              ),
+                            ]);
+                          },
+                        ),
                         const Divider(height: 1),
                         _detailRow('Источник записи', session.source == 'manual' || session.source == 'manual_entry'
                             ? 'Вручную' : session.source,
@@ -741,8 +883,6 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                       ],
                     )),
                     const SizedBox(height: 12),
-                    ScreenTimeCard(database: widget.database, session: session),
-                    const SizedBox(height: 12),
                     SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       const Text('Фазы сна', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
@@ -800,6 +940,10 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                       const SizedBox(height: 8),
                       const Text('Показываются только измерения, реально полученные из Apple Health. Их отсутствие не заменяется оценками.', style: TextStyle(color: AppTheme.teal, fontSize: 12, height: 1.4)),
                     ])),
+                    const SizedBox(height: 12),
+                    SleepEventTimelineCard(eventsFuture: _timelineFuture),
+                    const SizedBox(height: 12),
+                    SleepNightAudioCard(database: widget.database, sessionId: widget.session.id),
                     const SizedBox(height: 12),
                     SectionCard(child: FutureBuilder<List<Map<String, Object?>>>(
                       future: _climateFuture,

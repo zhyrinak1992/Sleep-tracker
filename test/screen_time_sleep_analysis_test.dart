@@ -2,27 +2,90 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sleep_tracker/features/analysis/screen_time_sleep_analysis.dart';
 
 void main() {
-  test('compares sleep duration, screen duration and last-use gap by median screen time', () {
-    final result = ScreenTimeSleepComparison.fromSamples([
-      const ScreenTimeSleepSample(screenMinutes: 10, lastUseGapMinutes: 60, sleepMinutes: 420),
-      const ScreenTimeSleepSample(screenMinutes: 20, lastUseGapMinutes: 45, sleepMinutes: 430),
-      const ScreenTimeSleepSample(screenMinutes: 40, lastUseGapMinutes: 20, sleepMinutes: 450),
-      const ScreenTimeSleepSample(screenMinutes: 60, lastUseGapMinutes: 10, sleepMinutes: 480),
-    ]);
-    expect(result, isNotNull);
-    expect(result!.belowMedian.nights, 2);
-    expect(result.belowMedian.averageSleepMinutes, 425);
-    expect(result.atOrAboveMedian.nights, 2);
-    expect(result.atOrAboveMedian.averageSleepMinutes, 465);
-    expect(result.atOrAboveMedian.averageLastUseGapMinutes, 15);
+  test('calculates circular sleep-onset averages across midnight and noon', () {
+    final beforeMidnight = ScreenTimeSleepAnalysis.sleepStartMinutesOfDay(DateTime(2026, 11, 25, 23, 30))!;
+    final afterMidnight = ScreenTimeSleepAnalysis.sleepStartMinutesOfDay(DateTime(2026, 11, 26, 0, 30))!;
+    final midnightComparison = ScreenTimeSleepAnalysis.compare([
+      ScreenTimeSleepSample(exposureMinutes: 1, sleepStartMinutesOfDay: beforeMidnight),
+      ScreenTimeSleepSample(exposureMinutes: 1, sleepStartMinutesOfDay: afterMidnight),
+    ])!;
+    expect(ScreenTimeSleepAnalysis.formatSleepStartMinutes(
+      midnightComparison.lowerGroup.metric(ScreenTimeSleepMetric.sleepStartTime).average!,
+    ), '00:00');
+    final morning = [
+      ScreenTimeSleepSample(exposureMinutes: 1, sleepStartMinutesOfDay: ScreenTimeSleepAnalysis.sleepStartMinutesOfDay(DateTime(2026, 11, 26, 11))!),
+      ScreenTimeSleepSample(exposureMinutes: 1, sleepStartMinutesOfDay: ScreenTimeSleepAnalysis.sleepStartMinutesOfDay(DateTime(2026, 11, 26, 13))!),
+    ];
+    final result = ScreenTimeSleepAnalysis.compare(morning)!;
+    expect(ScreenTimeSleepAnalysis.formatSleepStartMinutes(
+      result.lowerGroup.metric(ScreenTimeSleepMetric.sleepStartTime).average!,
+    ), '12:00');
+  });
+  test('splits screen-time observations by their data median', () {
+    final samples = List.generate(8, (index) => ScreenTimeSleepSample(
+      exposureMinutes: index * 10,
+      sleepDurationMinutes: 400 + index * 10,
+      sleepEfficiencyPercent: 80 + index.toDouble(),
+      awakeningCount: index.toDouble(),
+      morningRating: 2 + index / 10,
+      sleepQuality: 2 + index / 10,
+      wellbeing: 3 + index / 10,
+    ));
+    final result = ScreenTimeSleepAnalysis.compare(samples)!;
+    expect(result.medianExposureMinutes, 35);
+    expect(result.lowerGroup.nights, 4);
+    expect(result.upperGroup.nights, 4);
+    expect(result.hasSufficientGroups, isTrue);
+    expect(result.differenceFor(ScreenTimeSleepMetric.sleepDuration), 40);
+    expect(result.differenceFor(ScreenTimeSleepMetric.sleepEfficiency), 4);
   });
 
-  test('requires four valid samples and excludes invalid values', () {
-    expect(ScreenTimeSleepComparison.fromSamples([
-      const ScreenTimeSleepSample(screenMinutes: 10, lastUseGapMinutes: 10, sleepMinutes: 420),
-      const ScreenTimeSleepSample(screenMinutes: 20, lastUseGapMinutes: 10, sleepMinutes: 430),
-      const ScreenTimeSleepSample(screenMinutes: 40, lastUseGapMinutes: 10, sleepMinutes: 450),
-      const ScreenTimeSleepSample(screenMinutes: 500, lastUseGapMinutes: 10, sleepMinutes: 480),
-    ]), isNull);
+  test('calculates the direction of sleep-onset shifts across midnight', () {
+    final samples = <ScreenTimeSleepSample>[];
+    for (var i = 0; i < 4; i++) {
+      samples.add(ScreenTimeSleepSample(exposureMinutes: i.toDouble(),
+        sleepStartMinutesOfDay: ScreenTimeSleepAnalysis.sleepStartMinutesOfDay(DateTime(2026, 11, 25, 23))));
+      samples.add(ScreenTimeSleepSample(exposureMinutes: (i + 4).toDouble(),
+        sleepStartMinutesOfDay: ScreenTimeSleepAnalysis.sleepStartMinutesOfDay(DateTime(2026, 11, 26, 1))));
+    }
+    final result = ScreenTimeSleepAnalysis.compare(samples)!;
+    expect(result.differenceFor(ScreenTimeSleepMetric.sleepStartTime), 120);
+  });
+  test('does not compare groups when one side has fewer than four nights', () {
+    final samples = List.generate(7, (index) => ScreenTimeSleepSample(
+      exposureMinutes: index.toDouble(), sleepDurationMinutes: 400 + index.toDouble(),
+    ));
+    final result = ScreenTimeSleepAnalysis.compare(samples)!;
+    expect(result.lowerGroup.nights, 4);
+    expect(result.upperGroup.nights, 3);
+    expect(result.hasSufficientGroups, isFalse);
+    expect(result.differenceFor(ScreenTimeSleepMetric.sleepDuration), isNull);
+  });
+
+  test('equal exposure values do not create artificial high and low groups', () {
+    final samples = List.generate(8, (_) => const ScreenTimeSleepSample(
+      exposureMinutes: 30, sleepDurationMinutes: 420,
+    ));
+    final result = ScreenTimeSleepAnalysis.compare(samples)!;
+    expect(result.lowerGroup.nights, 8);
+    expect(result.upperGroup.nights, 0);
+    expect(result.hasSufficientGroups, isFalse);
+    expect(result.differenceFor(ScreenTimeSleepMetric.sleepDuration), isNull);
+  });
+
+  test('each sleep metric requires four valid values in both groups', () {
+    final samples = List.generate(8, (index) => ScreenTimeSleepSample(
+      exposureMinutes: index.toDouble(),
+      sleepDurationMinutes: 400 + index.toDouble(),
+      sleepEfficiencyPercent: index < 3 || index > 3 ? 80 : null,
+    ));
+    final result = ScreenTimeSleepAnalysis.compare(samples)!;
+    expect(result.differenceFor(ScreenTimeSleepMetric.sleepDuration), isNotNull);
+    expect(result.lowerGroup.metric(ScreenTimeSleepMetric.sleepEfficiency).validSamples, 3);
+    expect(result.differenceFor(ScreenTimeSleepMetric.sleepEfficiency), isNull);
+  });
+
+  test('missing exposure values are not represented as zero', () {
+    expect(ScreenTimeSleepAnalysis.compare(const []), isNull);
   });
 }

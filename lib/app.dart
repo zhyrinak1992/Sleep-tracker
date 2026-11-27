@@ -3,12 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'data/notification_service.dart';
 import 'data/audio_observation_service.dart';
+import 'data/climate_polling_policy.dart';
 import 'data/sleep_database.dart';
 import 'data/yandex_smart_home_service.dart';
 import 'features/home/home_screen.dart';
 import 'features/diary/diary_screen.dart';
 import 'features/analysis/analysis_screen.dart';
 import 'features/health/health_screen.dart';
+import 'features/health/health_day_tag_monthly_report.dart';
+import 'features/analysis/periodic_report_service.dart';
 import 'features/notes/notes_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'theme/app_theme.dart';
@@ -65,6 +68,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   Timer? _cleanupTimer;
   Timer? _climateTimer;
   bool _climateRefreshInProgress = false;
+  bool _appInBackground = false;
+  bool _appDetached = false;
 
   Widget _createPage(int index) {
     switch (index) {
@@ -89,10 +94,19 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _cleanupTimer = Timer.periodic(const Duration(minutes: 30), (_) { _cleanupAudio(); _cleanupTrash(); });
+    AudioObservationService.instance.observing.addListener(_syncClimatePolling);
+    AudioObservationService.instance.paused.addListener(_syncClimatePolling);
+    _cleanupTimer = Timer.periodic(const Duration(minutes: 30), (_) {
+      _cleanupAudio();
+      _cleanupTrash();
+      _generateClosedHealthTagReports();
+      _generateClosedPeriodicReports();
+    });
     _cleanupTrash();
     _startClimatePolling();
     _ensureNightReminders();
+    _generateClosedHealthTagReports();
+    _generateClosedPeriodicReports();
   }
 
   Future<void> _ensureNightReminders() async {
@@ -114,9 +128,29 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   }
 
   void _startClimatePolling() {
-    _climateTimer?.cancel();
+    if (_climateTimer != null) {
+      _refreshClimate();
+      return;
+    }
     _refreshClimate();
     _climateTimer = Timer.periodic(const Duration(minutes: 15), (_) => _refreshClimate());
+  }
+
+  void _syncClimatePolling() {
+    if (!_appInBackground) {
+      _startClimatePolling();
+      return;
+    }
+    final keepPollingForActiveNight = !_appDetached &&
+        shouldKeepClimatePollingInBackground(
+          audioObservationActive: AudioObservationService.instance.observing.value,
+          audioObservationPaused: AudioObservationService.instance.paused.value,
+        );
+    if (keepPollingForActiveNight) {
+      _startClimatePolling();
+    } else {
+      _stopClimatePolling();
+    }
   }
 
   void _stopClimatePolling() {
@@ -128,6 +162,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   void dispose() {
     _cleanupTimer?.cancel();
     _stopClimatePolling();
+    AudioObservationService.instance.observing.removeListener(_syncClimatePolling);
+    AudioObservationService.instance.paused.removeListener(_syncClimatePolling);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -153,6 +189,22 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       debugPrint('Trash cleanup failed: $error\\n$stackTrace');
     }
   }
+
+  Future<void> _generateClosedHealthTagReports() async {
+    try {
+      await HealthDayTagMonthlyReportService(_database).generateClosedReports();
+    } catch (error, stackTrace) {
+      debugPrint('Monthly health tag report generation failed: $error\\n$stackTrace');
+    }
+  }
+
+  Future<void> _generateClosedPeriodicReports() async {
+    try {
+      await PeriodicReportService(_database).generateClosedReports();
+    } catch (error, stackTrace) {
+      debugPrint('Periodic report generation failed: $error\\n$stackTrace');
+    }
+  }
   Future<void> _refreshClimate() async {
     if (_climateRefreshInProgress) return;
     _climateRefreshInProgress = true;
@@ -168,14 +220,21 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      _appInBackground = false;
+      _appDetached = false;
       _startClimatePolling();
       _cleanupAudio();
       _cleanupTrash();
       _ensureNightReminders();
+      _generateClosedHealthTagReports();
+      _generateClosedPeriodicReports();
     } else if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
-      _stopClimatePolling();
+      _appInBackground = true;
+      _appDetached = state == AppLifecycleState.detached;
+      _syncClimatePolling();
     }
   }
 

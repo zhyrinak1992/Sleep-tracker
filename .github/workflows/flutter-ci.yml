@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: flutter-checks-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -27,6 +31,18 @@ jobs:
       - name: Verify calendar analytics across DST
         env:
           TZ: Europe/Berlin
-        run: flutter test test/sleep_dynamics_analysis_test.dart --reporter expanded
+        run: flutter test test/sleep_dynamics_analysis_test.dart test/health_day_tag_history_period_test.dart --reporter expanded
+      - name: Verify weekly analysis calendar boundaries across DST
+        env:
+          TZ: Europe/Berlin
+        run: flutter test test/sleep_analytics_test.dart --reporter expanded
+      - name: Verify physiological report calendar boundaries across DST
+        env:
+          TZ: Europe/Berlin
+        run: flutter test test/health_report_service_test.dart --reporter expanded
+      - name: Verify periodic report calendar boundaries across DST
+        env:
+          TZ: Europe/Berlin
+        run: flutter test test/periodic_report_service_test.dart --reporter expanded
       - name: Run tests
         run: flutter test --reporter expanded

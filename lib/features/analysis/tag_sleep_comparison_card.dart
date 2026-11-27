@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../data/sleep_database.dart';
@@ -7,6 +8,7 @@ import '../../models/sleep_tag.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_card.dart';
 import 'tag_sleep_comparison.dart';
+import 'sleep_analytics.dart';
 import 'tag_combination_suggestions.dart';
 import '../diary/sleep_session_metrics.dart';
 
@@ -75,17 +77,24 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
       widget.sessions.map((session) => session.id).toList(),
     );
     final awakeningCounts = <String, int>{};
+    final efficiencyBySession = <String, double>{};
+    final sleepLatencyBySession = <String, int>{};
     for (final session in widget.sessions) {
       final stages = stagesBySession[session.id] ?? const <Map<String, Object?>>[];
-      final hasAwakeSamples = stages.any((row) {
-        final stage = (row['stage'] as String? ?? '').toLowerCase();
-        return stage.contains('бодрств') || stage == 'awake' || stage.contains('awake');
-      });
-      if (!hasAwakeSamples) continue;
-      awakeningCounts[session.id] = SleepSessionMetrics.calculate(
-        session: session,
-        stages: stages,
-      ).awakeningCount;
+      final metrics = SleepSessionMetrics.calculate(session: session, stages: stages);
+      // A missing or malformed awake interval is not evidence of zero
+      // awakenings. Require the approved stage-coverage threshold as well.
+      if (metrics.hasAwakeSamples &&
+          metrics.stageCoveragePercent != null &&
+          metrics.stageCoveragePercent! >= 80) {
+        awakeningCounts[session.id] = metrics.awakeningCount;
+      }
+      if (metrics.sleepEfficiencyPercent != null) {
+        efficiencyBySession[session.id] = metrics.sleepEfficiencyPercent!;
+      }
+      if (metrics.sleepLatencyMinutes != null) {
+        sleepLatencyBySession[session.id] = metrics.sleepLatencyMinutes!;
+      }
     }
     final templates = await _store.load();
     final customTags = await CustomSleepTagStore(
@@ -104,6 +113,8 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
     return _TagComparisonData(
       tagsBySession: tags,
       awakeningCountsBySession: awakeningCounts,
+      efficiencyBySession: efficiencyBySession,
+      sleepLatencyBySession: sleepLatencyBySession,
       templates: templates,
       customTags: customTags,
       suggestions: suggestions,
@@ -125,6 +136,12 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
     if (metric == TagSleepMetric.awakeningCount) {
       return '$sign${absolute.round()} эпизодов';
     }
+    if (metric == TagSleepMetric.sleepEfficiency) {
+      return '$sign${absolute.toStringAsFixed(1)} п. п.';
+    }
+    if (metric == TagSleepMetric.sleepLatency) {
+      return '$sign${absolute.round()} мин';
+    }
     return '$sign${absolute.toStringAsFixed(1)} балла';
   }
 
@@ -136,6 +153,12 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
     }
     if (metric == TagSleepMetric.awakeningCount) {
       return '${value.round()} эпизодов';
+    }
+    if (metric == TagSleepMetric.sleepEfficiency) {
+      return '${value.toStringAsFixed(1)}%';
+    }
+    if (metric == TagSleepMetric.sleepLatency) {
+      return '${value.round()} мин';
     }
     return '${value.toStringAsFixed(1)} из 5';
   }
@@ -301,9 +324,39 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
         endExclusive: widget.endExclusive,
         metric: _metric,
         awakeningCountsBySession: data.awakeningCountsBySession,
+        efficiencyBySession: data.efficiencyBySession,
+        sleepLatencyBySession: data.sleepLatencyBySession,
       );
+      final previousPeriodStart = SleepAnalytics.previousEqualPeriodStart(
+        widget.start,
+        widget.endExclusive,
+      );
+      final previousResult = TagSleepComparison.calculate(
+        sessions: widget.sessions,
+        tagsBySession: data.tagsBySession,
+        tagKeys: selectedKeys,
+        start: previousPeriodStart,
+        endExclusive: widget.start,
+        metric: _metric,
+        awakeningCountsBySession: data.awakeningCountsBySession,
+        efficiencyBySession: data.efficiencyBySession,
+        sleepLatencyBySession: data.sleepLatencyBySession,
+      );
+      final periodDifferenceChange = result.isSufficient && previousResult.isSufficient
+          ? result.difference! - previousResult.difference!
+          : null;
       final matchingTemplates = data.templates.where((item) => item.id == _activeTemplateId);
       final activeTemplate = matchingTemplates.isEmpty ? null : matchingTemplates.first;
+      Widget periodLine(String label, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          children: [
+            Expanded(child: Text(label, style: const TextStyle(color: AppTheme.muted, fontSize: 11))),
+            const SizedBox(width: 8),
+            Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11)),
+          ],
+        ),
+      );
 
       return SectionCard(
         child: Column(
@@ -450,6 +503,34 @@ class _TagSleepComparisonCardState extends State<TagSleepComparisonCard> {
                 'Разница средних: ${_formatDifference(result.difference!, result.metric)} в группе со всеми отметками. Выборки: ${result.withTag.nights} и ${result.withoutTag.nights} ночей.',
                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, height: 1.4),
               ),
+            const SizedBox(height: 12),
+            const Text(
+              'Изменение закономерности относительно предыдущего равного по длительности периода',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+            ),
+            const SizedBox(height: 5),
+            if (result.isSufficient && previousResult.isSufficient) ...[
+              periodLine(
+                'Предыдущий период',
+                '${_formatDifference(previousResult.difference!, _metric)} · ${previousResult.withTag.nights}/${previousResult.withoutTag.nights} ночей',
+              ),
+              periodLine(
+                'Текущий период',
+                '${_formatDifference(result.difference!, _metric)} · ${result.withTag.nights}/${result.withoutTag.nights} ночей',
+              ),
+              periodLine(
+                'Изменение разницы',
+                '${_formatDifference(periodDifferenceChange!, _metric)}',
+              ),
+            ] else
+              Text(
+                'Недостаточно сопоставимых данных для двух периодов. Предыдущий период: ${previousResult.withTag.nights}/${previousResult.withoutTag.nights} ночей; текущий: ${result.withTag.nights}/${result.withoutTag.nights}.',
+                style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
+              ),
+            Text(
+              'Предыдущий период: ${DateFormat('d MMM yyyy', 'ru').format(previousPeriodStart)} — ${DateFormat('d MMM yyyy', 'ru').format(widget.start.subtract(const Duration(days: 1)))}.',
+              style: const TextStyle(color: AppTheme.muted, fontSize: 10),
+            ),
             const SizedBox(height: 5),
             const Text(
               'Учитываются только завершённые ночи с доступным выбранным показателем. Недостающие значения не заменяются нулями. Результат не является медицинским выводом.',
@@ -493,12 +574,16 @@ class _TagComparisonData {
   const _TagComparisonData({
     required this.tagsBySession,
     required this.awakeningCountsBySession,
+    required this.efficiencyBySession,
+    required this.sleepLatencyBySession,
     required this.templates,
     required this.customTags,
     required this.suggestions,
   });
   final Map<String, Set<String>> tagsBySession;
   final Map<String, int> awakeningCountsBySession;
+  final Map<String, double> efficiencyBySession;
+  final Map<String, int> sleepLatencyBySession;
   final List<TagComparisonTemplate> templates;
   final List<SleepTag> customTags;
   final List<TagCombinationSuggestion> suggestions;

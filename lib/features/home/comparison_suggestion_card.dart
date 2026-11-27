@@ -39,6 +39,8 @@ class _ComparisonSuggestionCardState extends State<ComparisonSuggestionCard> {
       final minutes = value.round();
       return '${minutes ~/ 60} ч ${minutes.remainder(60)} мин';
     }
+    if (metric == TagSleepMetric.sleepEfficiency) return '${value.toStringAsFixed(1)}%';
+    if (metric == TagSleepMetric.sleepLatency) return '${value.round()} мин';
     if (metric == TagSleepMetric.morningRating) return '${value.toStringAsFixed(1)} из 5';
     return '${value.toStringAsFixed(1)} эпизода';
   }
@@ -49,6 +51,8 @@ class _ComparisonSuggestionCardState extends State<ComparisonSuggestionCard> {
 
   String _differenceUnit(TagSleepMetric metric) => switch (metric) {
     TagSleepMetric.sleepDuration => 'мин',
+    TagSleepMetric.sleepEfficiency => 'п. п.',
+    TagSleepMetric.sleepLatency => 'мин',
     TagSleepMetric.morningRating => 'балла',
     TagSleepMetric.awakeningCount => 'эпизода',
   };

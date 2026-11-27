@@ -23,6 +23,7 @@ void main() {
     expect(result.sleepDurationMinutes, 440);
     expect(result.firstAwakeningAt, DateTime(2026, 11, 22, 1));
     expect(result.awakeningCount, 1);
+    expect(result.hasAwakeSamples, isTrue);
     expect(result.awakeStageMinutes, 10);
     expect(result.stageBreakdownMinutes['Глубокий'], 120);
     expect(result.stageBreakdownMinutes['REM'], 320);
@@ -32,6 +33,23 @@ void main() {
     expect(result.sleepEndAt, DateTime(2026, 11, 22, 6, 30));
     expect(result.stageCoveragePercent, closeTo(450 / 510 * 100, 0.01));
     expect(result.sleepEfficiencyPercent, closeTo(440 / 510 * 100, 0.01));
+  });
+
+  test('does not report the stop-button time as an actual final wake', () {
+    final session = SleepSession(
+      id: 'manual-end-only',
+      startedAt: DateTime(2026, 11, 24, 22),
+      endedAt: DateTime(2026, 11, 25, 7),
+    );
+
+    final result = SleepSessionMetrics.calculate(
+      session: session,
+      stages: const [],
+    );
+
+    expect(result.timeInBedMinutes, 540);
+    expect(result.finalWakeAt, isNull);
+    expect(result.sleepEndAt, isNull);
   });
 
   test('does not invent efficiency without awake stage coverage', () {
@@ -45,6 +63,7 @@ void main() {
       {'stage': 'Лёгкий сон', 'started_at': start.toUtc().toIso8601String(), 'ended_at': DateTime(2026, 11, 22, 7).toUtc().toIso8601String()},
     ]);
     expect(result.sleepEfficiencyPercent, isNull);
+    expect(result.hasAwakeSamples, isFalse);
     expect(result.stageCoveragePercent, 100);
     expect(result.sleepOnsetAt, start);
     expect(result.sleepEndAt, DateTime(2026, 11, 22, 7));

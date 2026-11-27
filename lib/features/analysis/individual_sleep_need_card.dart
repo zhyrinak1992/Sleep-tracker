@@ -28,7 +28,7 @@ class _IndividualSleepNeedCardState extends State<IndividualSleepNeedCard> {
   Future<IndividualSleepNeedResult> _load() async {
     final now = DateTime.now();
     final cutoff = now.subtract(const Duration(days: 90));
-    final all = await widget.database.getSessions(limit: 365);
+    final all = await widget.database.getSessions(limit: null);
     final sessions = all.where((session) =>
       !session.startedAt.isBefore(cutoff) && !session.startedAt.isAfter(now)
     ).toList();

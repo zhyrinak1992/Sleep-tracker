@@ -35,7 +35,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
   }
 
   Future<_DiaryCalendarData> _loadDiaryData() async {
-    final sessions = await widget.database.getSessions(limit: 1000);
+    final sessions = await widget.database.getSessions(limit: null);
     final ids = sessions.map((session) => session.id).toList();
     final reports = await widget.database.getMorningReportsForSessions(ids);
     final stages = await widget.database.getStagesForSessions(ids);

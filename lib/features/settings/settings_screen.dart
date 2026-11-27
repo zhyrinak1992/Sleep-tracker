@@ -342,9 +342,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<String?> _requestBackupPassword({required bool confirm}) async {
+  Future<String?> _requestEncryptedBackupPassword() async {
     final passwordController = TextEditingController();
-    final confirmController = TextEditingController();
     String? errorText;
     try {
       return await showDialog<String>(
@@ -352,11 +351,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         barrierDismissible: false,
         builder: (dialogContext) => StatefulBuilder(
           builder: (dialogContext, setDialogState) => AlertDialog(
-            title: Text(confirm ? 'Задать пароль копии' : 'Пароль резервной копии'),
+            title: const Text('Пароль старой резервной копии'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Пароль не сохраняется в приложении. Он понадобится при восстановлении на этом или другом iPhone. Используйте не менее 10 символов.'),
+                const Text('Этот архив защищён паролем. Введите пароль, заданный при создании резервной копии. Приложение не хранит пароль и не может восстановить его.'),
                 const SizedBox(height: 12),
                 TextField(
                   controller: passwordController,
@@ -365,16 +364,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   enableSuggestions: false,
                   decoration: const InputDecoration(labelText: 'Пароль', border: OutlineInputBorder()),
                 ),
-                if (confirm) ...[
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: confirmController,
-                    obscureText: true,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    decoration: const InputDecoration(labelText: 'Повторите пароль', border: OutlineInputBorder()),
-                  ),
-                ],
                 if (errorText != null) ...[
                   const SizedBox(height: 8),
                   Text(errorText!, style: const TextStyle(color: Colors.red)),
@@ -389,17 +378,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               FilledButton(
                 onPressed: () {
                   final password = passwordController.text;
-                  if (password.length < 10) {
-                    setDialogState(() => errorText = 'Нужно не менее 10 символов.');
-                    return;
-                  }
-                  if (confirm && password != confirmController.text) {
-                    setDialogState(() => errorText = 'Пароли не совпадают.');
+                  if (password.isEmpty) {
+                    setDialogState(() => errorText = 'Введите пароль старой копии.');
                     return;
                   }
                   Navigator.pop(dialogContext, password);
                 },
-                child: Text(confirm ? 'Создать копию' : 'Продолжить'),
+                child: const Text('Продолжить'),
               ),
             ],
           ),
@@ -407,14 +392,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     } finally {
       passwordController.dispose();
-      confirmController.dispose();
     }
   }
 
   Future<void> _createBackup() async {
     await _run(
       () => BackupService.instance.exportToFiles(),
-      'Резервная копия подготовлена без дополнительного пароля. Выберите «Сохранить в Файлы».',
+      'Резервная копия подготовлена. Выберите «Сохранить в Файлы».',
     );
   }
 
@@ -483,7 +467,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _busy = true);
     try {
       final draft = await BackupService.instance.prepareImportFromFiles(
-        requestPassword: () => _requestBackupPassword(confirm: false),
+        requestPassword: _requestEncryptedBackupPassword,
       );
       if (draft == null || !mounted) return;
       final preview = draft.preview;
@@ -650,12 +634,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Text('Резервное копирование', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
           const SizedBox(height: 8),
           const Text(
-            'Резервная копия содержит историю сна, оценки, теги, заметки, показатели, настройки и сохранённые аудиофрагменты. Новый формат шифруется паролем AES-256-GCM и подходит для переноса на другой iPhone.',
+            'Резервная копия содержит историю сна, оценки, теги, заметки, показатели, настройки и доступные аудиофрагменты. Новые переносимые архивы .sleepbackup создаются без отдельного пароля.',
             style: TextStyle(color: AppTheme.muted, height: 1.5),
           ),
           const SizedBox(height: 8),
           const Text(
-            'Запомните пароль: приложение не хранит его и не сможет восстановить. Старые незашифрованные JSON-копии также можно импортировать, но при переносе рекомендуется создать новую зашифрованную копию.',
+            'Целостность данных и аудиофайлов проверяется по манифесту и контрольным суммам SHA-256. Старые зашифрованные архивы .stbackup можно импортировать, введя их прежний пароль.',
             style: TextStyle(color: AppTheme.teal, fontSize: 12, height: 1.45),
           ),
           const SizedBox(height: 14),
@@ -781,7 +765,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('Отчёты и очистка аудио', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
         const SizedBox(height: 8),
-        const Text('Аудиофайлы хранятся не более 7 дней. При запуске приложения просроченные файлы и их записи удаляются; история сна и отчёты остаются.', style: TextStyle(color: AppTheme.muted, height: 1.45)),
+        const Text('Аудиофайлы хранятся не более 7 дней. После этого удаляются только сами файлы, а карточки аудиособытий остаются в истории.', style: TextStyle(color: AppTheme.muted, height: 1.45)),
         const SizedBox(height: 12),
         Wrap(spacing: 8, runSpacing: 8, children: [
           OutlinedButton.icon(onPressed: _busy ? null : () => _run(() => PdfReportService.exportHistory(days: 7), 'Недельный PDF-отчёт подготовлен.'), icon: const Icon(Icons.picture_as_pdf_outlined), label: const Text('Неделя')),
@@ -814,7 +798,7 @@ class _AudioEventsPanelState extends State<AudioEventsPanel> {
   Future<List<Map<String, Object?>>> _load() => SleepDatabase.instance.getAudioEvents();
   static const categories = <String, String>{
     'unknown': 'Неопределённый звук', 'snore': 'Храп', 'cough': 'Кашель',
-    'speech': 'Разговор', 'laugh': 'Смех', 'groan': 'Стон', 'noise': 'Посторонний шум',
+    'speech': 'Разговор', 'laugh': 'Смех', 'groan': 'Стон', 'sobbing': 'Всхлипывания', 'noise': 'Посторонний шум',
   };
   @override
   void dispose() { _player.dispose(); super.dispose(); }
@@ -830,17 +814,29 @@ class _AudioEventsPanelState extends State<AudioEventsPanel> {
         if (events.isEmpty) return const Text('Пока нет сохранённых аудиособытий.', style: TextStyle(color: AppTheme.muted));
         return Column(children: events.map((event) {
           final id = event['id']! as String;
-          final path = event['file_path']! as String;
+          final path = event['file_path'] as String?;
           final category = event['category'] as String? ?? 'unknown';
           final captured = DateTime.tryParse(event['captured_at'] as String? ?? '')?.toLocal();
+          final captureLabel = captured == null
+              ? 'Дата неизвестна'
+              : '${captured.day.toString().padLeft(2,'0')}.${captured.month.toString().padLeft(2,'0')}.${captured.year} ${captured.hour.toString().padLeft(2,'0')}:${captured.minute.toString().padLeft(2,'0')}';
+          final retentionLabel = path == null || path.isEmpty
+              ? 'аудиофайл удалён по сроку хранения'
+              : 'хранение 7 дней';
           return ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: IconButton(icon: const Icon(Icons.play_circle_outline), onPressed: () async {
-              if (await File(path).exists()) await _player.play(DeviceFileSource(path));
-              else if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Аудиофайл не найден.')));
-            }),
+            leading: IconButton(
+              icon: const Icon(Icons.play_circle_outline),
+              onPressed: path == null || path.isEmpty ? null : () async {
+                if (await File(path).exists()) {
+                  await _player.play(DeviceFileSource(path));
+                } else if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Аудиофайл не найден.')));
+                }
+              },
+            ),
             title: Text(categories[category] ?? categories['unknown']!),
-            subtitle: Text('${captured == null ? 'Дата неизвестна' : '${captured.day.toString().padLeft(2,'0')}.${captured.month.toString().padLeft(2,'0')}.${captured.year} ${captured.hour.toString().padLeft(2,'0')}:${captured.minute.toString().padLeft(2,'0')}'} · хранение 7 дней${event['user_corrected'] == 1 ? ' · исправлено вручную' : event['confidence'] == null ? '' : ' · уверенность ${((event['confidence'] as num).toDouble() * 100).round()}%'}'),
+            subtitle: Text('$captureLabel · $retentionLabel${event['user_corrected'] == 1 ? ' · исправлено вручную' : event['confidence'] == null ? '' : ' · уверенность ${((event['confidence'] as num).toDouble() * 100).round()}%'}'),
             trailing: PopupMenuButton<String>(onSelected: (value) async {
               if (value == 'delete') { await SleepDatabase.instance.deleteAudioEvent(id); final remaining = await SleepDatabase.instance.getAudioEvents(); await NotificationService.instance.scheduleAudioExpiry(remaining.map((row) => DateTime.parse(row['expires_at']! as String))); }
               else { await SleepDatabase.instance.updateAudioCategory(id, value); }

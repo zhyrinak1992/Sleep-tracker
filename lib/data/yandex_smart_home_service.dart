@@ -8,6 +8,12 @@ import 'package:http/http.dart' as http;
 
 import 'sleep_database.dart';
 
+/// Only an explicit invalid_grant response means the stored refresh token
+/// is no longer usable. Other OAuth/server errors must not erase credentials.
+bool shouldDiscardYandexRefreshToken({
+  required int statusCode,
+  required String? errorCode,
+}) => statusCode == 400 && errorCode == 'invalid_grant';
 class YandexSmartHomeException implements Exception {
   const YandexSmartHomeException(this.message);
   final String message;
@@ -220,16 +226,46 @@ class YandexSmartHomeService {
       headers: {'Accept': 'application/json'},
       body: {'grant_type': 'refresh_token', 'refresh_token': refresh, 'client_id': clientId},
     ).timeout(const Duration(seconds: 20));
+
+    dynamic decoded;
     try {
-      final data = _decodeOAuthResponse(response);
-      await _saveOAuthTokens(data);
+      decoded = jsonDecode(response.body);
+    } catch (_) {
+      throw YandexSmartHomeException(
+        'Не удалось прочитать ответ обновления токена Яндекса (HTTP ${response.statusCode}).',
+      );
+    }
+    if (decoded is! Map<String, dynamic>) {
+      throw const YandexSmartHomeException(
+        'Яндекс OAuth вернул ответ неизвестного формата при обновлении токена.',
+      );
+    }
+    if (response.statusCode >= 200 &&
+        response.statusCode < 300 &&
+        decoded['access_token'] is String) {
+      await _saveOAuthTokens(decoded);
       return true;
-    } on YandexSmartHomeException {
+    }
+
+    final error = decoded['error']?.toString();
+    if (shouldDiscardYandexRefreshToken(
+      statusCode: response.statusCode,
+      errorCode: error,
+    )) {
+      // Only invalid_grant means that the stored refresh token is unusable.
+      // Transient, rate-limit, and client-configuration errors keep credentials.
       await _storage.delete(key: _tokenKey);
       await _storage.delete(key: _refreshTokenKey);
       await _storage.delete(key: _tokenExpiryKey);
       return false;
     }
+
+    final description = decoded['error_description']?.toString();
+    throw YandexSmartHomeException(
+      description?.isNotEmpty == true
+          ? description!
+          : 'Не удалось обновить токен Яндекса (HTTP ${response.statusCode}).',
+    );
   }
 
   Future<String?> readAccessToken() => _storage.read(key: _tokenKey);

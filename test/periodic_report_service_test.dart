@@ -1,4 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite/sqflite.dart' show Database, databaseFactory;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart' show databaseFactoryFfi, sqfliteFfiInit;
+import 'package:sleep_tracker/data/sleep_database.dart';
 import 'package:sleep_tracker/features/analysis/periodic_report_service.dart';
 
 void main() {
@@ -56,5 +61,195 @@ void main() {
     test('rejects malformed snapshot JSON', () {
       expect(() => PeriodicReportSnapshot.decode('[]'), throwsFormatException);
     });
+
+    test('formats quarterly and half-year report titles', () {
+      final quarter = PeriodicReportSnapshot.decode('''
+        {
+          "id": "quarter_2026-04-01",
+          "kind": "quarter",
+          "start": "2026-04-01T00:00:00.000",
+          "endExclusive": "2026-07-01T00:00:00.000",
+          "nights": 12
+        }
+      ''');
+      final halfYear = PeriodicReportSnapshot.decode('''
+        {
+          "id": "halfYear_2026-07-01",
+          "kind": "halfYear",
+          "start": "2026-07-01T00:00:00.000",
+          "endExclusive": "2027-01-01T00:00:00.000",
+          "nights": 20
+        }
+      ''');
+
+      expect(quarter.title, '2 квартал 2026');
+      expect(halfYear.title, 'II полугодие 2026');
+    });
+  });
+
+  test('generates only closed quarterly and half-year archives with correct date bounds', () async {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+    final directory = await Directory.systemTemp.createTemp('periodic-reports-');
+    Database? openedDatabase;
+    addTearDown(() async {
+      await openedDatabase?.close();
+      SleepDatabase.instance.setDatabaseForTesting(null);
+      SleepDatabase.instance.setDatabasePathForTesting(null);
+      if (await directory.exists()) await directory.delete(recursive: true);
+    });
+    SleepDatabase.instance.setDatabasePathForTesting('${directory.path}/sleep.sqlite');
+    final db = await SleepDatabase.instance.database;
+    openedDatabase = db;
+
+    Future<void> addNight(String id, DateTime start) async {
+      await db.insert('sleep_sessions', {
+        'id': id,
+        'started_at': start.toIso8601String(),
+        'ended_at': start.add(const Duration(hours: 8)).toIso8601String(),
+        'source': 'manual',
+        'created_at': start.toIso8601String(),
+        'updated_at': start.toIso8601String(),
+        'user_edited': 0,
+      });
+    }
+
+    await addNight('jan-night', DateTime(2026, 1, 15, 22));
+    await addNight('apr-night', DateTime(2026, 4, 15, 22));
+    await addNight('jul-night', DateTime(2026, 7, 15, 22));
+    await addNight('oct-night', DateTime(2026, 10, 15, 22));
+
+    // A valid awake interval contributes one event; a night with only asleep
+    // samples must not be interpreted as zero awakenings.
+    await SleepDatabase.instance.addSleepStage(
+      sessionId: 'jan-night',
+      stage: 'Основной',
+      startedAt: DateTime(2026, 1, 15, 22),
+      endedAt: DateTime(2026, 1, 16, 1),
+      source: 'test',
+    );
+    await SleepDatabase.instance.addSleepStage(
+      sessionId: 'jan-night',
+      stage: 'Бодрствование',
+      startedAt: DateTime(2026, 1, 16, 1),
+      endedAt: DateTime(2026, 1, 16, 1, 10),
+      source: 'test',
+    );
+    await SleepDatabase.instance.addSleepStage(
+      sessionId: 'jan-night',
+      stage: 'Глубокий',
+      startedAt: DateTime(2026, 1, 16, 1, 10),
+      endedAt: DateTime(2026, 1, 16, 6),
+      source: 'test',
+    );
+    await SleepDatabase.instance.addSleepStage(
+      sessionId: 'apr-night',
+      stage: 'Основной',
+      startedAt: DateTime(2026, 4, 15, 22),
+      endedAt: DateTime(2026, 4, 16, 6),
+      source: 'test',
+    );
+
+    final service = PeriodicReportService(SleepDatabase.instance);
+    final reports = await service.generateClosedReports(now: DateTime(2026, 11, 25));
+    final quarters = reports.where((report) => report.kind == 'quarter').toList();
+    final halfYears = reports.where((report) => report.kind == 'halfYear').toList();
+
+    expect(quarters.map((report) => report.id).toSet(), {
+      'quarter_2026-01-01',
+      'quarter_2026-04-01',
+      'quarter_2026-07-01',
+    });
+    expect(halfYears.map((report) => report.id).toSet(), {'halfYear_2026-01-01'});
+    expect(reports.any((report) => report.id == 'quarter_2026-10-01'), isFalse);
+    expect(reports.any((report) => report.id == 'halfYear_2026-07-01'), isFalse);
+
+    final q1 = quarters.singleWhere((report) => report.id == 'quarter_2026-01-01');
+    expect(q1.averageAwakenings, 1);
+    expect(q1.data['awakeningSamples'], 1);
+
+    final q2 = quarters.singleWhere((report) => report.id == 'quarter_2026-04-01');
+    expect(q2.averageAwakenings, isNull);
+    expect(q2.data['awakeningSamples'], 0);
+    expect(q2.start, DateTime(2026, 4, 1));
+    expect(q2.endExclusive, DateTime(2026, 7, 1));
+    expect(q2.nights, 1);
+    expect(q2.data['schemaVersion'], 9);
+    expect((q2.data['months'] as List).length, 1);
+    final q2Month = (q2.data['months'] as List).single as Map;
+    expect(q2Month['nightCount'], 1);
+    expect(q2Month['nights'], isA<List>());
+    
+    final h1 = halfYears.single;
+    expect(h1.start, DateTime(2026, 1, 1));
+    expect(h1.endExclusive, DateTime(2026, 7, 1));
+    expect(h1.nights, 2);
+    expect((h1.data['months'] as List).length, 2);
+  });
+
+  test('weekly and monthly report buckets preserve local dates across the spring DST change', () async {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+    final directory = await Directory.systemTemp.createTemp('periodic-reports-dst-');
+    Database? openedDatabase;
+    addTearDown(() async {
+      await openedDatabase?.close();
+      SleepDatabase.instance.setDatabaseForTesting(null);
+      SleepDatabase.instance.setDatabasePathForTesting(null);
+      if (await directory.exists()) await directory.delete(recursive: true);
+    });
+    SleepDatabase.instance.setDatabasePathForTesting('${directory.path}/sleep.sqlite');
+    final db = await SleepDatabase.instance.database;
+    openedDatabase = db;
+
+    Future<void> addNight(String id, DateTime start) async {
+      await db.insert('sleep_sessions', {
+        'id': id,
+        'started_at': start.toIso8601String(),
+        'ended_at': start.add(const Duration(hours: 8)).toIso8601String(),
+        'source': 'manual',
+        'created_at': start.toIso8601String(),
+        'updated_at': start.toIso8601String(),
+        'user_edited': 0,
+      });
+    }
+
+    // In Europe/Berlin, clocks jump forward on 29 March 2026.
+    await addNight('dst-sunday', DateTime(2026, 3, 29, 0, 30));
+    await addNight('dst-monday', DateTime(2026, 3, 30, 0, 30));
+
+    final reports = await PeriodicReportService(SleepDatabase.instance)
+        .generateClosedReports(now: DateTime(2026, 4, 2));
+    final week = reports.singleWhere((report) =>
+        report.id == 'week_2026-03-23');
+    expect(week.start, DateTime(2026, 3, 23));
+    expect(week.endExclusive, DateTime(2026, 3, 30));
+    expect(week.nights, 1, reason: 'Monday 00:30 belongs to the next week');
+    final daily = (week.data['trendPoints'] as List).whereType<Map>().toList();
+    expect(daily, hasLength(1));
+    expect(daily.single['label'], '29.03');
+    expect((daily.single['nights'] as List).length, 1);
+    expect((daily.single['nights'] as List).single['sessionId'], 'dst-sunday');
+
+    final month = reports.singleWhere((report) =>
+        report.id == 'month_2026-03-01');
+    final buckets = (month.data['weeklyTrend'] as List).whereType<Map>().toList();
+    final finalBucket = buckets.singleWhere((bucket) => bucket['bucket'] == 5);
+    expect(finalBucket['dayFrom'], 29);
+    expect(finalBucket['dayTo'], 31);
+    expect(finalBucket['nights'], hasLength(2),
+        reason: 'The final monthly bucket starts at local midnight on 29 March');
+
+    final yearReports = await PeriodicReportService(SleepDatabase.instance)
+        .generateClosedReports(now: DateTime(2027, 1, 2));
+    final year = yearReports.singleWhere((report) =>
+        report.id == 'year_2026-01-01');
+    expect(year.nights, 2);
+    expect(year.start, DateTime(2026, 1, 1));
+    expect(year.endExclusive, DateTime(2027, 1, 1));
+    final yearMonths = (year.data['months'] as List).whereType<Map>().toList();
+    expect(yearMonths, hasLength(1));
+    expect(yearMonths.single['month'], 3);
+    expect(yearMonths.single['nightCount'], 2);
   });
 }

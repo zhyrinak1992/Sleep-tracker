@@ -150,8 +150,7 @@ class BackupRestorePlanner {
           final key = row['key'];
           return {
             'key': key,
-            if (key == 'sleep_change_history_v1' || key == 'comparison_suggestion_history_v1')
-              'value': row['value'],
+            'value': row['value'],
           };
         }
         final archiveState = archive.map(metadataFingerprint).toList()

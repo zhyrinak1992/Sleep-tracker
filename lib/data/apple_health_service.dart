@@ -4,6 +4,27 @@ import 'package:health/health.dart';
 
 import 'sleep_database.dart';
 
+
+/// Merges a fresh HealthKit result into the existing night record.
+/// Values absent from the latest query remain intact; current values win.
+String mergeNightActivityMetadata({
+  required String? previousRaw,
+  required Map<String, Object?> current,
+}) {
+  final merged = <String, Object?>{};
+  if (previousRaw != null && previousRaw.isNotEmpty) {
+    final decoded = jsonDecode(previousRaw);
+    if (decoded is! Map) {
+      throw const FormatException('Архив активности повреждён.');
+    }
+    if (decoded['sessionId'] == current['sessionId']) {
+      merged.addAll(Map<String, Object?>.from(decoded));
+    }
+  }
+  merged.addAll(current);
+  return jsonEncode(merged);
+}
+
 class AppleHealthSyncResult {
   const AppleHealthSyncResult({required this.imported, required this.found});
   final int imported;
@@ -32,6 +53,12 @@ class AppleHealthService {
     HealthDataType.RESPIRATORY_RATE,
     HealthDataType.BLOOD_OXYGEN,
     HealthDataType.HEART_RATE_VARIABILITY_SDNN,
+  ];
+
+  // Wrist temperature is supported by newer iOS versions only. Query it
+  // separately so an unsupported OS version cannot block the core metrics.
+  static const List<HealthDataType> _optionalMetricTypes = [
+    HealthDataType.SLEEP_WRIST_TEMPERATURE,
   ];
 
   static const List<HealthDataType> _activityTypes = [
@@ -112,6 +139,24 @@ class AppleHealthService {
       }
     } catch (_) {
       // Sleep remains useful on its own; optional metrics can be retried later.
+    }
+
+    for (final type in _optionalMetricTypes) {
+      if (!_health.isDataTypeAvailable(type)) continue;
+      try {
+        final authorized = await _health.requestAuthorization(
+          [type],
+          permissions: [HealthDataAccess.READ],
+        );
+        if (!authorized) continue;
+        metricData.addAll(await _health.getHealthDataFromTypes(
+          types: [type],
+          startTime: start,
+          endTime: end,
+        ));
+      } catch (_) {
+        // Newer HealthKit types must not block metrics supported by older iOS.
+      }
     }
 
     final unique = _health.removeDuplicates([...sleepData, ...metricData]);
@@ -290,10 +335,19 @@ class AppleHealthService {
             key == 'steps' || key == 'activeEnergyKcal' ||
             key == 'exerciseMinutes' || key == 'workoutCount' ||
             key == 'workoutDurationMinutes')) {
-          await SleepDatabase.instance.setAppMetadata(
-            'sleep_tracker_activity_v1_$sessionId',
-            jsonEncode(activity),
-          );
+          final metadataKey = 'sleep_tracker_activity_v1_$sessionId';
+          final previousRaw = await SleepDatabase.instance.getAppMetadata(metadataKey);
+          String merged;
+          try {
+            merged = mergeNightActivityMetadata(
+              previousRaw: previousRaw,
+              current: activity,
+            );
+          } on FormatException {
+            // Never replace an existing activity record that cannot be read.
+            continue;
+          }
+          await SleepDatabase.instance.setAppMetadata(metadataKey, merged);
         }
       }
     }
@@ -315,6 +369,7 @@ class AppleHealthService {
     HealthDataType.RESPIRATORY_RATE => ('Частота дыхания', 'вдох/мин'),
     HealthDataType.BLOOD_OXYGEN => ('Насыщение кислородом', '%'),
     HealthDataType.HEART_RATE_VARIABILITY_SDNN => ('Вариабельность пульса SDNN', 'мс'),
+    HealthDataType.SLEEP_WRIST_TEMPERATURE => ('Температура запястья', '°C'),
     _ => null,
   };
 

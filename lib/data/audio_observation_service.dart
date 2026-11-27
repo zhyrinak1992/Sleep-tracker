@@ -64,6 +64,13 @@ class AudioObservationService {
       observing.value = false;
       _paused = false;
       paused.value = false;
+      await _subscription?.cancel();
+      _subscription = null;
+      try {
+        await _recorder.stop();
+      } catch (cleanupError) {
+        debugPrint('Audio recorder cleanup after start failure failed: $cleanupError');
+      }
       await SleepDatabase.instance.setAppMetadata('audio_observation_user_paused', 'false');
       rethrow;
     }
@@ -83,14 +90,14 @@ class AudioObservationService {
       return;
     }
     if (_paused) return;
-    if (_observing) {
-      var nativeRecording = false;
-      try {
-        nativeRecording = await _recorder.isRecording();
-      } catch (error) {
-        debugPrint('Could not inspect native recorder state: $error');
-      }
-      if (nativeRecording) return;
+    var nativeRecording = false;
+    try {
+      nativeRecording = await _recorder.isRecording();
+    } catch (error) {
+      debugPrint('Could not inspect native recorder state: $error');
+    }
+    if (_observing && nativeRecording) return;
+    if (_observing || nativeRecording) {
       _observing = false;
       observing.value = false;
       await _subscription?.cancel();
@@ -184,9 +191,9 @@ class AudioObservationService {
       path = p.join(audioDir.path, 'event_$eventId.wav');
       final wav = _wavFile(pcm, _sampleRate, 1, 16);
       await File(path).writeAsBytes(wav, flush: true);
-      final session = await SleepDatabase.instance.getOpenSession();
+      final sessionId = await SleepDatabase.instance.getSessionIdForTimestamp(started);
       await SleepDatabase.instance.saveAudioEvent(
-        id: eventId, sessionId: session?.id, filePath: path,
+        id: eventId, sessionId: sessionId, filePath: path,
         category: 'unknown', capturedAt: started,
         durationMs: (pcm.length / 2 / _sampleRate * 1000).round(),
       );
@@ -247,9 +254,11 @@ class AudioObservationService {
       await _recorder.pause();
       if (_eventBytes != null) await _saveCurrentEvent();
     } catch (error) {
-      // Keep UI and service state aligned if the native pause request fails.
+      // Keep UI, in-memory state and persisted privacy state aligned if the
+      // native pause request fails and observation continues.
       _paused = false;
       paused.value = false;
+      await SleepDatabase.instance.setAppMetadata('audio_observation_user_paused', 'false');
       rethrow;
     }
   }

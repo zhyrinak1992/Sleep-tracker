@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart' as pdf;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 import '../models/sleep_session.dart';
@@ -21,6 +23,21 @@ class PdfReportService {
     if (days >= 3650) return DateTime.fromMillisecondsSinceEpoch(0);
     final today = DateTime(now.year, now.month, now.day);
     return DateTime(today.year, today.month, today.day - days + 1);
+  }
+
+  /// Reads the monthly night count without confusing it with the detailed
+  /// night rows stored under the legacy `nights` key.
+  static int monthNightCount(Map<String, Object?> month) {
+    final explicit = month['nightCount'];
+    if (explicit is num && explicit.isFinite && explicit >= 0) {
+      return explicit.round();
+    }
+    final nights = month['nights'];
+    if (nights is List) return nights.length;
+    if (nights is num && nights.isFinite && nights >= 0) {
+      return nights.round();
+    }
+    return 0;
   }
 
 
@@ -225,6 +242,33 @@ class PdfReportService {
       final parsed = number(value);
       return parsed == null ? 'Нет данных' : parsed.toStringAsFixed(1) + suffix;
     }
+    String signedDurationDelta(Object? currentValue, Object? previousValue) {
+      final current = number(currentValue);
+      final previousValueNumber = number(previousValue);
+      if (current == null || previousValueNumber == null) return 'Недостаточно сопоставимых данных';
+      final delta = current - previousValueNumber;
+      final rounded = delta.abs().round();
+      final arrow = delta > 0 ? '↑ +' : delta < 0 ? '↓ −' : '→ ';
+      return '$arrow${rounded ~/ 60} ч ${rounded % 60} мин';
+    }
+    String signedPercentDelta(Object? currentValue, Object? previousValue) {
+      final current = number(currentValue);
+      final previousValueNumber = number(previousValue);
+      if (current == null || previousValueNumber == null || previousValueNumber == 0) {
+        return 'Процент недоступен (нет данных или предыдущий период равен нулю)';
+      }
+      final delta = (current - previousValueNumber) / previousValueNumber * 100;
+      final arrow = delta > 0 ? '↑ +' : delta < 0 ? '↓ −' : '→ ';
+      return '$arrow${delta.abs().toStringAsFixed(1)}%';
+    }
+    String signedScaleDelta(Object? currentValue, Object? previousValue) {
+      final current = number(currentValue);
+      final previousValueNumber = number(previousValue);
+      if (current == null || previousValueNumber == null) return 'Недостаточно сопоставимых данных';
+      final delta = current - previousValueNumber;
+      final arrow = delta > 0 ? '↑ +' : delta < 0 ? '↓ −' : '→ ';
+      return '$arrow${delta.abs().toStringAsFixed(1)} балла';
+    }
 
     final score = snapshot['score'] is Map ? Map<String, Object?>.from(snapshot['score'] as Map) : <String, Object?>{};
     final scoreComponents = score['components'] is Map ? Map<String, Object?>.from(score['components'] as Map) : <String, Object?>{};
@@ -242,6 +286,12 @@ class PdfReportService {
         : const <Map>[];
     final weeklyTrend = snapshot['weeklyTrend'] is List
         ? (snapshot['weeklyTrend'] as List).whereType<Map>().toList()
+        : const <Map>[];
+    final trendPoints = snapshot['trendPoints'] is List
+        ? (snapshot['trendPoints'] as List).whereType<Map>().toList()
+        : const <Map>[];
+    final weekdayTrend = snapshot['weekdayTrend'] is List
+        ? (snapshot['weekdayTrend'] as List).whereType<Map>().toList()
         : const <Map>[];
     final weekdayPatterns = snapshot['weekdayPatterns'] is List
         ? (snapshot['weekdayPatterns'] as List).whereType<Map>().toList()
@@ -274,7 +324,7 @@ class PdfReportService {
           return pw.Text('${component['label'] ?? entry.key}: ${value is num ? value.toStringAsFixed(0) + ' / 100' : 'Нет данных'} · выборка ${component['samples'] ?? 0}');
         }),
       ],
-      if (snapshot['kind'] == 'year')
+      if (const {'year', 'quarter', 'halfYear'}.contains(snapshot['kind']))
         pw.Text('Суммарная продолжительность сна: ${duration(snapshot['totalSleepMinutes'])}'),
       pw.Text('Средняя продолжительность сна: ${duration(snapshot['averageSleepMinutes'])} · выборка ${snapshot['sleepDurationSamples'] ?? 0}'),
       pw.Text('Среднее время в постели: ${duration(snapshot['averageTimeInBedMinutes'])} · выборка ${snapshot['timeInBedSamples'] ?? 0}'),
@@ -292,11 +342,13 @@ class PdfReportService {
       final previousScore = previous['score'] is Map ? Map<String, Object?>.from(previous['score'] as Map) : <String, Object?>{};
       content.add(pw.Text('Средняя оценка сна: ${previousScore['average'] is num ? (previousScore['average'] as num).toStringAsFixed(0) + ' / 100' : 'Недостаточно данных'} · ночей с оценкой ${previousScore['samples'] ?? 0}'));
       content.add(pw.Text('Средняя продолжительность сна: ${duration(previous['averageSleepMinutes'])}'));
+      content.add(pw.Text('Изменение средней длительности: ${signedDurationDelta(snapshot['averageSleepMinutes'], previous['averageSleepMinutes'])} · ${signedPercentDelta(snapshot['averageSleepMinutes'], previous['averageSleepMinutes'])}'));
       content.add(pw.Text('Среднее время в постели: ${duration(previous['averageTimeInBedMinutes'])}'));
       content.add(pw.Text('Эффективность: ${average(previous['averageEfficiency'], suffix: '%')}'));
       content.add(pw.Text('Пробуждения: ${average(previous['averageAwakenings'])}'));
       content.add(pw.Text('Субъективное качество: ${average(previous['averageQuality'], suffix: ' / 5')}'));
       content.add(pw.Text('Самочувствие: ${average(previous['averageWellbeing'], suffix: ' / 5')}'));
+      content.add(pw.Text('Изменение средней оценки самочувствия: ${signedScaleDelta(snapshot['averageWellbeing'], previous['averageWellbeing'])}'));
     }
     final rankedInsights = snapshot['rankedInsights'] is List
         ? (snapshot['rankedInsights'] as List).whereType<Map>().toList()
@@ -412,7 +464,7 @@ class PdfReportService {
         data: months.map((month) => [
           month['month'] is int && (month['month'] as int) >= 1 && (month['month'] as int) <= 12
               ? monthNames[(month['month'] as int) - 1] : '—',
-          month['nights']?.toString() ?? '0',
+          monthNightCount(Map<String, Object?>.from(month)).toString(),
           duration(month['averageSleepMinutes']),
           (month['score'] is Map && (month['score'] as Map)['average'] is num)
             ? ((month['score'] as Map)['average'] as num).toStringAsFixed(0) + ' / 100' : '—',
@@ -453,6 +505,62 @@ class PdfReportService {
       ));
       content.add(pw.Text('Показываются только группы минимум с тремя измерениями; статистика описательная и не устанавливает причины изменений.'));
     }
+    if (snapshot['kind'] == 'week' && trendPoints.isNotEmpty) {
+      content.add(pw.SizedBox(height: 14));
+      content.add(pw.Header(level: 1, child: pw.Text('Динамика по дням недели')));
+      content.add(pw.TableHelper.fromTextArray(
+        headers: ['Дата', 'Ночей с измерением', 'Средний сон'],
+        cellStyle: const pw.TextStyle(fontSize: 8),
+        headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+        data: trendPoints.map((point) => [
+          point['label']?.toString() ?? '—',
+          point['samples']?.toString() ?? '0',
+          duration(point['sleepMinutes']),
+        ]).toList(),
+      ));
+    }
+    if (snapshot['kind'] == 'week' && weekdayTrend.isNotEmpty) {
+      content.add(pw.SizedBox(height: 10));
+      content.add(pw.Header(level: 1, child: pw.Text('Средняя длительность по дням недели')));
+      content.add(pw.TableHelper.fromTextArray(
+        headers: ['День', 'Ночей с измерением', 'Средний сон'],
+        cellStyle: const pw.TextStyle(fontSize: 8),
+        headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+        data: weekdayTrend.map((point) => [
+          point['label']?.toString() ?? '—',
+          point['samples']?.toString() ?? '0',
+          duration(point['sleepMinutes']),
+        ]).toList(),
+      ));
+    }
+    final nightlyBuckets = snapshot['kind'] == 'customRange' || snapshot['kind'] == 'week' ? trendPoints
+        : snapshot['kind'] == 'month' ? weeklyTrend : months;
+    final nightlyRows = <List<String>>[];
+    for (final bucket in nightlyBuckets) {
+      final nights = (bucket['nights'] as List? ?? const []).whereType<Map>();
+      for (final night in nights) {
+        final date = DateTime.tryParse(night['startedAt']?.toString() ?? '');
+        nightlyRows.add([
+          date == null ? '—' : DateFormat('dd.MM.yyyy').format(date),
+          duration(night['sleepMinutes']),
+          night['score'] is num ? (night['score'] as num).toStringAsFixed(0) : 'Нет данных',
+          average(night['efficiency'], suffix: '%'),
+          night['awakenings'] is num ? (night['awakenings'] as num).toStringAsFixed(1) : 'Нет данных',
+          average(night['quality'], suffix: ' / 5'),
+          average(night['wellbeing'], suffix: ' / 5'),
+        ]);
+      }
+    }
+    if (nightlyRows.isNotEmpty) {
+      content.add(pw.SizedBox(height: 14));
+      content.add(pw.Header(level: 1, child: pw.Text('Фактические данные отдельных ночей')));
+      content.add(pw.TableHelper.fromTextArray(
+        headers: ['Дата', 'Сон', 'Оценка', 'Эффективность', 'Пробуждения', 'Качество', 'Самочувствие'],
+        cellStyle: const pw.TextStyle(fontSize: 7),
+        headerStyle: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold),
+        data: nightlyRows,
+      ));
+    }
     if (notes.isNotEmpty) {
       content.add(pw.SizedBox(height: 14));
       content.add(pw.Header(level: 1, child: pw.Text('Заметки за период')));
@@ -485,6 +593,356 @@ class PdfReportService {
     await Share.shareXFiles([XFile(file.path, mimeType: 'application/pdf')], subject: 'Sleep Tracker — $title');
   }
 
+
+  static Future<void> exportHealthSnapshot(
+    Map<String, Object?> snapshot,
+    String title,
+  ) async {
+    final regular = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Regular.ttf'));
+    final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));
+    final doc = pw.Document();
+    final start = DateTime.parse(snapshot['start'] as String);
+    final endExclusive = DateTime.parse(snapshot['endExclusive'] as String);
+    final end = DateTime(endExclusive.year, endExclusive.month, endExclusive.day - 1);
+    final metrics = (snapshot['metrics'] as List? ?? const [])
+        .whereType<Map>()
+        .map((row) => Map<String, Object?>.from(row))
+        .toList();
+    final previous = snapshot['previous'] is Map
+        ? Map<String, Object?>.from(snapshot['previous'] as Map)
+        : <String, Object?>{};
+    final previousMetrics = (previous['metrics'] as List? ?? const [])
+        .whereType<Map>()
+        .map((row) => Map<String, Object?>.from(row))
+        .toList();
+    final previousByKey = {
+      for (final metric in previousMetrics)
+        '${metric['type']}::${metric['unit']}': metric,
+    };
+    String value(Object? raw) => raw is num ? raw.toStringAsFixed(1) : '—';
+
+    final content = <pw.Widget>[
+      pw.Text(title, style: pw.TextStyle(fontSize: 19, fontWeight: pw.FontWeight.bold)),
+      pw.SizedBox(height: 8),
+      pw.Text('Период: ${DateFormat('dd.MM.yyyy').format(start)} — ${DateFormat('dd.MM.yyyy').format(end)}'),
+      pw.Text('Ночей с физиологическими измерениями: ${snapshot['nights'] ?? 0}'),
+      pw.SizedBox(height: 12),
+      pw.Text('Фактические показатели по ночам',
+        style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+      pw.SizedBox(height: 5),
+    ];
+
+    if (metrics.isEmpty) {
+      content.add(pw.Text('За период нет пригодных физиологических измерений.'));
+    } else {
+      content.add(pw.Table.fromTextArray(
+        headers: const ['Показатель', 'Ед.', 'Среднее', 'Медиана', 'Мин.', 'Макс.', 'Ночей', 'Измерений', 'Пред. период'],
+        data: [
+          for (final metric in metrics)
+            [
+              metric['type'] ?? '',
+              metric['unit'] ?? '',
+              value(metric['average']),
+              value(metric['median']),
+              value(metric['minimum']),
+              value(metric['maximum']),
+              metric['nightCount'] ?? 0,
+              metric['measurementCount'] ?? 0,
+              previousByKey['${metric['type']}::${metric['unit']}'] is Map
+                  ? value((previousByKey['${metric['type']}::${metric['unit']}'] as Map)['average'])
+                  : '—',
+            ],
+        ],
+        headerStyle: pw.TextStyle(font: bold, fontSize: 7),
+        cellStyle: pw.TextStyle(font: regular, fontSize: 7),
+        headerDecoration: const pw.BoxDecoration(color: pdf.PdfColor(0.90, 0.92, 0.95)),
+        cellAlignment: pw.Alignment.centerLeft,
+        cellPadding: const pw.EdgeInsets.all(4),
+      ));
+      content.add(pw.SizedBox(height: 4));
+      content.add(pw.Text(
+        'Для предыдущего периода: ${previous['nights'] ?? 0} ночей с измерениями. '
+        'Сравнение средних является описательным; число ночей и измерений указано отдельно.',
+        style: pw.TextStyle(font: regular, fontSize: 8),
+      ));
+    }
+
+    final trendPoints = (snapshot['trendPoints'] as List? ?? const [])
+        .whereType<Map>()
+        .map((row) => Map<String, Object?>.from(row))
+        .toList();
+    if (trendPoints.isNotEmpty) {
+      content.add(pw.SizedBox(height: 14));
+      content.add(pw.Text('Динамика внутри периода',
+        style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)));
+      for (final point in trendPoints) {
+        final pointMetrics = (point['metrics'] as List? ?? const [])
+            .whereType<Map>()
+            .map((row) => Map<String, Object?>.from(row))
+            .toList();
+        if (pointMetrics.isEmpty) continue;
+        content.add(pw.SizedBox(height: 6));
+        content.add(pw.Text('${point['label'] ?? ''} · ${point['nights'] ?? 0} ночей',
+          style: pw.TextStyle(font: bold, fontSize: 9)));
+        content.add(pw.Table.fromTextArray(
+          headers: const ['Показатель', 'Среднее', 'Ночей', 'Измерений', 'Единицы'],
+          data: [
+            for (final metric in pointMetrics)
+              [
+                metric['type'] ?? '',
+                value(metric['average']),
+                metric['nightCount'] ?? 0,
+                metric['measurementCount'] ?? 0,
+                metric['unit'] ?? '',
+              ],
+          ],
+          headerStyle: pw.TextStyle(font: bold, fontSize: 7),
+          cellStyle: pw.TextStyle(font: regular, fontSize: 7),
+          headerDecoration: const pw.BoxDecoration(color: pdf.PdfColor(0.94, 0.95, 0.97)),
+          cellPadding: const pw.EdgeInsets.all(3),
+        ));
+      }
+    }
+
+    content.add(pw.SizedBox(height: 14));
+    content.add(pw.Text('Методика и ограничения',
+      style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)));
+    final notes = (snapshot['methodologyNotes'] as List? ?? const []).whereType<String>();
+    for (final note in notes) {
+      content.add(pw.Padding(
+        padding: const pw.EdgeInsets.only(top: 4),
+        child: pw.Text('• $note', style: pw.TextStyle(font: regular, fontSize: 8)),
+      ));
+    }
+    content.add(pw.SizedBox(height: 8));
+    content.add(pw.Text(
+      'В отчёт включены только фактические измерения, сохранённые источником. '
+      'Отсутствующие значения не заменяются нулями, редкие точки не интерполируются.',
+      style: pw.TextStyle(font: regular, fontSize: 8),
+    ));
+
+    doc.addPage(pw.MultiPage(
+      maxPages: 1000,
+      theme: pw.ThemeData.withFont(base: regular, bold: bold),
+      build: (_) => content,
+    ));
+    final dir = await getTemporaryDirectory();
+    final file = File(p.join(dir.path, 'SleepTracker-health-${DateTime.now().millisecondsSinceEpoch}.pdf'));
+    await file.writeAsBytes(await doc.save(), flush: true);
+    await Share.shareXFiles(
+      [XFile(file.path, mimeType: 'application/pdf')],
+      subject: 'Sleep Tracker — $title',
+    );
+  }
+
+  /// Exports the complete saved detail for one completed night.
+  /// Only values actually stored for this session are included; missing data
+  /// is rendered as unavailable and no sleep phases or measurements are inferred.
+  static Future<void> exportSingleNight({
+    required SleepDatabase database,
+    required SleepSession session,
+  }) async {
+    final bytes = await buildSingleNightPdfBytes(
+      database: database,
+      session: session,
+    );
+    final directory = await getTemporaryDirectory();
+    final fileDate = DateFormat('yyyyMMdd').format(session.startedAt);
+    final file = File(p.join(directory.path, 'SleepTracker-night-$fileDate.pdf'));
+    await file.writeAsBytes(bytes, flush: true);
+    await Share.shareXFiles(
+      [XFile(file.path, mimeType: 'application/pdf', name: p.basename(file.path))],
+      subject: 'Sleep Tracker — отчёт о ночи',
+      text: 'Подробный отчёт по одной сохранённой ночи.',
+    );
+  }
+
+  static Future<Uint8List> buildSingleNightPdfBytes({
+    required SleepDatabase database,
+    required SleepSession session,
+    DateTime? generatedAt,
+  }) async {
+    final current = await database.getSessionById(session.id);
+    final night = current ?? session;
+    if (night.endedAt == null || !night.endedAt!.isAfter(night.startedAt)) {
+      throw StateError('Нельзя сформировать PDF для незавершённой ночи.');
+    }
+
+    final stages = await database.getStages(night.id);
+    final metrics = SleepSessionMetrics.calculate(session: night, stages: stages);
+    final morning = await database.getMorningReport(night.id);
+    final notes = await database.getNotes(sessionId: night.id);
+    final healthSamples = await database.getMetrics(night.id);
+    final healthSummaries = SleepMetricSummary.fromSamples(healthSamples);
+    final climateSamples = await database.getClimateSamples(
+      sessionId: night.id,
+      from: night.startedAt,
+      to: night.endedAt,
+    );
+    final audioEvents = await database.getAudioEvents(sessionId: night.id);
+
+    String dateTime(DateTime? value) => value == null
+        ? 'Нет данных'
+        : DateFormat('dd.MM.yyyy HH:mm').format(value.toLocal());
+    String duration(int? value) => value == null
+        ? 'Нет данных'
+        : '${value ~/ 60} ч ${(value % 60).toString().padLeft(2, '0')} мин';
+    String decimal(Object? value, {String suffix = ''}) =>
+        value is num && value.toDouble().isFinite
+            ? value.toStringAsFixed(1) + suffix
+            : 'Нет данных';
+
+    final regular = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Regular.ttf'));
+    final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));
+    final doc = pw.Document();
+    final stageRows = stages.where((row) =>
+      row['stage'] is String && row['started_at'] is String && row['ended_at'] is String
+    ).toList()..sort((a, b) =>
+      DateTime.parse(a['started_at']! as String).compareTo(DateTime.parse(b['started_at']! as String)));
+    final climateGroups = <(String, String), List<double>>{};
+    for (final row in climateSamples) {
+      final type = row['metric_type'], unit = row['unit'], value = row['value'];
+      if (type is String && unit is String && value is num && value.toDouble().isFinite) {
+        climateGroups.putIfAbsent((type, unit), () => []).add(value.toDouble());
+      }
+    }
+    final source = night.source == 'manual' || night.source == 'manual_entry'
+        ? 'Вручную' : night.source;
+    doc.addPage(pw.MultiPage(
+      theme: pw.ThemeData.withFont(base: regular, bold: bold),
+      build: (_) => [
+        pw.Header(level: 0, child: pw.Text('Sleep Tracker — подробный отчёт о ночи')),
+        pw.Text(DateFormat('d MMMM yyyy', 'ru').format(night.startedAt)),
+        pw.Text('Сформирован: ${DateFormat('dd.MM.yyyy HH:mm').format(generatedAt ?? DateTime.now())}'),
+        pw.SizedBox(height: 12),
+        pw.Header(level: 1, child: pw.Text('Основные сведения')),
+        pw.TableHelper.fromTextArray(
+          headers: ['Показатель', 'Значение'],
+          cellStyle: const pw.TextStyle(fontSize: 9),
+          headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+          data: [
+            ['Продолжительность в постели', duration(metrics.timeInBedMinutes)],
+            ['Продолжительность сна', duration(metrics.sleepDurationMinutes)],
+            ['Начало записи', dateTime(night.startedAt)],
+            ['Окончание записи', dateTime(night.endedAt)],
+            ['Фактическое засыпание', dateTime(metrics.sleepOnsetAt)],
+            ['Фактическое пробуждение', dateTime(metrics.sleepEndAt)],
+            ['Латентность засыпания', duration(metrics.sleepLatencyMinutes)],
+            ['Эффективность сна', metrics.sleepEfficiencyPercent == null ? 'Нет данных' : '${metrics.sleepEfficiencyPercent!.toStringAsFixed(1)}%'],
+            ['Покрытие интервала фазами', metrics.stageCoveragePercent == null ? 'Нет данных' : '${metrics.stageCoveragePercent!.toStringAsFixed(1)}%'],
+            ['Количество пробуждений', metrics.hasAwakeSamples ? metrics.awakeningCount.toString() : 'Нет данных'],
+            ['Источник записи', source],
+            ['Ручная корректировка', night.userEdited ? 'Да' : 'Нет'],
+          ],
+        ),
+        pw.SizedBox(height: 12),
+        pw.Header(level: 1, child: pw.Text('Фазы сна')),
+        if (metrics.stageBreakdownMinutes.isEmpty)
+          pw.Text('Источник не предоставил данные о фазах сна.')
+        else
+          pw.TableHelper.fromTextArray(
+            headers: ['Фаза', 'Продолжительность'],
+            cellStyle: const pw.TextStyle(fontSize: 9),
+            data: metrics.stageBreakdownMinutes.entries.map((entry) =>
+              [entry.key, duration(entry.value)]).toList(),
+          ),
+        if (stageRows.isNotEmpty) ...[
+          pw.SizedBox(height: 8),
+          pw.Text('Исходные интервалы фаз', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+          pw.TableHelper.fromTextArray(
+            headers: ['Фаза', 'Начало', 'Окончание'],
+            cellStyle: const pw.TextStyle(fontSize: 8),
+            headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+            data: stageRows.map((row) => [
+              row['stage'] as String,
+              dateTime(DateTime.tryParse(row['started_at']! as String)),
+              dateTime(DateTime.tryParse(row['ended_at']! as String)),
+            ]).toList(),
+          ),
+        ],
+        pw.SizedBox(height: 12),
+        pw.Header(level: 1, child: pw.Text('Утренний отчёт')),
+        if (morning == null || (morning['wellbeing'] == null && morning['sleep_quality'] == null))
+          pw.Text('Субъективные оценки не добавлены.')
+        else ...[
+          pw.Text('Самочувствие: ${decimal(morning['wellbeing'], suffix: ' / 5')}'),
+          pw.Text('Качество сна: ${decimal(morning['sleep_quality'], suffix: ' / 5')}'),
+        ],
+        if (morning?['answers_json'] is String && (morning!['answers_json'] as String).isNotEmpty)
+          pw.Text('Дополнительные ответы: ${morning['answers_json']}',
+            style: const pw.TextStyle(fontSize: 8)),
+        pw.SizedBox(height: 12),
+        pw.Header(level: 1, child: pw.Text('Физиологические измерения')),
+        if (healthSummaries.isEmpty)
+          pw.Text('Измерения Apple Health для этой ночи не сохранены.')
+        else
+          pw.TableHelper.fromTextArray(
+            headers: ['Показатель', 'Среднее', 'Минимум', 'Максимум', 'Измерений'],
+            cellStyle: const pw.TextStyle(fontSize: 8),
+            headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+            data: healthSummaries.map((summary) => [
+              summary.metricType,
+              '${summary.average.toStringAsFixed(1)} ${summary.unit}',
+              '${summary.minimum.toStringAsFixed(1)}',
+              '${summary.maximum.toStringAsFixed(1)}',
+              summary.count.toString(),
+            ]).toList(),
+          ),
+        pw.SizedBox(height: 12),
+        pw.Header(level: 1, child: pw.Text('Микроклимат спальни')),
+        if (climateGroups.isEmpty)
+          pw.Text('Измерения микроклимата для этой ночи не сохранены.')
+        else
+          pw.TableHelper.fromTextArray(
+            headers: ['Показатель', 'Среднее', 'Измерений'],
+            cellStyle: const pw.TextStyle(fontSize: 8),
+            headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+            data: climateGroups.entries.map((entry) {
+              final values = entry.value;
+              final avg = values.reduce((a, b) => a + b) / values.length;
+              final label = entry.key.$1 == 'temperature' ? 'Температура' :
+                  entry.key.$1 == 'humidity' ? 'Влажность' : entry.key.$1;
+              return [label, '${avg.toStringAsFixed(1)} ${entry.key.$2}', values.length.toString()];
+            }).toList(),
+          ),
+        pw.SizedBox(height: 12),
+        pw.Header(level: 1, child: pw.Text('Звуковые события')),
+        if (audioEvents.isEmpty)
+          pw.Text('Сохранённых звуковых событий для этой ночи нет.')
+        else
+          pw.TableHelper.fromTextArray(
+            headers: ['Категория', 'Время', 'Длительность', 'Уверенность'],
+            cellStyle: const pw.TextStyle(fontSize: 8),
+            headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+            data: audioEvents.map((event) => [
+              event['category'] as String? ?? 'Не указано',
+              dateTime(DateTime.tryParse(event['captured_at'] as String? ?? '')),
+              event['duration_ms'] is num ? '${((event['duration_ms'] as num) / 1000).toStringAsFixed(1)} с' : 'Нет данных',
+              event['confidence'] is num ? '${((event['confidence'] as num) * 100).toStringAsFixed(0)}%' : 'Нет данных',
+            ]).toList(),
+          ),
+        pw.SizedBox(height: 12),
+        pw.Header(level: 1, child: pw.Text('Заметки')),
+        if ((night.note?.trim().isEmpty ?? true) && notes.isEmpty)
+          pw.Text('Заметки к этой ночи не добавлены.')
+        else ...[
+          if (night.note?.trim().isNotEmpty ?? false)
+            pw.Padding(padding: const pw.EdgeInsets.only(bottom: 5), child: pw.Text(night.note!)),
+          ...notes.map((note) => pw.Padding(
+            padding: const pw.EdgeInsets.only(bottom: 5),
+            child: pw.Text(note.text),
+          )),
+        ],
+        pw.SizedBox(height: 10),
+        pw.Text(
+          'Отчёт содержит только сохранённые данные этой ночи. Отсутствующие значения не моделируются; расчётные показатели доступны только при достаточном исходном покрытии.',
+          style: const pw.TextStyle(fontSize: 8),
+        ),
+      ],
+    ));
+    return doc.save();
+  }
+
   static Future<void> exportHistory({int days = 30, DateTime? from, DateTime? to, bool includeNotes = false}) async {
     if ((from == null) != (to == null)) {
       throw ArgumentError('Для произвольного периода укажите обе даты: начало и окончание.');
@@ -499,7 +957,7 @@ class PdfReportService {
     if (!rangeEndExclusive.isAfter(rangeStart)) {
       throw ArgumentError('Дата окончания отчёта должна быть не раньше даты начала.');
     }
-    final sessions = await SleepDatabase.instance.getSessions(limit: 10000);
+    final sessions = await SleepDatabase.instance.getSessions(limit: null);
     final selected = sessions.where((s) =>
       !s.startedAt.isBefore(rangeStart) && s.startedAt.isBefore(rangeEndExclusive) && s.endedAt != null
     ).toList()..sort((a, b) => a.startedAt.compareTo(b.startedAt));

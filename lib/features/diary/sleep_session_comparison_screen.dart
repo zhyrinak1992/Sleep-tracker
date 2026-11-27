@@ -16,9 +16,9 @@ class _SleepSessionComparisonScreenState extends State<SleepSessionComparisonScr
   late Future<List<SleepSession>> _sessionsFuture;
   String? _firstId, _secondId;
   @override
-  void initState() { super.initState(); _sessionsFuture = widget.database.getSessions(limit: 10000); }
+  void initState() { super.initState(); _sessionsFuture = widget.database.getSessions(limit: null); }
   Future<void> _reload() async {
-    setState(() => _sessionsFuture = widget.database.getSessions(limit: 10000));
+    setState(() => _sessionsFuture = widget.database.getSessions(limit: null));
     await _sessionsFuture;
   }
   SleepSession? _byId(List<SleepSession> sessions, String? id) {
@@ -87,7 +87,18 @@ class _SleepSessionComparisonScreenState extends State<SleepSessionComparisonScr
           const Divider(height: 1),
           _row('Покрытие фаз', _percent(a.stageCoveragePercent), _percent(b.stageCoveragePercent), _percentDelta(a.stageCoveragePercent, b.stageCoveragePercent)),
           const Divider(height: 1),
-          _row('Количество пробуждений', a.awakeningCount.toString(), b.awakeningCount.toString(), _delta(a.awakeningCount, b.awakeningCount, unit: 'эп.')),
+          _row(
+            'Количество пробуждений',
+            a.hasAwakeSamples && a.stageCoveragePercent != null && a.stageCoveragePercent! >= 80
+                ? a.awakeningCount.toString() : 'Нет данных',
+            b.hasAwakeSamples && b.stageCoveragePercent != null && b.stageCoveragePercent! >= 80
+                ? b.awakeningCount.toString() : 'Нет данных',
+            _delta(
+              a.hasAwakeSamples && a.stageCoveragePercent != null && a.stageCoveragePercent! >= 80 ? a.awakeningCount : null,
+              b.hasAwakeSamples && b.stageCoveragePercent != null && b.stageCoveragePercent! >= 80 ? b.awakeningCount : null,
+              unit: 'эп.',
+            ),
+          ),
           const Divider(height: 1),
           _row('Суммарное бодрствование', _duration(a.awakeStageMinutes), _duration(b.awakeStageMinutes), _delta(a.awakeStageMinutes, b.awakeStageMinutes)),
           const Divider(height: 1),

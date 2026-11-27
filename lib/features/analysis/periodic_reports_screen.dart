@@ -1,10 +1,21 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:cross_file/cross_file.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../data/pdf_report_service.dart';
 import '../../data/sleep_database.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/screen_header.dart';
 import '../../widgets/section_card.dart';
 import 'periodic_report_service.dart';
+import 'sleep_recommendation_text.dart';
+import 'periodic_report_export.dart';
+import 'tag_insight_preferences.dart';
+import 'tag_insight_history.dart';
 
 class PeriodicReportsScreen extends StatefulWidget {
   const PeriodicReportsScreen({super.key, required this.database});
@@ -15,16 +26,506 @@ class PeriodicReportsScreen extends StatefulWidget {
 
 class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
   late Future<List<PeriodicReportSnapshot>> _future;
+  late Future<Map<String, Object?>?> _currentInsightFuture;
+  TagInsightPreferences _insightPreferences = const TagInsightPreferences();
+  bool _preferencesLoading = true;
+  String? _preferencesError;
+
+  TagInsightPreferenceStore get _preferenceStore => TagInsightPreferenceStore(
+    widget.database.getAppMetadata,
+    widget.database.setAppMetadata,
+  );
+
   @override
-  void initState() { super.initState(); _future = _load(); }
+  void initState() {
+    super.initState();
+    _future = _load();
+    _currentInsightFuture = _loadCurrentInsights();
+    _loadInsightPreferences();
+  }
+
+  Future<void> _loadInsightPreferences() async {
+    try {
+      final preferences = await _preferenceStore.load();
+      if (!mounted) return;
+      setState(() {
+        _insightPreferences = preferences;
+        _preferencesLoading = false;
+        _preferencesError = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _preferencesLoading = false;
+        _preferencesError = error.toString();
+      });
+    }
+  }
+
   Future<List<PeriodicReportSnapshot>> _load() async {
     final service = PeriodicReportService(widget.database);
     await service.generateClosedReports();
     return service.loadArchive();
   }
-  void _refresh() => setState(() => _future = _load());
+
+  Future<Map<String, Object?>?> _loadCurrentInsights() =>
+      TagInsightHistoryStore(
+        widget.database.getAppMetadata,
+        widget.database.setAppMetadata,
+      ).loadCurrent();
+
+  void _refresh() => setState(() {
+    _future = _load();
+    _currentInsightFuture = _loadCurrentInsights();
+  });
+
+  Future<void> _hideInsight(
+    String tagKey, String metricKey, String tagLabel, String metricLabel,
+  ) async {
+    try {
+      final preferences = await _preferenceStore.hide(
+        tagKey: tagKey, metricKey: metricKey,
+        tagLabel: tagLabel, metricLabel: metricLabel,
+      );
+      if (mounted) setState(() => _insightPreferences = preferences);
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось скрыть закономерность: $error')),
+      );
+    }
+  }
+
+  Future<void> _togglePinInsight(
+    String tagKey, String metricKey, String tagLabel, String metricLabel, bool currentlyPinned,
+  ) async {
+    try {
+      final preferences = currentlyPinned
+          ? await _preferenceStore.unpin(tagKey: tagKey, metricKey: metricKey)
+          : await _preferenceStore.pin(
+              tagKey: tagKey, metricKey: metricKey,
+              tagLabel: tagLabel, metricLabel: metricLabel,
+            );
+      if (mounted) setState(() => _insightPreferences = preferences);
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось изменить закрепление: $error')),
+      );
+    }
+  }
+
+  Future<void> _restoreInsight(String id) async {
+    final preferences = await _preferenceStore.restore(id);
+    if (mounted) setState(() => _insightPreferences = preferences);
+  }
+
+  Future<void> _showHiddenInsights() async {
+    if (_preferencesLoading || _preferencesError != null) return;
+    final entries = _insightPreferences.hidden.entries.toList();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Скрытые закономерности'),
+        content: entries.isEmpty
+            ? const Text('Скрытых закономерностей пока нет.')
+            : ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 360),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: entries.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final entry = entries[index];
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(entry.value.tagLabel),
+                      subtitle: Text(entry.value.metricLabel),
+                      trailing: TextButton(
+                        onPressed: () async {
+                          try {
+                            await _restoreInsight(entry.key);
+                            if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                          } catch (error) {
+                            if (dialogContext.mounted) ScaffoldMessenger.of(dialogContext).showSnackBar(
+                              SnackBar(content: Text('Не удалось восстановить закономерность: $error')),
+                            );
+                          }
+                        },
+                        child: const Text('Вернуть'),
+                      ),
+                    );
+                  },
+                ),
+              ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Закрыть'),
+          ),
+        ],
+      ),
+    );
+  }
+  String _monthLabel(DateTime? date) {
+    if (date == null) return 'Период неизвестен';
+    const months = [
+      'январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
+      'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь',
+    ];
+    return '${months[date.month - 1]} ${date.year}';
+  }
+
+  String _dateTimeLabel(Object? raw) {
+    final date = DateTime.tryParse(raw?.toString() ?? '');
+    if (date == null) return 'Дата неизвестна';
+    return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _insightValue(String metricKey, Object? raw) {
+    if (raw is! num) return 'нет данных';
+    if (metricKey == 'duration' || metricKey == 'sleepLatency') {
+      return _duration(raw.toDouble());
+    }
+    if (metricKey == 'bedtime' || metricKey == 'wakeTime') {
+      final minute = raw.round().remainder(1440);
+      return '${(minute ~/ 60).toString().padLeft(2, '0')}:${(minute % 60).toString().padLeft(2, '0')}';
+    }
+    const suffixes = {
+      'score': ' / 100',
+      'awakenings': ' эпиз.',
+      'efficiency': '%',
+      'subjectiveQuality': ' / 5',
+      'wellbeing': ' / 5',
+      'heartRate': ' уд/мин',
+      'respiratoryRate': ' вдох/мин',
+      'bloodOxygen': '%',
+      'hrv': ' мс',
+      'roomTemperature': ' °C',
+      'roomHumidity': '%',
+    };
+    return raw.toStringAsFixed(1) + (suffixes[metricKey] ?? '');
+  }
+
+  String _insightDifference(String metricKey, Object? raw) {
+    if (raw is! num) return 'Разница пока не рассчитана';
+    if (metricKey == 'bedtime' || metricKey == 'wakeTime') {
+      final minutes = raw.round().abs();
+      if (raw == 0) return 'Разницы нет';
+      return (raw > 0 ? 'позже на ' : 'раньше на ') + '$minutes мин';
+    }
+    if (raw == 0) return 'Разницы нет';
+    return (raw > 0 ? 'выше на ' : 'ниже на ') +
+        _insightValue(metricKey, raw.abs());
+  }
+
+  Future<void> _showInsightHistory() async {
+    final history = await TagInsightHistoryStore(
+      widget.database.getAppMetadata,
+      widget.database.setAppMetadata,
+    ).loadHistory();
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('История закономерностей'),
+        content: SizedBox(
+          width: 520,
+          height: 460,
+          child: history.isEmpty
+              ? const Center(child: Text('История появится после первого пересчёта анализа.'))
+              : ListView.separated(
+                  itemCount: history.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final snapshot = history[history.length - index - 1];
+                    final start = DateTime.tryParse(
+                      snapshot['periodStart'] as String? ?? '',
+                    );
+                    final insights = (snapshot['insights'] as List? ?? const [])
+                        .whereType<Map>()
+                        .map((item) => Map<String, Object?>.from(item))
+                        .toList();
+                    return ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      title: Text(_monthLabel(start)),
+                      subtitle: Text(
+                        'Пересчёт ${_dateTimeLabel(snapshot['generatedAt'])} · ${insights.length} закономерностей',
+                      ),
+                      children: insights.map((insight) {
+                        final current = insight['current'] is Map
+                            ? Map<String, Object?>.from(insight['current'] as Map)
+                            : <String, Object?>{};
+                        final last = insight['lastComparable'] is Map
+                            ? Map<String, Object?>.from(insight['lastComparable'] as Map)
+                            : <String, Object?>{};
+                        final metricKey = insight['metricKey'] as String? ?? '';
+                        final values = current.isNotEmpty ? current : last;
+                        final events = (insight['statusEvents'] as List? ?? const [])
+                            .whereType<Map>().toList();
+                        return ExpansionTile(
+                          tilePadding: const EdgeInsets.only(left: 8),
+                          title: Text('${insight['tagLabel']} · ${insight['metricLabel']}'),
+                          subtitle: Text(TagInsightHistoryStore.statusLabel(
+                            insight['status'] as String?,
+                          )),
+                          children: [
+                            ListTile(
+                              dense: true,
+                              title: Text(
+                                'С отметкой: ${_insightValue(metricKey, values['withTagAverage'])} · ${values['withTagSamples'] ?? 0} ночей',
+                              ),
+                              subtitle: Text(
+                                'Без отметки: ${_insightValue(metricKey, values['withoutTagAverage'])} · ${values['withoutTagSamples'] ?? 0} ночей',
+                              ),
+                            ),
+                            ...events.map((event) => ListTile(
+                              dense: true,
+                              leading: const Icon(Icons.history_rounded, size: 17),
+                              title: Text(TagInsightHistoryStore.statusLabel(
+                                event['status'] as String?,
+                              )),
+                              subtitle: Text(_dateTimeLabel(event['at'])),
+                            )),
+                          ],
+                        );
+                      }).toList(),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Закрыть'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCurrentInsightsSection() => FutureBuilder<Map<String, Object?>?>(
+    future: _currentInsightFuture,
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const SizedBox.shrink();
+      }
+      if (snapshot.hasError) {
+        return SectionCard(child: Text(
+          'Не удалось загрузить текущие закономерности: ${snapshot.error}',
+          style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+        ));
+      }
+      final current = snapshot.data;
+      if (current == null) {
+        return const SectionCard(child: Text(
+          'Текущие закономерности появятся после утреннего отчёта и накопления достаточных данных.',
+          style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4),
+        ));
+      }
+      final all = (current['insights'] as List? ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, Object?>.from(item))
+          .toList();
+      final visible = all.where((insight) {
+        final tagKey = insight['tagKey'] as String? ?? '';
+        final metricKey = insight['metricKey'] as String? ?? '';
+        return tagKey.isNotEmpty && metricKey.isNotEmpty &&
+            !_insightPreferences.isHidden(
+              TagInsightPreferenceStore.identity(tagKey, metricKey),
+            );
+      }).toList()
+        ..sort((a, b) {
+          int pinOrder(Map<String, Object?> insight) =>
+              _insightPreferences.pinned.indexOf(
+                TagInsightPreferenceStore.identity(
+                  insight['tagKey'] as String,
+                  insight['metricKey'] as String,
+                ),
+              );
+          final aPin = pinOrder(a);
+          final bPin = pinOrder(b);
+          if (aPin >= 0 && bPin >= 0) return aPin.compareTo(bPin);
+          if (aPin >= 0) return -1;
+          if (bPin >= 0) return 1;
+          return (a['tagLabel'] as String).compareTo(b['tagLabel'] as String);
+        });
+      final start = DateTime.tryParse(current['periodStart'] as String? ?? '');
+      return SectionCard(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Что может влиять на твой сон',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Период: ${_monthLabel(start)} · сравнение ночей с отметкой и без неё. Статус сопоставляется с предыдущими пересчётами этого же месяца; это не доказательство причин.',
+            style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
+          ),
+          const SizedBox(height: 8),
+          if (visible.isEmpty)
+            Text(
+              all.isEmpty
+                  ? 'Пока нет подтверждённых закономерностей для персональных рекомендаций. Они появятся только при достаточном количестве сопоставимых ночей и повторяющихся различиях.'
+                  : 'Все выявленные закономерности скрыты. Их можно вернуть из списка скрытых.',
+              style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+            ),
+          ...visible.map((insight) {
+            final tagKey = insight['tagKey'] as String;
+            final tagLabel = insight['tagLabel'] as String;
+            final metricKey = insight['metricKey'] as String;
+            final metricLabel = insight['metricLabel'] as String;
+            final identity = TagInsightPreferenceStore.identity(tagKey, metricKey);
+            final pinned = _insightPreferences.pinned.contains(identity);
+            final currentValues = insight['current'] is Map
+                ? Map<String, Object?>.from(insight['current'] as Map)
+                : <String, Object?>{};
+            final lastValues = insight['lastComparable'] is Map
+                ? Map<String, Object?>.from(insight['lastComparable'] as Map)
+                : <String, Object?>{};
+            final values = currentValues.isNotEmpty ? currentValues : lastValues;
+            final difference = currentValues['difference'];
+            final status = insight['status'] as String?;
+            final recommendation = status == 'insufficientData' || difference is! num
+                ? null
+                : SleepRecommendationText.forObservedPattern(
+                    tagLabel: tagLabel,
+                    metricKey: metricKey,
+                    difference: difference.toDouble(),
+                  );
+            final samplesWith = values['withTagSamples'] ?? 0;
+            final samplesWithout = values['withoutTagSamples'] ?? 0;
+            final differenceText = status == 'insufficientData'
+                ? 'Последнее сопоставимое различие: ${_insightDifference(metricKey, lastValues['difference'])}'
+                : status == 'noLongerObserved'
+                    ? 'Прежнее направление различия больше не наблюдается'
+                    : _insightDifference(metricKey, difference);
+            return Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(left: 10, right: 4, bottom: 6),
+                title: Text(
+                  '$tagLabel · $metricLabel',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  '${TagInsightHistoryStore.statusLabel(status)} · с отметкой $samplesWith / без отметки $samplesWithout ночей',
+                  style: const TextStyle(fontSize: 11),
+                ),
+                trailing: PopupMenuButton<String>(
+                  enabled: !_preferencesLoading && _preferencesError == null,
+                  tooltip: 'Действия с закономерностью',
+                  onSelected: (action) {
+                    if (action == 'hide') {
+                      _hideInsight(tagKey, metricKey, tagLabel, metricLabel);
+                    } else if (action == 'pin' || action == 'unpin') {
+                      _togglePinInsight(
+                        tagKey, metricKey, tagLabel, metricLabel, action == 'unpin',
+                      );
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: pinned ? 'unpin' : 'pin',
+                      child: Text(pinned ? 'Снять закрепление' : 'Закрепить'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'hide',
+                      child: Text('Скрыть'),
+                    ),
+                  ],
+                ),
+                children: [
+                  _ReportLine(
+                    label: 'Среднее с отметкой',
+                    value: _insightValue(metricKey, values['withTagAverage']),
+                  ),
+                  _ReportLine(
+                    label: 'Среднее без отметки',
+                    value: _insightValue(metricKey, values['withoutTagAverage']),
+                  ),
+                  _ReportLine(label: 'Наблюдаемое различие', value: differenceText),
+                  if (recommendation != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Что можно проверить',
+                            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11)),
+                          const SizedBox(height: 3),
+                          Text(recommendation,
+                            style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4)),
+                        ],
+                      ),
+                    ),
+                  if (status == 'insufficientData')
+                    const Padding(
+                      padding: EdgeInsets.only(top: 5),
+                      child: Text(
+                        'Недостаточно сопоставимых наблюдений. Это не считается опровержением прежней закономерности.',
+                        style: TextStyle(color: AppTheme.muted, fontSize: 11),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ));
+    },
+  );
+
   Future<void> _export(PeriodicReportSnapshot report) async {
     await PdfReportService.exportPeriodicSnapshot(report.data, report.title);
+  }
+  Future<void> _exportCsv(PeriodicReportSnapshot report) async {
+    final directory = await getTemporaryDirectory();
+    final file = File(p.join(directory.path, 'SleepTracker-${report.id}.csv'));
+    await file.writeAsString(PeriodicReportExport.toCsv(report.data), encoding: utf8, flush: true);
+    await Share.shareXFiles(
+      [XFile(file.path, mimeType: 'text/csv', name: p.basename(file.path))],
+      subject: 'Табличный отчёт Sleep Tracker',
+      text: 'Табличные данные сохранённого отчёта Sleep Tracker.',
+    );
+  }
+
+  Future<void> _createCustomRangeReport() async {
+    final today = DateTime.now();
+    final start = await showDatePicker(
+      context: context,
+      initialDate: today,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(today.year, today.month, today.day),
+      helpText: 'Начало отчётного периода',
+      cancelText: 'Отмена',
+      confirmText: 'Далее',
+    );
+    if (start == null || !mounted) return;
+    final end = await showDatePicker(
+      context: context,
+      initialDate: start.isAfter(today) ? today : today,
+      firstDate: start,
+      lastDate: DateTime(today.year, today.month, today.day),
+      helpText: 'Окончание отчётного периода',
+      cancelText: 'Отмена',
+      confirmText: 'Сформировать',
+    );
+    if (end == null || !mounted) return;
+    try {
+      final report = await PeriodicReportService(widget.database)
+          .generateCustomRangeReport(startDate: start, endDateInclusive: end);
+      if (!mounted) return;
+      _refresh();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Отчёт «${report.title}» сохранён в архив.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось сформировать отчёт: $error')),
+      );
+    }
   }
   String _duration(double? minutes) {
     if (minutes == null) return 'Нет данных';
@@ -48,20 +549,75 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
           child: Text('Не удалось сформировать архив отчётов: ' + snapshot.error.toString()),
         ));
         final reports = snapshot.data ?? const <PeriodicReportSnapshot>[];
-        if (reports.isEmpty) return const Center(child: Padding(
-          padding: EdgeInsets.all(28),
-          child: Text('Здесь будут сохраняться недельные, месячные и годовые отчёты после завершения соответствующих периодов.'),
-        ));
         return ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
           children: [
             const ScreenHeader(title: 'История отчётов', subtitle: 'Сохранённые сводки по завершённым периодам', icon: Icons.auto_graph_rounded),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
+            SectionCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Отчёт за выбранный период',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 5),
+                  const Text(
+                    'Выберите даты начала и окончания. В отчёт попадут завершённые ночные записи, начавшиеся в этом календарном диапазоне.',
+                    style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _createCustomRangeReport,
+                      icon: const Icon(Icons.date_range_rounded),
+                      label: const Text('Выбрать даты и сформировать'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _buildCurrentInsightsSection(),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Wrap(
+                spacing: 8,
+                children: [
+                  TextButton.icon(
+                    onPressed: _showInsightHistory,
+                    icon: const Icon(Icons.history_rounded, size: 17),
+                    label: const Text('История статусов'),
+                  ),
+                  TextButton.icon(
+                    onPressed: _preferencesLoading || _preferencesError != null ? null : _showHiddenInsights,
+                    icon: const Icon(Icons.visibility_off_outlined, size: 17),
+                    label: Text('Скрытые закономерности (${_insightPreferences.hidden.length})'),
+                  ),
+                ],
+              ),
+            ),
+            if (_preferencesError != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text('Настройки закономерностей недоступны: $_preferencesError',
+                  style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+              ),
+            const SizedBox(height: 4),
+            if (reports.isEmpty)
+              const SectionCard(child: Text(
+                'Здесь будут сохраняться недельные, месячные, квартальные, полугодовые и годовые отчёты после завершения соответствующих периодов.',
+                style: TextStyle(color: AppTheme.muted, fontSize: 12),
+              )),
             ...reports.map((report) => _ReportCard(
               report: report,
               duration: _duration(report.averageSleepMinutes),
               average: _average,
               onExport: () => _export(report),
+              onExportCsv: () => _exportCsv(report),
+              insightPreferences: _insightPreferences,
+              canManageInsights: !_preferencesLoading && _preferencesError == null,
+              onHideInsight: _hideInsight,
+              onTogglePinInsight: _togglePinInsight,
             )),
             const SizedBox(height: 10),
             const Text(
@@ -76,11 +632,21 @@ class _PeriodicReportsScreenState extends State<PeriodicReportsScreen> {
 }
 
 class _ReportCard extends StatelessWidget {
-  const _ReportCard({required this.report, required this.duration, required this.average, required this.onExport});
+  const _ReportCard({
+    required this.report, required this.duration, required this.average,
+    required this.onExport, required this.onExportCsv,
+    required this.insightPreferences, required this.canManageInsights,
+    required this.onHideInsight, required this.onTogglePinInsight,
+  });
   final PeriodicReportSnapshot report;
   final String duration;
   final String Function(double?, String) average;
   final VoidCallback onExport;
+  final VoidCallback onExportCsv;
+  final TagInsightPreferences insightPreferences;
+  final bool canManageInsights;
+  final Future<void> Function(String, String, String, String) onHideInsight;
+  final Future<void> Function(String, String, String, String, bool) onTogglePinInsight;
 
   @override
   Widget build(BuildContext context) {
@@ -106,12 +672,75 @@ class _ReportCard extends StatelessWidget {
       : <String, Object?>{};
     final currentTagPatterns = tagPatterns['current'] is List
       ? (tagPatterns['current'] as List).whereType<Map>().toList() : const <Map>[];
+    final visibleCurrentTagPatterns = currentTagPatterns.map((rawPattern) {
+      final pattern = Map<String, Object?>.from(rawPattern);
+      final tagKey = (pattern['tagKey'] ?? '').toString();
+      final metrics = pattern['metrics'] is Map
+          ? Map<String, Object?>.from(pattern['metrics'] as Map)
+          : <String, Object?>{};
+      if (tagKey.isNotEmpty) {
+        metrics.removeWhere((metricKey, _) => insightPreferences.isHidden(
+          TagInsightPreferenceStore.identity(tagKey, metricKey),
+        ));
+      }
+      return <String, Object?>{...pattern, 'metrics': metrics};
+    }).where((pattern) =>
+      pattern['metrics'] is Map && (pattern['metrics'] as Map).isNotEmpty
+    ).toList();
     final previousTagPatterns = tagPatterns['previous'] is List
       ? (tagPatterns['previous'] as List).whereType<Map>().toList() : const <Map>[];
     final rankedInsights = report.data['rankedInsights'] is List
-      ? (report.data['rankedInsights'] as List).whereType<Map>().toList() : const <Map>[];
+      ? (report.data['rankedInsights'] as List).whereType<Map>().map((item) => Map<String, Object?>.from(item)).toList()
+      : <Map<String, Object?>>[];
+    final visibleRankedInsights = rankedInsights.where((insight) {
+      final tagKey = insight['tagKey'] as String?;
+      final metricKey = insight['metricKey'] as String?;
+      if (tagKey == null || metricKey == null) return true;
+      return !insightPreferences.isHidden(TagInsightPreferenceStore.identity(tagKey, metricKey));
+    }).toList()..sort((a, b) {
+      int pinOrder(Map<String, Object?> insight) {
+        final tagKey = insight['tagKey'] as String?;
+        final metricKey = insight['metricKey'] as String?;
+        if (tagKey == null || metricKey == null) return -1;
+        return insightPreferences.pinned.indexOf(TagInsightPreferenceStore.identity(tagKey, metricKey));
+      }
+      final aPin = pinOrder(a);
+      final bPin = pinOrder(b);
+      if (aPin >= 0 && bPin >= 0) return aPin.compareTo(bPin);
+      if (aPin >= 0) return -1;
+      if (bPin >= 0) return 1;
+      return ((a['rank'] as num?) ?? 0).compareTo((b['rank'] as num?) ?? 0);
+    });
     final scoreComponents = score['components'] is Map ? Map<String, Object?>.from(score['components'] as Map) : <String, Object?>{};
     final previousScore = previous['score'] is Map ? Map<String, Object?>.from(previous['score'] as Map) : <String, Object?>{};
+    final previousSleepMinutes = _number(previous['averageSleepMinutes']);
+    final sleepDurationDelta = report.averageSleepMinutes == null || previousSleepMinutes == null
+        ? null : report.averageSleepMinutes! - previousSleepMinutes;
+    final sleepDurationPercent = previousSleepMinutes == null || previousSleepMinutes == 0 ||
+            report.averageSleepMinutes == null
+        ? null : (report.averageSleepMinutes! - previousSleepMinutes) / previousSleepMinutes * 100;
+    final previousWellbeing = _number(previous['averageWellbeing']);
+    final wellbeingDelta = report.averageWellbeing == null || previousWellbeing == null
+        ? null : report.averageWellbeing! - previousWellbeing;
+    String signedDurationDelta(double? value) {
+      if (value == null) return 'Недостаточно сопоставимых данных';
+      final rounded = value.abs().round();
+      final sign = value > 0 ? '+' : value < 0 ? '−' : '';
+      final direction = value > 0 ? '↑ ' : value < 0 ? '↓ ' : '→ ';
+      return '$direction$sign${rounded ~/ 60} ч ${rounded % 60} мин';
+    }
+    String signedValueDelta(double? value, String suffix) {
+      if (value == null) return 'Недостаточно сопоставимых данных';
+      final sign = value > 0 ? '+' : value < 0 ? '−' : '';
+      final direction = value > 0 ? '↑ ' : value < 0 ? '↓ ' : '→ ';
+      return '$direction$sign${value.abs().toStringAsFixed(1)}$suffix';
+    }
+    String signedPercentDelta(double? value) {
+      if (value == null) return 'Процент недоступен (нет данных или предыдущий период равен нулю)';
+      final sign = value > 0 ? '+' : value < 0 ? '−' : '';
+      final direction = value > 0 ? '↑ ' : value < 0 ? '↓ ' : '→ ';
+      return '$direction$sign${value.abs().toStringAsFixed(1)}%';
+    }
     final shortest = report.data['shortestAverageMonth'];
     final longest = report.data['longestAverageMonth'];
     return Padding(
@@ -122,6 +751,7 @@ class _ReportCard extends StatelessWidget {
           Row(children: [
             Expanded(child: Text(report.title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16))),
             IconButton(tooltip: 'Экспорт PDF', onPressed: onExport, icon: const Icon(Icons.picture_as_pdf_outlined)),
+            IconButton(tooltip: 'Экспорт CSV', onPressed: onExportCsv, icon: const Icon(Icons.table_chart_outlined)),
           ]),
           const SizedBox(height: 10),
           _ReportLine(label: 'Завершённых ночей', value: report.nights.toString()),
@@ -141,12 +771,12 @@ class _ReportCard extends StatelessWidget {
               );
             }).toList(),
           ),
-          if (rankedInsights.isNotEmpty) ...[
+          if (visibleRankedInsights.isNotEmpty) ...[
             const Divider(height: 22),
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
               initiallyExpanded: true,
-              title: const Text('Что чаще связано с изменениями сна', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+              title: const Text('Что может влиять на твой сон', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
               subtitle: const Text('Ранжирование по повторяемости, объёму выборки и размеру различия', style: TextStyle(fontSize: 11)),
               children: [
                 const Padding(
@@ -156,8 +786,7 @@ class _ReportCard extends StatelessWidget {
                     style: TextStyle(fontSize: 11, height: 1.4, color: AppTheme.muted),
                   ),
                 ),
-                ...rankedInsights.map((rawInsight) {
-                  final insight = Map<String, Object?>.from(rawInsight);
+                ...visibleRankedInsights.map((insight) {
                   final metricKey = insight['metricKey'] as String? ?? '';
                   final difference = insight['difference'] as num? ?? 0;
                   final withAverage = insight['withTagAverage'];
@@ -192,6 +821,11 @@ class _ReportCard extends StatelessWidget {
                     return (difference > 0 ? 'выше на ' : 'ниже на ') + display(difference.abs());
                   }
                   final repeated = insight['repeatsPreviousPeriod'] == true;
+                  final recommendation = SleepRecommendationText.forObservedPattern(
+                    tagLabel: (insight['tagLabel'] ?? '').toString(),
+                    metricKey: metricKey,
+                    difference: difference.toDouble(),
+                  );
                   final withObservations = insight['withTagObservations'] is List
                     ? (insight['withTagObservations'] as List).whereType<Map>().toList() : const <Map>[];
                   final withoutObservations = insight['withoutTagObservations'] is List
@@ -213,18 +847,62 @@ class _ReportCard extends StatelessWidget {
                     child: ExpansionTile(
                       tilePadding: EdgeInsets.zero,
                       childrenPadding: const EdgeInsets.only(left: 10, right: 4, bottom: 8),
-                      title: Text(
-                        '${insight['rank']}. ${insight['tagLabel']} · ${insight['metricLabel']}',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                      ),
+                      title: Row(children: [
+                        Expanded(child: Text(
+                          '${insight['rank']}. ${insight['tagLabel']} · ${insight['metricLabel']}',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        )),
+                        PopupMenuButton<String>(
+                          enabled: canManageInsights,
+                          tooltip: 'Действия с закономерностью',
+                          onSelected: (action) {
+                            final tagKey = (insight['tagKey'] ?? '').toString();
+                            final tagLabel = (insight['tagLabel'] ?? '').toString();
+                            final metricLabel = (insight['metricLabel'] ?? metricKey).toString();
+                            if (tagKey.isEmpty || metricKey.isEmpty) return;
+                            if (action == 'hide') {
+                              onHideInsight(tagKey, metricKey, tagLabel, metricLabel);
+                            } else if (action == 'pin' || action == 'unpin') {
+                              onTogglePinInsight(tagKey, metricKey, tagLabel, metricLabel, action == 'unpin');
+                            }
+                          },
+                          itemBuilder: (context) {
+                            final pinned = insightPreferences.isPinned(TagInsightPreferenceStore.identity(
+                              (insight['tagKey'] ?? '').toString(), metricKey,
+                            ));
+                            return [
+                              PopupMenuItem(value: pinned ? 'unpin' : 'pin',
+                                child: Text(pinned ? 'Снять закрепление' : 'Закрепить')),
+                              const PopupMenuItem(value: 'hide', child: Text('Скрыть')),
+                            ];
+                          },
+                        ),
+                      ]),
                       subtitle: Text(
                         '${deltaText()} · выборки $samplesWith / $samplesWithout ночей' +
-                        (repeated ? ' · повторяется' : ' · только текущий период'),
+                        (repeated ? ' · повторяется' : ' · только текущий период') +
+                        (insightPreferences.isPinned(TagInsightPreferenceStore.identity(
+                          (insight['tagKey'] ?? '').toString(), metricKey,
+                        )) ? ' · закреплено' : ''),
                         style: const TextStyle(fontSize: 11),
                       ),
                       children: [
                         _ReportLine(label: 'С отметкой', value: display(withAverage) + ' · n=$samplesWith'),
                         _ReportLine(label: 'Без отметки', value: display(withoutAverage) + ' · n=$samplesWithout'),
+                        if (recommendation != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Что можно проверить',
+                                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11)),
+                                const SizedBox(height: 3),
+                                Text(recommendation,
+                                  style: const TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4)),
+                              ],
+                            ),
+                          ),
                         if (insight['previousDifference'] is num)
                           _ReportLine(
                             label: 'Разница в предыдущем периоде',
@@ -239,13 +917,13 @@ class _ReportCard extends StatelessWidget {
               ],
             ),
           ],
-          if (currentTagPatterns.isNotEmpty) ...[
+          if (visibleCurrentTagPatterns.isNotEmpty) ...[
             const Divider(height: 22),
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
               title: const Text('Персональные закономерности по отметкам', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
               subtitle: const Text('Наблюдаемое сравнение ночей с отметкой и без неё', style: TextStyle(fontSize: 11)),
-              children: currentTagPatterns.map((rawPattern) {
+              children: visibleCurrentTagPatterns.map((rawPattern) {
                 final pattern = Map<String, Object?>.from(rawPattern);
                 final key = pattern['tagKey'];
                 final previousPattern = previousTagPatterns.where((item) => item['tagKey'] == key).toList();
@@ -330,11 +1008,28 @@ class _ReportCard extends StatelessWidget {
             _ReportLine(label: 'Ночей', value: report.nights.toString() + ' · ранее ' + (previous['nights'] ?? 0).toString()),
             _ReportLine(label: 'Средняя оценка сна', value: (score['average'] is num ? (score['average'] as num).toStringAsFixed(0) + ' / 100' : 'Нет данных') + ' · ранее ' + (previousScore['average'] is num ? (previousScore['average'] as num).toStringAsFixed(0) + ' / 100' : 'Нет данных')),
             _ReportLine(label: 'Средняя продолжительность сна', value: duration + ' · ранее ' + _formatDuration(previous['averageSleepMinutes']) + ' (' + (previous['sleepDurationSamples'] ?? 0).toString() + ' изм.)'),
+            _ReportDeltaLine(
+              label: 'Изменение длительности',
+              value: signedDurationDelta(sleepDurationDelta) + ' · ' + signedPercentDelta(sleepDurationPercent),
+              direction: sleepDurationDelta == null ? null : sleepDurationDelta.compareTo(0),
+            ),
             _ReportLine(label: 'Время в постели', value: _formatDuration(report.averageTimeInBedMinutes) + ' · ранее ' + _formatDuration(previous['averageTimeInBedMinutes']) + ' (' + (previous['timeInBedSamples'] ?? 0).toString() + ' ночей)'),
             _ReportLine(label: 'Эффективность', value: _formatPercent(report.averageEfficiency) + ' · ранее ' + _formatPercent(_number(previous['averageEfficiency'])) + ' (' + (previous['efficiencySamples'] ?? 0).toString() + ' ночей)'),
             _ReportLine(label: 'Пробуждения', value: _formatNumber(report.averageAwakenings) + ' · ранее ' + _formatNumber(_number(previous['averageAwakenings'])) + ' (' + (previous['awakeningSamples'] ?? 0).toString() + ' ночей)'),
             _ReportLine(label: 'Качество сна', value: _formatScale(report.averageQuality) + ' · ранее ' + _formatScale(_number(previous['averageQuality'])) + ' (' + (previous['qualitySamples'] ?? 0).toString() + ' оценок)'),
-            _ReportLine(label: 'Самочувствие', value: _formatScale(report.averageWellbeing) + ' · ранее ' + _formatScale(_number(previous['averageWellbeing'])) + ' (' + (previous['wellbeingSamples'] ?? 0).toString() + ' оценок)'),
+            _ReportLine(label: 'Самочувствие', value: _formatScale(report.averageWellbeing) + ' · ранее ' + _formatScale(previousWellbeing) + ' (' + (previous['wellbeingSamples'] ?? 0).toString() + ' оценок)'),
+            _ReportDeltaLine(
+              label: 'Изменение самочувствия',
+              value: signedValueDelta(wellbeingDelta, ' балла'),
+              direction: wellbeingDelta == null ? null : wellbeingDelta.compareTo(0),
+            ),
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Text(
+                'Стрелки показывают только направление математического изменения; увеличение длительности сна само по себе не означает улучшение его качества.',
+                style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.35),
+              ),
+            ),
           ],
           if (notes.isNotEmpty) ...[
             const Divider(height: 22),
@@ -374,7 +1069,7 @@ class _ReportCard extends StatelessWidget {
               final monthScore = month['score'] is Map ? Map<String, Object?>.from(month['score'] as Map) : <String, Object?>{};
               return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 _ReportLine(
-                  label: PeriodicReportSnapshot.monthName(index) + ' · ' + (month['nights'] ?? 0).toString() + ' ночей',
+                  label: PeriodicReportSnapshot.monthName(index) + ' · ' + PdfReportService.monthNightCount(Map<String, Object?>.from(month)).toString() + ' ночей',
                   value: _formatDuration(month['averageSleepMinutes']),
                 ),
                 _ReportLine(
@@ -532,6 +1227,34 @@ class _InteractiveSleepTrendChartState extends State<_InteractiveSleepTrendChart
           }),
       ],
     ]);
+  }
+}
+
+class _ReportDeltaLine extends StatelessWidget {
+  const _ReportDeltaLine({required this.label, required this.value, required this.direction});
+  final String label;
+  final String value;
+  final int? direction;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = direction == null ? AppTheme.muted
+        : direction! > 0 ? Colors.teal : direction! < 0 ? Colors.deepOrange : AppTheme.muted;
+    final icon = direction == null ? Icons.remove_circle_outline
+        : direction! > 0 ? Icons.arrow_upward : direction! < 0 ? Icons.arrow_downward : Icons.trending_flat;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(children: [
+        Expanded(child: Text(label, style: const TextStyle(color: AppTheme.muted, fontSize: 13))),
+        const SizedBox(width: 12),
+        Flexible(child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 4),
+          Flexible(child: Text(value, textAlign: TextAlign.end,
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: color))),
+        ])),
+      ]),
+    );
   }
 }
 

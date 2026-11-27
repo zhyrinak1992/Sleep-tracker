@@ -33,25 +33,49 @@ class SleepRegularitySummary {
 }
 
 class SleepAnalytics {
+  static DateTime addCalendarDays(DateTime date, int days) =>
+      DateTime(date.year, date.month, date.day + days);
+
   static DateTime periodStart(DateTime date, AnalysisPeriod period) {
     final day = DateTime(date.year, date.month, date.day);
     if (period == AnalysisPeriod.week) {
-      return day.subtract(Duration(days: day.weekday - DateTime.monday));
+      return addCalendarDays(day, -(day.weekday - DateTime.monday));
     }
     if (period == AnalysisPeriod.month) return DateTime(date.year, date.month);
     return DateTime(date.year);
   }
 
   static DateTime nextPeriodStart(DateTime start, AnalysisPeriod period) {
-    if (period == AnalysisPeriod.week) return start.add(const Duration(days: 7));
+    if (period == AnalysisPeriod.week) return addCalendarDays(start, 7);
     if (period == AnalysisPeriod.month) return DateTime(start.year, start.month + 1);
     return DateTime(start.year + 1);
   }
 
   static DateTime previousPeriodStart(DateTime start, AnalysisPeriod period) {
-    if (period == AnalysisPeriod.week) return start.subtract(const Duration(days: 7));
+    if (period == AnalysisPeriod.week) return addCalendarDays(start, -7);
     if (period == AnalysisPeriod.month) return DateTime(start.year, start.month - 1);
     return DateTime(start.year - 1);
+  }
+
+  /// Returns the start of the immediately preceding period with the same
+  /// number of local calendar days. UTC date arithmetic avoids 23/25-hour
+  /// local days shifting the boundary away from midnight across DST.
+  static DateTime previousEqualPeriodStart(
+    DateTime start,
+    DateTime endExclusive,
+  ) {
+    if (!endExclusive.isAfter(start)) {
+      throw ArgumentError('The period end must be after its start.');
+    }
+    final startDay = DateTime(start.year, start.month, start.day);
+    final endDay = DateTime(endExclusive.year, endExclusive.month, endExclusive.day);
+    final startUtc = DateTime.utc(startDay.year, startDay.month, startDay.day);
+    final endUtc = DateTime.utc(endDay.year, endDay.month, endDay.day);
+    final calendarDays = endUtc.difference(startUtc).inDays;
+    if (calendarDays < 1) {
+      throw ArgumentError('The period must contain at least one calendar day.');
+    }
+    return addCalendarDays(startDay, -calendarDays);
   }
 
   static SleepPeriodSummary summarize(

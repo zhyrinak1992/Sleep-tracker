@@ -92,7 +92,7 @@ class SleepForecastAnalysis {
     final lowerLatency = personalLatency ? percentile(latencies, 0.25) : null;
     final upperLatency = personalLatency ? percentile(latencies, 0.75) : null;
 
-    final recentCutoff = DateTime(now.year, now.month, now.day - 7);
+    final recentCutoff = now.subtract(const Duration(days: 7));
     final recentMinutes = <int>[];
     for (final session in sessions) {
       if (session.endedAt == null ||
