@@ -11,6 +11,7 @@ import 'weather_night_detail_card.dart';
 import 'sleep_session_metrics_card.dart';
 import 'sleep_session_metrics.dart';
 import 'sleep_event_timeline.dart';
+import 'sleep_night_audio_card.dart';
 import 'sleep_metric_summary.dart';
 import '../../models/sleep_session.dart';
 import '../../models/sleep_note.dart';
@@ -941,6 +942,8 @@ class _SleepSessionDetailScreenState extends State<SleepSessionDetailScreen> {
                     ])),
                     const SizedBox(height: 12),
                     SleepEventTimelineCard(eventsFuture: _timelineFuture),
+                    const SizedBox(height: 12),
+                    SleepNightAudioCard(database: widget.database, sessionId: widget.session.id),
                     const SizedBox(height: 12),
                     SectionCard(child: FutureBuilder<List<Map<String, Object?>>>(
                       future: _climateFuture,
