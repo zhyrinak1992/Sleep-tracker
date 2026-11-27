@@ -191,9 +191,9 @@ class AudioObservationService {
       path = p.join(audioDir.path, 'event_$eventId.wav');
       final wav = _wavFile(pcm, _sampleRate, 1, 16);
       await File(path).writeAsBytes(wav, flush: true);
-      final session = await SleepDatabase.instance.getOpenSession();
+      final sessionId = await SleepDatabase.instance.getSessionIdForTimestamp(started);
       await SleepDatabase.instance.saveAudioEvent(
-        id: eventId, sessionId: session?.id, filePath: path,
+        id: eventId, sessionId: sessionId, filePath: path,
         category: 'unknown', capturedAt: started,
         durationMs: (pcm.length / 2 / _sampleRate * 1000).round(),
       );
